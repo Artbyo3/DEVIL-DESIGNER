@@ -47,7 +47,9 @@ def save(context,name):
     if scene.dd_avatar:
         low,high=garment.bounds(scene.dd_avatar)
         data['body_height_m']=(high.z-low.z)*garment.metres_per_unit(scene)
+        identities={pattern.id for pattern in doc.patterns}
         for panel in garment.generated(scene,'panel'):
+            if panel.get('dd_pattern_id') not in identities:continue
             point=panel.matrix_world.translation
             data['panels'].append(dict(pattern=panel['dd_pattern_id'],position=[(point[i]-low[i])/max(1e-6,high[i]-low[i]) for i in range(3)],
                 orientation=[list(row) for row in panel.matrix_world.to_3x3()]))
@@ -69,40 +71,72 @@ def load(context,index):
     if path.stat().st_size>10_000_000:raise ValueError('This garment file exceeds the 10 MB design limit.')
     try:
         data=json.loads(path.read_text(encoding='utf-8'))
-        if data.get('format')!='devil-designer-garment' or data.get('version')!=1:raise ValueError('Unsupported garment library format.')
+        if not isinstance(data,dict) or data.get('format')!='devil-designer-garment' or type(data.get('version')) is not int or data['version']!=1:raise ValueError('Unsupported garment library format.')
         doc=Document.loads(json.dumps(data['document']))
+        if not doc.patterns:raise ValueError('This garment design has no patterns.')
+        name=data.get('name',path.stem)
+        if not isinstance(name,str):raise ValueError('Invalid stored garment name.')
+        height=data.get('body_height_m',0)
+        if type(height) not in (int,float) or not math.isfinite(height) or height<0:raise ValueError('Invalid stored body height.')
+        settings=data.get('settings',{})
+        if not isinstance(settings,dict):raise ValueError('Invalid stored garment settings.')
+        supported=('dd_spacing','dd_quality','dd_frames','dd_self_collision','dd_pin_top','dd_weld_distance','dd_thickness')
+        float_bounds={'dd_spacing':(.003,.2),'dd_weld_distance':(.0001,.05),'dd_thickness':(0,.01)}
+        settings={key:value for key,value in settings.items() if key in supported}
+        for key,value in settings.items():
+            prop=scene.bl_rna.properties[key]
+            valid=type(value) is bool if prop.type=='BOOLEAN' else type(value) is int if prop.type=='INT' else type(value) in (int,float)
+            if prop.type!='BOOLEAN':
+                lower,upper=prop.hard_min,prop.hard_max
+                if key in float_bounds:
+                    lower=min(lower,float_bounds[key][0]);upper=max(upper,float_bounds[key][1])
+            if not valid or prop.type!='BOOLEAN' and (not math.isfinite(value) or not lower<=value<=upper):
+                raise ValueError('Invalid stored garment setting: '+key+'.')
+        poses=data.get('panels',[])
+        if not isinstance(poses,list):raise ValueError('Invalid stored garment placement.')
+        identities={pattern.id for pattern in doc.patterns}
+        placed=set()
+        for pose in poses:
+            if not isinstance(pose,dict):raise ValueError('Invalid stored garment placement.')
+            identity=pose.get('pattern')
+            matrix=pose.get('orientation');position=pose.get('position')
+            if not isinstance(identity,str) or identity in placed:
+                raise ValueError('Invalid stored garment placement pattern.')
+            if identity in identities:placed.add(identity)
+            if not isinstance(matrix,list) or len(matrix)!=3 or any(not isinstance(row,list) or len(row)!=3 for row in matrix) or not isinstance(position,list) or len(position)!=3:
+                raise ValueError('Invalid stored garment placement.')
+            if any(type(value) not in (int,float) or not math.isfinite(value) or abs(value)>3.402823466e38 for row in matrix+[position] for value in row):
+                raise ValueError('Invalid stored garment placement.')
         avatar=scene.dd_avatar
         if avatar:
             low,high=garment.bounds(avatar)
-            if scene.dd_library_refit and data.get('body_height_m',0)>1e-6:
-                factor=(high.z-low.z)*garment.metres_per_unit(scene)/data['body_height_m']
+            if scene.dd_library_refit and height>1e-6:
+                factor=(high.z-low.z)*garment.metres_per_unit(scene)/height
                 if not .05<factor<20:raise ValueError('Avatar scale differs too much. Correct the scene/body units before refitting.')
                 scale_document(doc,factor)
-        for pose in data.get('panels',[]):
-            matrix=pose.get('orientation');position=pose.get('position')
-            if not isinstance(matrix,list) or len(matrix)!=3 or any(len(row)!=3 for row in matrix) or len(position)!=3 or any(not math.isfinite(float(v)) for row in matrix for v in row) or any(not math.isfinite(float(v)) for v in position):
-                raise ValueError('Invalid stored garment placement.')
-            pose['orientation']=[[float(v) for v in row] for row in matrix]
-            pose['position']=[float(v) for v in position]
-        previous=scene.dd_document
-        previous_spacing=scene.dd_spacing
-        stored_spacing=float(data.get('settings',{}).get('dd_spacing',scene.dd_spacing))
-        if not math.isfinite(stored_spacing) or not .003<=stored_spacing<=.2:raise ValueError('Invalid stored mesh spacing.')
-        scene.dd_spacing=stored_spacing
-        scene.dd_document=doc.dumps()
-        try:panels=garment.build_panels(context)
-        except Exception:scene.dd_document=previous;scene.dd_spacing=previous_spacing;raise
+        placements={}
         if avatar:
-            by_id={o['dd_pattern_id']:o for o in panels}
-            for pose in data.get('panels',[]):
-                obj=by_id.get(pose['pattern'])
-                if obj:
-                    matrix=Matrix(pose['orientation']).to_4x4()
-                    matrix.translation=tuple(low[i]+(high[i]-low[i])*pose['position'][i] for i in range(3))
-                    obj.matrix_world=matrix
-        for key,value in data.get('settings',{}).items():
-            if key in {'dd_quality','dd_frames','dd_self_collision','dd_pin_top','dd_weld_distance','dd_thickness'}:setattr(scene,key,value)
-        scene.dd_library_name=data.get('name',path.stem)
-        context.view_layer.update()
-        return garment.document(scene)
-    except (KeyError,TypeError,json.JSONDecodeError,OSError) as exc:raise ValueError('Cannot read this garment design.') from exc
+            for pose in poses:
+                if pose['pattern'] not in identities:continue
+                matrix=Matrix(pose['orientation']).to_4x4()
+                translation=tuple(low[axis]+(high[axis]-low[axis])*pose['position'][axis] for axis in range(3))
+                if any(not math.isfinite(value) or abs(value)>3.402823466e38 for value in translation):raise ValueError('Invalid stored garment placement.')
+                matrix.translation=translation
+                placements[pose['pattern']]=matrix
+        incoming=doc.dumps()
+        previous={key:getattr(scene,key) for key in (*supported,'dd_document','dd_library_name')}
+        try:
+            for key,value in settings.items():setattr(scene,key,value)
+            scene.dd_library_name=name
+            scene.dd_document=incoming
+            panels=garment.build_panels(context)
+            for obj in panels:
+                matrix=placements.get(obj['dd_pattern_id'])
+                if matrix is not None:obj.matrix_world=matrix
+            context.view_layer.update()
+            return garment.document(scene)
+        except Exception:
+            for key,value in previous.items():setattr(scene,key,value)
+            raise
+    except UnicodeError as exc:raise ValueError('Cannot read this garment design: invalid UTF-8 text.') from exc
+    except (KeyError,TypeError,AttributeError,OverflowError,json.JSONDecodeError,OSError) as exc:raise ValueError('Cannot read this garment design.') from exc

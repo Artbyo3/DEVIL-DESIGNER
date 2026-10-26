@@ -336,7 +336,8 @@ class Renderer:
             self.body_reference(ed)
             self.grid(view, c)
 
-            if not l.advanced and not ed.session.document.patterns and not ed.draft:
+            if (not l.advanced and not ed.session.document.patterns and not ed.draft
+                    and not (ed.minimal_ui and (ed.card_kind or not ed.context_card_hidden))):
                 self.text(c.x + c.w / 2, c.y + c.h / 2 + 12 * s, 'Drag to draw your first panel', 17, TEXT, True, max_width=c.w - 32 * s)
                 self.text(c.x + c.w / 2, c.y + c.h / 2 - 14 * s, 'Then pick Sew, pair the edges, and Simulate.', 11, TEXT_SUB, True, max_width=c.w - 32 * s)
 

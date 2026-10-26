@@ -34,6 +34,10 @@ pair edges, then click Simulate. There are no separate Build or Arrange clicks f
 a new standard two-panel front/back garment. The selected body is used automatically;
 if the body is ambiguous, one inline choice starts the requested simulation.
 
+An empty garment also offers **Create panel**, a one-click editable 40 x 45 cm
+starter, alongside custom panel drawing and the garment library. Starter creation
+is undoable. See `ARTIST_UX_AUDIT.md` for the workflow fixes and artist test checklist.
+
 Selecting a piece shows its small card. **Fabric** opens Cotton, Linen, Denim, Silk,
 Leather, and Knit beneath the card. Presets own physical parameters; there are no
 cloth-parameter fields. With nothing selected the card describes the garment, its
