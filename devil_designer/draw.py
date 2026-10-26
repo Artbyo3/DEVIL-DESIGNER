@@ -719,10 +719,12 @@ class Renderer:
         self.round_rect(shadow, (0, 0, 0, .18), radius=14)
         self.round_rect(layout.rail, SURFACE_FLOATING, radius=14)
         self.round_rect_outline(layout.rail, SURFACE_OUTLINE, radius=14)
-        icons = {'LIBRARY': 'GRID', 'FULL': 'EXPAND'}
+        icons = {'LIBRARY': 'GRID'}
         shortcuts = {'SELECT': 'V', 'POLYGON': 'P', 'RECTANGLE': 'R', 'ELLIPSE': 'E',
                      'INTERNAL': 'I', 'SEW': 'J', 'PIN': 'K', 'DART': 'D',
-                     'UNDO': 'Ctrl Z', 'REDO': 'Ctrl Shift Z', 'FULL': 'Tab'}
+                     'UNDO': 'Ctrl Z', 'REDO': 'Ctrl Shift Z',
+                     'CLOSE': 'Esc', 'WORKSPACE_PANEL': 'Workspace',
+                     'GARMENT': 'Garment settings', 'HELP': '?'}
         tooltip = None
         for key, (rect, label) in layout.buttons.items():
             hover = rect.contains(*ed.pointer)
@@ -769,6 +771,10 @@ class Renderer:
                 position = (rect.x + rect.w + 8 * scale, rect.y + rect.h / 2)
                 if key in {'SIMULATE', 'KEEP'}:
                     position = (max(layout.panel.x + 8 * scale, rect.x - (220 if blocker else 60) * scale), rect.y + rect.h + 20 * scale)
+                elif key in {'CLOSE', 'WORKSPACE_PANEL'}:
+                    position = (rect.x - 70 * scale, rect.y - 18 * scale)
+                elif key == 'GARMENT':
+                    position = (rect.x + 20 * scale, rect.y - 18 * scale)
                 tooltip = (blocker or label, shortcuts.get(key, 'Right-click for options' if key == 'SEW' else ''), position)
         for rect, identity, label in ed.seam_badges():
             self.round_rect(rect, ACCENT_BG, radius=10)
@@ -862,6 +868,12 @@ class Renderer:
             panel = layout.panel
             message = ed.confirm_message if ed.confirm_action else ed.message
             self.text(panel.x + 76 * scale, panel.y + 28 * scale, message, 11, TEXT_SUB, max_width=panel.w - 360 * scale)
+        elif getattr(ed, 'error_message', None):
+            panel = layout.panel
+            width = min(460 * scale, max(120 * scale, panel.w - 360 * scale))
+            toast = Rect(panel.x + 76 * scale, panel.y + 15 * scale, width, 30 * scale)
+            self.round_rect(toast, (.45, .12, .12, .96), radius=12)
+            self.text(toast.x + 12 * scale, toast.y + 10 * scale, ed.error_message, 10, (1.0, .85, .85, 1.0), max_width=toast.w - 24 * scale)
         elif ed.message:
             if ed.toast_text != ed.message:
                 ed.toast_text = ed.message

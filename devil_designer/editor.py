@@ -55,6 +55,7 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         self.pending_edge = self.seam_selected = None
         self.pointer = (0, 0)
         self.message = 'Drag to draw a panel. Sew its edges, then Simulate.'
+        self.error_message = None
         self._closed = False
         self.canvas_layout = self.make_layout()
         self.refresh_controls()
@@ -296,11 +297,13 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         try:
             changed = action()
             self.persist()
+            self.error_message = None
             self.message = message if changed is not False else "Nothing to change."
             if self.session.last_repairs:
                 self.message += f" {self.session.last_repairs} affected sewing pair(s) removed; re-pair edited edges."
             return True
         except ValueError as exc:
+            self.error_message = str(exc)
             self.message = str(exc)
             return False
 
@@ -506,7 +509,6 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
             self.renderer.draw(self)
         except Exception as exc:
             print("Devil Designer drawing error:", exc)
-            self.cleanup()
 
     def modal(self, context, event):
         if self._closed:
@@ -517,9 +519,10 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
             self.cleanup()
             return {'CANCELLED'}
         except Exception as exc:
-            self.report({'ERROR'}, "Pattern editor closed: " + str(exc))
-            self.cleanup()
-            return {'CANCELLED'}
+            print("Devil Designer modal error:", exc)
+            self.error_message = f"Editor error: {exc}"
+            self.message = self.error_message
+            return {'RUNNING_MODAL'}
 
     def handle_event(self, context, event):
         if (self._area not in list(self._window.screen.areas) or self._area.type != 'VIEW_3D'
@@ -576,10 +579,18 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         if self.confirm_action:
             if press and event.type == 'ESC':
                 self.perform_action('CANCEL_ACTION')
-            elif press and event.type == 'LEFTMOUSE':
+                return {'RUNNING_MODAL'}
+            if press and event.type == 'LEFTMOUSE':
                 action = self.canvas_layout.button(*self.pointer)
                 if action in {'CONFIRM_ACTION', 'CANCEL_ACTION', 'STOP'}:
                     self.perform_action(action)
+                    return {'RUNNING_MODAL'}
+            if press and event.ctrl and event.type in {'Z', 'Y'}:
+                redo = event.type == 'Y' or event.shift
+                self.perform_action('REDO' if redo else 'UNDO')
+                return {'RUNNING_MODAL'}
+            if press and event.ctrl and event.type == 'S':
+                return {'PASS_THROUGH'}
             return {'RUNNING_MODAL'}
         if self.minimal_ui:
             result = self.minimal_event(context, event)
@@ -654,12 +665,21 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         if not panel:
             return {'PASS_THROUGH'}
         if event.type == 'ESC' and press:
-            if self.draft or self.pending_edge or self.free_clicks:
+            if self.draft or self.pending_edge or self.free_clicks or self.pending_place or self.pending_tack:
                 self.cancel_gesture()
+                self.clear_interaction_references()
                 self.message = "Draft cancelled."
                 return {'RUNNING_MODAL'}
-            if self.minimal_ui:
-                self.message = 'Workspace stays open. Use Close to exit.'
+            if self.session.point_selection or self.session.selected:
+                self.session.point_selection = []
+                self.session.selected = None
+                self.sync_selection()
+                self.message = "Selection cleared."
+                return {'RUNNING_MODAL'}
+            if self.workspace_panel_open and not self.workspace_panel_pinned:
+                self.workspace_panel_open = False
+                return {'RUNNING_MODAL'}
+            if self.workspace_panel_open and self.workspace_panel_pinned:
                 return {'RUNNING_MODAL'}
             self.cleanup()
             return {'FINISHED'}
@@ -667,9 +687,8 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
             button = self.canvas_layout.button(*self.pointer)
             if button:
                 if button == 'CLOSE':
-                    if self.draft:
-                        self.message = 'Finish drawing or cancel before closing the workspace.'
-                        return {'RUNNING_MODAL'}
+                    if self.draft or self.gesture:
+                        self.cancel_gesture()
                     self.cleanup()
                     return {'FINISHED'}
                 if button == 'STAGE_NEXT':
@@ -732,13 +751,15 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                     self.fit()
                     return {'RUNNING_MODAL'}
                 if button == 'FULL':
-                    self.toggle_full()
+                    if not self.minimal_ui:
+                        self.toggle_full()
                     return {'RUNNING_MODAL'}
                 if button == 'HELP':
-                    self.message = "Shortcuts: V select, P polygon, R rect, E ellipse, I internal, D dart, J sew, K pin, T tack, F fit, S snap, Z undo."
+                    self.show_card('HELP')
+                    self.message = "Shortcuts: V select, P polygon, R rect, E ellipse, I internal, D dart, J sew, K pin, T tack, F fit, S snap, Ctrl+Z undo, Ctrl+Shift+Z redo."
                     return {'RUNNING_MODAL'}
                 return {'RUNNING_MODAL'}
-        if event.type == 'TAB' and press:
+        if not self.minimal_ui and event.type == 'TAB' and press:
             self.toggle_full()
             return {'RUNNING_MODAL'}
         if press and event.ctrl and event.type in {'Z', 'Y'}:
