@@ -3,7 +3,7 @@
 A movable 2D clothing-pattern editor with Bezier drafting, internal construction,
 sewing, avatar placement, native Blender cloth, and a reusable local garment library.
 
-By **Artbyo3**. **0.5.0 development build**, tested in **Blender 5.2.3 LTS**.
+By **Artbyo3**. **0.5.0**, tested in **Blender 5.2.3 LTS**.
 Requires Blender 5.2+.
 
 ## Install and open
@@ -14,14 +14,61 @@ menu > Install from Disk**. Disable the previous version and restart Blender to
 unload its old Python modules. Enable Devil Designer if necessary.
 
 In a 3D Viewport use **Ctrl+Alt+D**, **F3 > Devil Designer**, or **View > Devil Designer**.
-There is no N-panel. Drag the editor header to move it, its bottom-right corner to
-resize it, and use **Expand / Restore** or Tab for the expanded layout. Bounds and
-Settings visibility save per scene. Other Blender controls work outside the editor.
+There is no full-height sidebar or all-settings popup. The workspace opens as a full canvas with
+a compact tool dock and an optional Workspace side card. Use Expand / Restore or Tab to switch layouts. Other Blender
+controls remain available outside the editor when the 3D view is revealed.
 
-The custom Settings inspector has **Design, Avatar, Sew, Cloth, and Library** tabs.
-Scroll inside it for additional controls. Click values to type, Enter to apply,
-Escape to cancel, or use +/- buttons. Drafting dimensions are displayed in cm;
-reference/output fields show their own units. The internal geometry unit is metres.
+The compact **Workspace** card controls snapping, measured edge labels, body-guide
+visibility, and Fit design. Guide opacity offers Light / Medium / Strong only while
+the guide is shown. Pin keeps the card open while working; unpin dismisses it on
+canvas input. Close hides it, and Workspace at the top right reopens it without
+changing the canvas layout or the active piece/task card. Other controls stay in
+their existing contextual locations.
+The pinned card remains visible while drawing. Escape cancels the current edit or
+closes a contextual popover; it does not exit the minimal workspace. Use Close or
+Ctrl+Alt+D to leave the editor explicitly.
+
+The default workspace has three primary actions: **Panel > Sew > Simulate**.
+Panel drawing is ready on open: drag the canvas to create pieces, click Sew and
+pair edges, then click Simulate. There are no separate Build or Arrange clicks for
+a new standard two-panel front/back garment. The selected body is used automatically;
+if the body is ambiguous, one inline choice starts the requested simulation.
+
+Selecting a piece shows its small card. **Fabric** opens Cotton, Linen, Denim, Silk,
+Leather, and Knit beneath the card. Presets own physical parameters; there are no
+cloth-parameter fields. With nothing selected the card describes the garment, its
+name, body, and piece count. The dock grid opens the local garment library.
+
+The arrow on **Simulate** opens Mesh density (Coarse / Standard / Fine) and Quality
+(Draft / Standard / High). The arrow on **Keep mesh** opens Auto weld and Thickness
+(None / Thin / Standard). A manual weld tolerance appears only after Keep actually
+reports unwelded seam pairs. Self-collision, body clearance, body-height refit, and
+automatic defaults are program decisions, not settings the artist must configure.
+
+Select a seam badge to reverse or remove that seam in place. Right-click a point,
+edge, or piece for a small task-specific card, not a list of unrelated options.
+Popovers stay within approximately five controls; the fabric list has six materials.
+Exact design dimensions can still be dragged or typed when needed. Numeric point
+and edge edits apply on completion as one undoable edit. Escape cancels a value drag.
+
+The selected piece card also exposes **Edit piece**. Internal-edge cards keep Cut
+and closed-path Trace attached to the selected path. Right-click a pin or tack for
+its removal card; Delete removes the selected anchor, not its owner piece. Shift+D
+duplicates through the same undoable action as the piece menu. Context cards have
+close buttons, and save/undo shortcuts continue working while hovering over them.
+Fit design frames patterns clear of the dock and pinned Workspace card when space
+permits, without shrinking the actual canvas.
+
+Public interface icons are sourced CC0 artwork from Kenney, Maki and Temaki.
+Provenance and original licenses ship in `devil_designer/assets/icons`; the Blender
+renderer caches native GPU geometry and needs no extra runtime dependencies.
+
+**Simulate** also pauses playback and automatically reveals the 3D result. Existing
+panel placement is preserved when resuming. Keep mesh stays beside Simulate; Reset
+is available on the garment card after simulation exists. Finish or cancel an
+unfinished drawing before switching tools or closing. The reference sections below
+describe the underlying authoring operations; old sidebar paths are superseded by
+the contextual cards described here.
 
 ## Draft and edit
 
@@ -34,6 +81,7 @@ separate Blender Curve objects.
 | --- | --- |
 | Select / polygon / rectangle / ellipse | V / P / R / E |
 | Internal line / sewing / pin / tack / dart | I / J / K / T / D |
+| Place selected panel in 3D | G inside the editor; Blender transforms outside it |
 | Finish polygon | Enter or click its first corner |
 | Finish open internal line / closed internal shape | Enter / click its first point |
 | Edit point or Bezier handle | Select, then drag the anchor or gold handle |
@@ -90,7 +138,7 @@ separate pieces when both independently selectable cut sides are needed.
 ## Sewing
 
 In Sew/J, click an edge and its partner for segment sewing. Select a sewn edge to
-inspect it; B reverses direction and X removes the pair. The Sew tab's pair list
+inspect it; B reverses direction and X removes the pair. The Sewing section's pair list
 also has Flip/remove controls and lengths for both sides.
 
 **Free sewing** uses four clicks: start A, end A, start B, end B. Each side can span
@@ -118,7 +166,8 @@ Choose the body in **Avatar > Avatar body**, or select its mesh in 3D and click
 **Use selected body**. The actual evaluated mesh appears behind the pattern grid
 at physical scale. It includes armature/shape-key deformation and object/scene
 scale; limb gaps are preserved. Reference view, opacity, position, alignment,
-framing, and refresh are all in the Avatar tab. It cannot be selected as a pattern.
+framing, and refresh are all in Body & placement, under More controls or search.
+It cannot be selected as a pattern.
 
 Build 3D panels, then either move them with Blender G/R, use the two-piece
 front/back Arrange helper, or choose **Click-place selected piece** and click the
@@ -155,13 +204,13 @@ Body clearance, quality, self collision, frame limit, and optional top-point pin
 are in Cloth. The chosen body gets Collision if needed; an existing collision
 modifier is left unchanged.
 
-Use **Simulate > Stop > Keep mesh**. Keep mesh copies the evaluated drape, removes
+Use **Simulate > Pause**, then Tools > Keep mesh when needed. Keep mesh copies the evaluated drape, removes
 loose sewing springs, welds only paired vertices within tolerance, and retains UVs,
 piece face identifiers, and group memberships. Optional thickness is an editable
 Solidify modifier. If pairs remain open, the result reports them; simulate longer
 or correct placement/direction before keeping another copy.
 
-Reset removes the simulation/cache and restores arranged panels, preserving kept
+Reset asks for confirmation before removing the simulation/cache and restoring arranged panels, preserving kept
 garments. Reset after body geometry/collision changes before simulating again.
 Simulation caches are not automatically baked to disk. A single piece can drape
 without sewing; a selected body is still required for this workflow.
@@ -185,14 +234,16 @@ In Library, type a garment name and choose **Save editable garment**. It saves t
 Bezier source, internal features, sewing, anchors, presets, wrap state, UV layout,
 and body-relative panel placements. It never bundles the avatar mesh or its name.
 Files live in Blender's user datafiles folder under `devil_designer/garments`.
-Saving an existing name replaces that named library entry.
+Saving an existing name asks before replacing that named library entry. A custom
+Library folder can be entered through More garment library controls or search.
 
 Choose another body, select an entry with Previous/Next, and **Load onto selected
 avatar**. With **Scale by body height** enabled, the source dimensions scale
 uniformly by height while preserving UV coordinates. Placement and tacks remap to
 the new body bounds. This is a starting refit, not automatic tailoring to every
 body proportion; adjust the 2D design, place pieces, and simulate again. Loading
-without a body still restores an editable design for later arrangement.
+without a body still restores an editable design for later arrangement. Loading
+over an existing garment requires confirmation; Go back or Escape preserves it.
 
 ## Saving and compatibility
 

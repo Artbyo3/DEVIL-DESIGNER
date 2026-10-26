@@ -315,7 +315,7 @@ class Document:
         for p in self.patterns:
             identity(p.id)
             if not isinstance(p.name,str) or not p.name.strip(): raise ValueError('Pattern names must contain text.')
-            if p.preset not in {'COTTON','LINEN','SILK','DENIM','KNIT'}: raise ValueError('Unknown cloth preset.')
+            if p.preset not in {'COTTON','LINEN','SILK','DENIM','KNIT','LEATHER'}: raise ValueError('Unknown cloth preset.')
             if not math.isfinite(p.wrap_radius) or p.wrap_radius<0: raise ValueError('Invalid wrap radius.')
             for v in p.vertices: identity(v.id)
             outer=p.outline();validate_polygon(outer)

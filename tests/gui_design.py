@@ -40,6 +40,11 @@ def run():
         bpy.context.view_layer.update()
         with bpy.context.temp_override(area=area,region=region):
             bpy.ops.devil_designer.pattern_editor('INVOKE_DEFAULT');op=editor._active
+            op.minimal_ui = False
+            scene.dd_reference_visible = True
+            op.full = False
+            op.advanced_tools = True
+            op.canvas_layout = op.make_layout()
             def event(kind,value='PRESS',point=None,**extra):
                 c=op.canvas_layout.canvas;x,y=point or (c.x+c.w/2,c.y+c.h/2)
                 data=dict(type=kind,value=value,mouse_x=x+region.x,mouse_y=y+region.y,shift=False,ctrl=False,alt=False)
@@ -49,11 +54,14 @@ def run():
                 op.handle_event(bpy.context,event('LEFTMOUSE','RELEASE',point=point,**extra))
             def click_rect(r):click_at((r.x+r.w/2,r.y+r.h/2))
             def control(key):
+                if op.inspector is None:
+                    op.open_section('DESIGN')
+                op.inspector_details.update(('DESIGN', 'SEW', 'AVATAR', 'CLOTH', 'LIBRARY'))
                 op.refresh_controls()
                 if not any(c.key==key for c in op.inspector.controls):
                     for tab in TABS:
                         if any(c.key==key for c in Inspector(op.inspector.rect,op.canvas_layout.scale,0,op.session.document.seams,tab).controls):
-                            click_rect(op.inspector.tabs[tab]);break
+                            op.open_section(tab);break
                 for _ in range(120):
                     item=next(c for c in op.inspector.controls if c.key==key);r=op.inspector.content
                     y=item.rect.y+item.rect.h/2
@@ -92,7 +100,7 @@ def run():
             scene.dd_internal_mode=False;op.session.selected=rectangle;op.session.path='OUTER';op.choose_tool('INTERNAL')
             world((.04,.05));world((.08,.1));op.handle_event(bpy.context,event('RET'));action('CUT')
             check(op.session.document.find(rectangle).path(op.session.path).role=='SLIT','internal polyline can become a slit')
-            op.session.selected=ellipse;op.session.path='OUTER';op.choose_tool('DART')
+            op.session.selected=ellipse;op.session.path='OUTER';op.fit();op.choose_tool('DART')
             edge=op.session.document.edge(ellipse,0)
             world(op.session.document.edge_point(edge,.25));world(op.session.document.edge_point(edge,.65));world((.65,.2))
             check(any(f.get('type')=='DART' for f in op.session.document.find(ellipse).features),'three-click dart adds automatic same-piece sewing')
@@ -114,7 +122,7 @@ def run():
                 world(op.session.document.edge_point(op.session.document.edge(owner,i),t))
             check(len(op.session.document.seams)==old+2,'four-click free sewing stores partial ranges')
             op.choose_tool('PIN');world((1.45,.2));check(len(op.session.document.anchors)==1,'pin tool creates a fabric anchor')
-            op.choose_tool('TACK');world((1.48,.25));check(op.pending_tack is not None,'tack tool waits for an avatar target')
+            op.choose_tool('TACK');world((1.56,.32));check(op.pending_tack is not None,'tack tool waits for an avatar target')
             area.spaces.active.region_3d.update()
             target=view3d_utils.location_3d_to_region_2d(region,area.spaces.active.region_3d,Vector((0,-.13,1.2)))
             if target is not None and op.canvas_layout.panel.contains(*target):
@@ -133,9 +141,23 @@ def run():
             click_rect(control('dd_library_name').value_rect)
             for char in 'UI outfit':op.handle_event(bpy.context,event('TEXT',unicode=char))
             op.handle_event(bpy.context,event('RET'));action('LIBRARY_SAVE')
+            if op.confirm_action == 'LIBRARY_SAVE':
+                click_rect(op.make_layout().buttons['CANCEL_ACTION'][0])
+                check(op.confirm_action is None,'library overwrite can be cancelled')
+                action('LIBRARY_SAVE')
+                click_rect(op.make_layout().buttons['CONFIRM_ACTION'][0])
             check(bool(op.library_items),'custom library saves the editable design')
             original=op.session.document.find(square_a).points[0]
             body.scale*=1.2;bpy.context.view_layer.update();action('LIBRARY_LOAD')
+            check(op.confirm_action == 'LIBRARY_LOAD', 'loading over a garment requires explicit confirmation')
+            selected_piece = op.session.selected
+            op.handle_event(bpy.context,event('X'))
+            check(op.session.selected == selected_piece and op.session.document.find(selected_piece) is not None,
+                  'confirmation blocks unrelated destructive shortcuts')
+            click_rect(op.make_layout().buttons['CANCEL_ACTION'][0])
+            check(op.session.document.find(square_a).points[0] == original,'cancelled library load preserves the garment')
+            action('LIBRARY_LOAD')
+            click_rect(op.make_layout().buttons['CONFIRM_ACTION'][0])
             check(abs(op.session.document.find(square_a).points[0][0]-original[0]*1.2)<1e-4,'custom library loads and scales design for another body size')
             op.session.selected=rectangle;op.session.path='OUTER';op.inspector_tab='DESIGN';op.inspector_scroll=0
             op.refresh_controls();op.fit();op.save_window()

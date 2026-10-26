@@ -12,3 +12,9 @@ build/
 .idea/
 .DS_Store
 Thumbs.db
+*.log
+*.bak
+*.tmp
+.coverage
+htmlcov/
+dist/

@@ -20,7 +20,8 @@ if not os.path.exists(BLENDER_PATH):
             BLENDER_PATH = p
             break
 
-def capture(stage="DRAFT", output_name="screenshot_app.png", full_mode=False):
+def capture(stage="DRAFT", output_name="screenshot_app.png", full_mode=False,
+            empty=False, panel_size=None, demo=False, tool=None, section=None, query='', reveal_3d=False, cursor_controls=False, card_kind=None):
     build_dir = ROOT / "build"
     build_dir.mkdir(exist_ok=True)
     full_path = build_dir / "screenshot_full_raw.png"
@@ -36,7 +37,6 @@ import sys, os, time, json
 from pathlib import Path
 import bpy
 
-# Disable Blender splash screen immediately before window creation
 bpy.context.preferences.view.show_splash = False
 
 ROOT = Path(r'{str(ROOT)}')
@@ -46,7 +46,6 @@ devil_designer.register()
 from devil_designer.core import Session
 from devil_designer import editor
 
-# Hide default Blender scene objects (Cube, Light, Camera)
 for obj in bpy.context.scene.objects:
     if obj.name in {{'Cube', 'Camera', 'Light'}}:
         obj.hide_set(True)
@@ -57,14 +56,12 @@ area.spaces.active.show_region_header = False
 area.spaces.active.show_region_tool_header = False
 region = next(r for r in area.regions if r.type == 'WINDOW')
 
-# Maximize 3D Viewport to hide all other Blender editor panels (Outliner, Properties, Timeline)
 try:
     with bpy.context.temp_override(area=area, region=region):
         bpy.ops.screen.screen_full_area(use_hide_panels=True)
 except Exception as e:
     print('Fullscreen area exception:', e)
 
-# Re-fetch area and region after maximization
 area = next(a for a in bpy.context.screen.areas if a.type == 'VIEW_3D')
 region = next(r for r in area.regions if r.type == 'WINDOW')
 
@@ -73,12 +70,23 @@ with bpy.context.temp_override(area=area, region=region):
     op = editor._active
     op.set_stage('{stage}')
     
-    # Toggle full expanded mode if requested
     if {full_mode} and not op.full:
         op.toggle_full()
+
+    if {panel_size is not None}:
+        from devil_designer.canvas import Rect
+        op.full = False
+        panel = op.canvas_layout.panel
+        requested_size = {panel_size!r}
+        op.set_window(Rect(panel.x, panel.y, requested_size[0], requested_size[1]))
+
+    if {demo}:
+        op.workflow_action('DEMO')
+        if op.session.document.patterns:
+            op.session.selected = op.session.document.patterns[0].id
+            op.sync_selection()
     
-    # Create sample garments if empty
-    if not op.session.document.patterns:
+    if not {empty} and not op.session.document.patterns:
         s = Session()
         s.add([(0, 0), (.35, 0), (.35, .42), (0, .42)])
         s.add([(.45, 0), (.80, 0), (.80, .42), (.45, .42)])
@@ -86,6 +94,46 @@ with bpy.context.temp_override(area=area, region=region):
         op.session = s
         op.persist()
         op.fit()
+
+    if {tool!r}:
+        op.choose_tool({tool!r})
+    if {section!r}:
+        if op.minimal_ui:
+            op.show_card({{'DESIGN': 'EDIT', 'AVATAR': 'GARMENT', 'SEW': 'SEWING', 'CLOTH': 'SIMULATE', 'LIBRARY': 'LIBRARY'}}[{section!r}])
+        else:
+            op.open_section({section!r})
+    if {query!r}:
+        op.settings_open = not op.minimal_ui
+        op.canvas_layout = op.make_layout()
+        op.search_query = {query!r}
+        op.inspector_scroll = 0
+    if {reveal_3d!r}:
+        op.reveal_3d()
+        from mathutils import Vector
+        area.spaces.active.region_3d.view_rotation = Vector((0, -1, 0)).to_track_quat('Z', 'Y')
+        area.spaces.active.region_3d.view_location = Vector((.65, 0, 1.2))
+        area.spaces.active.region_3d.view_distance = 2.8
+    if {cursor_controls!r}:
+        canvas = op.canvas_layout.canvas
+        if op.session.document.patterns:
+            op.pointer = op.view.screen(op.session.document.patterns[0].points[0], canvas)
+        else:
+            op.pointer = (canvas.x + canvas.w / 2, canvas.y + canvas.h / 2)
+        op.show_card('POINT')
+    if {card_kind!r}:
+        canvas = op.canvas_layout.canvas
+        anchor = (canvas.x + canvas.w * .68, canvas.y + canvas.h * .62)
+        if {card_kind!r} == 'SEAM' and op.session.document.seams:
+            badge, identity, label = op.seam_badges()[0]
+            op.seam_selected = identity
+            anchor = (badge.x + badge.w + 6 * op.canvas_layout.scale, badge.y + badge.h)
+        if {card_kind!r} in {{'SIMULATE', 'KEEP'}}:
+            button = op.canvas_layout.buttons[{card_kind!r} + '_OPTIONS'][0]
+            anchor = (button.x, button.y + button.h)
+        op.show_card({card_kind!r}, anchor)
+    if not {cursor_controls!r}:
+        op.pointer = (-100, -100)
+    op.refresh_controls()
         
     p = op.canvas_layout.panel
     rect_data = {{
@@ -127,6 +175,7 @@ with bpy.context.temp_override(area=area, region=region):
     try:
         rect = json.loads(rect_path.read_text(encoding="utf-8"))
         img = Image.open(full_path)
+        img.save(build_dir / (Path(output_name).stem + '_workspace.png'))
         win_w, win_h = img.size
         x = max(0, int(rect['panel_x']))
         w = min(win_w - x, int(rect['panel_w']))

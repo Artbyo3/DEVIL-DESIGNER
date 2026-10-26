@@ -61,6 +61,14 @@ class DesignTools:
             try:self._scene.dd_segment_length=self.session.document.edge_length(self.session.segment)
             except ValueError:self.session.segment=None
 
+    def select_anchor(self, anchor):
+        self.selected_anchor = anchor.id
+        self.session.selected = anchor.pattern
+        self.session.corner = None
+        self.session.path = 'OUTER'
+        self.session.segment = None
+        self.session.point_selection = []
+
     def design_info(self,key):
         doc=self.session.document;p=doc.find(self.session.selected)
         if key=='PATTERN_INFO':
@@ -70,7 +78,7 @@ class DesignTools:
                 try:detail=f'Selected segment: {doc.edge_length(self.session.segment)*100:.3f} cm'
                 except ValueError:pass
             return p.name,detail
-        if key=='CHAIN_INFO':return f'Chain A: {len(self.chain_a)} / B: {len(self.chain_b)} segments','Free mode: start/end A, start/end B.'
+        if key=='CHAIN_INFO':return f'Chain A: {len(self.chain_a)} / B: {len(self.chain_b)} segments',('Free mode: start/end A, start/end B.' if self._scene.dd_free_sewing else 'Pair mode: pick an edge, then its partner.')
         if key=='PRESET_INFO':return (p.preset.title() if p else 'Select a pattern for a preset.'),'Stretch/bend per piece; mass shared.'
         if key=='LIBRARY_INFO':
             if not self.library_items:return 'No saved garments.','Save stores editable source and UVs.'
@@ -111,9 +119,6 @@ class DesignTools:
             elif action == 'DUPLICATE':
                 if not p:raise ValueError('Select a pattern to duplicate.')
                 self.session.duplicate()
-                new_pat = self.session.document.patterns[-1]
-                new_pat.points = [(pt[0] + 0.05, pt[1] + 0.05) for pt in new_pat.points]
-                self.session.selected = new_pat.id
                 self.message = 'Pattern duplicated (Shift D).'
             elif action.startswith('SET_PRESET_'):
                 p_val = action.replace('SET_PRESET_', '')
@@ -162,9 +167,11 @@ class DesignTools:
                 elif action=='LIBRARY_LOAD':
                     before=scene.dd_document
                     loaded=library.load(bpy.context,scene.dd_library_selected)
+                    self.clear_interaction_references()
                     self.session.undo_stack.append(before);self.session.redo_stack.clear()
                     self.session.document=loaded;self.session.selected=loaded.patterns[0].id if loaded.patterns else None
                     self.session.path='OUTER';self.session.corner=None;self.session.segment=None
+                    self.session.point_selection=[]
                     self._stored=scene.dd_document;self.update_reference(bpy.context,align=True);self.fit()
             else:return
             self.persist();self.sync_selection();self.refresh_controls()
@@ -228,7 +235,7 @@ class DesignTools:
                     else:
                         owner,source=self.pending_tack
                         self.session.selected=owner
-                        anchor=self.session.add_anchor(source,'TACK',placement.normalized_target(self._scene,point));self.selected_anchor=anchor.id;self.persist()
+                        anchor=self.session.add_anchor(source,'TACK',placement.normalized_target(self._scene,point));self.select_anchor(anchor);self.persist()
                     self.pending_place=self.pending_tack=None;self.message='Placement / tack attached to the avatar.'
                 except ValueError as exc:self.message=str(exc)
                 return {'RUNNING_MODAL'}
@@ -240,10 +247,12 @@ class DesignTools:
             else:self.design_action('CHAIN_SEW')
             return {'RUNNING_MODAL'}
         if not self.numeric and press:
-            if event.type in {'E','I','K','T','D'} and not event.ctrl and not event.alt:
-                self.choose_tool({'E':'ELLIPSE','I':'INTERNAL','K':'PIN','T':'TACK','D':'DART'}[event.type]);return {'RUNNING_MODAL'}
+            if event.type == 'D' and event.shift and not event.ctrl and not event.alt:
+                self.perform_action('DUPLICATE');return {'RUNNING_MODAL'}
+            if event.type in {'E','I','K','T','D','G'} and not event.ctrl and not event.alt:
+                self.choose_tool({'E':'ELLIPSE','I':'INTERNAL','K':'PIN','T':'TACK','D':'DART','G':'PLACE'}[event.type]);return {'RUNNING_MODAL'}
             if event.type in {'C','Q','M','U'} and not event.ctrl:
-                self.design_action({'C':'CURVE','Q':'SPLIT','M':'MERGE','U':'MIRROR_SEW' if event.shift else 'UNFOLD'}[event.type]);return {'RUNNING_MODAL'}
+                self.perform_action({'C':'CURVE','Q':'SPLIT','M':'MERGE','U':'MIRROR_SEW' if event.shift else 'UNFOLD'}[event.type]);return {'RUNNING_MODAL'}
             if event.type=='L':self._scene.dd_lengths_visible=not self._scene.dd_lengths_visible;return {'RUNNING_MODAL'}
         return None
 
@@ -253,12 +262,12 @@ class DesignTools:
         if self.tool in {'PIN','TACK'}:
             for anchor in doc.anchors:
                 if math.dist(self.view.screen((anchor.x,anchor.y),self.canvas_layout.canvas),self.pointer)<10*self.canvas_layout.scale:
-                    self.selected_anchor=anchor.id;self.message='Anchor selected. Use Remove selected pin / tack in Avatar.';return
+                    self.select_anchor(anchor);self.message='Anchor selected. Delete removes this pin or tack.';return
             p,index=self.design_hit()
             if p is None:raise ValueError('Click inside the fabric to add a pin or tack.')
             self.session.selected=p.id
             if self.tool=='PIN':
-                anchor=self.session.add_anchor(point);self.selected_anchor=anchor.id;self.persist();self.message='Pin added.'
+                anchor=self.session.add_anchor(point);self.select_anchor(anchor);self.persist();self.message='Pin added.'
             else:self.pending_tack=(p.id,point);self.message='Now click the avatar in 3D to attach this tack.'
         elif self.tool=='DART':
             if len(self.dart_base)<2:

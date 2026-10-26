@@ -11,9 +11,17 @@ class OverlayControls:
     def initialize_controls(self):
         saved = tuple(self._scene.dd_ui_rect)
         self.window_rect = saved if saved[2] > 0 and saved[3] > 0 else None
-        self.settings_open = self._scene.dd_ui_settings
+        self.settings_open = False
+        self.advanced_tools = False
+        self.pending_simulation = False
         self.inspector_scroll = 0
         self.inspector_tab = 'DESIGN'
+        self.inspector_sections = ['DESIGN']
+        self.inspector_details = set()
+        self.search_query = ''
+        self.search_active = False
+        self.confirm_action = None
+        self.confirm_message = ''
         self.stage = 'DRAFT'
         self.inspector = None
         self.numeric = None
@@ -21,6 +29,80 @@ class OverlayControls:
         self.body_open = False
         self.body_offset = 0
         self.body_menu = None
+        self.context_anchor = None
+        self.setting_drag = None
+
+    def open_context(self, section=None, select=True):
+        if select:
+            pattern, corner = self.hit()
+            if pattern:
+                if (self.session.selected != pattern.id or self.session.path != self.hit_path
+                        or corner not in self.session.point_selection):
+                    self.session.point_selection = [corner] if corner is not None else []
+                self.session.selected = pattern.id
+                self.session.path = self.hit_path
+                self.session.corner = corner
+                self.session.segment = self.hit_edge() if corner is None else None
+                self.sync_selection()
+            else:
+                self.session.selected = None
+                self.session.corner = self.session.segment = None
+                self.session.point_selection = []
+        self.context_anchor = self.pointer
+        self.inspector_sections = [section] if section else []
+        self.inspector_details = set(self.inspector_sections)
+        self.inspector_scroll = 0
+        self.search_query = ''
+        self.search_active = False
+        self.refresh_library()
+        self.refresh_controls()
+        self.message = 'Controls at your cursor. Drag numeric values; click to type. Click outside to close.'
+
+    def close_context(self):
+        self.context_anchor = None
+        self.search_active = False
+        self.search_query = ''
+        self.body_open = False
+        self.refresh_controls()
+
+    def local_control_rows(self):
+        rows = []
+        if self.tool == 'SEW':
+            if self.chain_stage:
+                rows.append(('button', 'CHAIN_B' if self.chain_stage == 'A' else 'CHAIN_SEW',
+                             'Continue to side B' if self.chain_stage == 'A' else 'Sew these chains'))
+            if self.seam_selected:
+                rows.extend(('seam', seam.id, 'Selected') for seam in self.session.document.seams
+                            if seam.id == self.seam_selected)
+            rows.append(('button', 'CANCEL_DRAFT', 'Cancel pending sewing'))
+            actions = [('SEW', 'Pair edges'), ('FREE_SEW', 'Pick sewing range on edges'),
+                       ('CHAIN_A', 'Collect side A'), ('CHAIN_B', 'Collect side B'),
+                       ('CHAIN_SEW', 'Sew chains'), ('CHAIN_CLEAR', 'Clear pending sewing')]
+            rows.extend(('button', key, label) for key, label in actions)
+        elif self.session.selected:
+            if self.session.corner is not None:
+                rows.extend([('button', 'CURVE', 'Corner / curve'),
+                             ('number', 'dd_point_x', ''), ('number', 'dd_point_y', '')])
+            elif self.session.segment:
+                rows.extend([('button', 'SPLIT', 'Split this edge'),
+                             ('number', 'dd_segment_length', ''),
+                             ('button', 'UNFOLD', 'Unfold across this edge'),
+                             ('button', 'MIRROR_SEW', 'Mirror and sew this edge')])
+            rows.extend([('preset_chips', 'PRESET_CHIP', ''),
+                         ('pair_buttons', 'DUPLICATE', 'DELETE', 'Duplicate', 'Delete'),
+                         ('pair_buttons', 'PLACE', 'PIN', 'Place in 3D', 'Pin'),
+                         ('pair_buttons', 'TACK', 'WRAP', 'Tack to body', 'Wrap'),
+                         ('pair_buttons', 'CUT', 'TRACE', 'Cut internal path', 'Trace as piece')])
+        else:
+            rows.extend(('button', key, label) for key, label in (
+                ('RECTANGLE', 'Draw panel'), ('POLYGON', 'Draw polygon'),
+                ('ELLIPSE', 'Draw ellipse'), ('INTERNAL', 'Draw internal path'),
+                ('DART', 'Draw dart'), ('SEW', 'Sew edges')))
+        rows.extend([('pair_buttons', 'SIMULATE', 'STOP', 'Simulate / pause', 'Stop'),
+                     ('pair_buttons', 'KEEP', 'RESET', 'Keep mesh', 'Reset'),
+                     ('pair_buttons', 'SNAP', 'LENGTHS', 'Snap', 'Measurements'),
+                     ('pair_buttons', 'UNDO', 'REDO', 'Undo', 'Redo')])
+        return rows
 
     def selection_context(self):
         ctx = {}
@@ -46,21 +128,214 @@ class OverlayControls:
     def refresh_controls(self):
         self.inspector = None
         self.body_menu = None
-        if self.canvas_layout.inspector:
+        inspector_rect = self.canvas_layout.inspector
+        if self.context_anchor is not None:
+            bounds = self.canvas_layout.available
+            scale = self.canvas_layout.scale
+            width = min(340 * scale, bounds.w)
+            height = min(620 * scale, bounds.h)
+            x = max(bounds.x, min(self.context_anchor[0], bounds.x + bounds.w - width))
+            y = max(bounds.y, min(self.context_anchor[1] - height, bounds.y + bounds.h - height))
+            inspector_rect = Rect(x, y, width, height)
+        if getattr(self, 'minimal_ui', False):
+            return
+        if inspector_rect:
             ctx = self.selection_context()
-            self.inspector = Inspector(self.canvas_layout.inspector, self.canvas_layout.scale,
+            ctx.update(sections=self.inspector_sections, query=self.search_query,
+                       corner=self.session.corner, segment=self.session.segment,
+                       drawing=bool(self.draft), tool=self.tool, details=self.inspector_details)
+            if self.context_anchor is not None and not self.search_query and not self.inspector_sections:
+                ctx['local_rows'] = self.local_control_rows()
+            self.inspector = Inspector(inspector_rect, self.canvas_layout.scale,
                                        self.inspector_scroll, self.session.document.seams,
-                                       self.inspector_tab, context=ctx)
+                                       'ALL', context=ctx)
             self.inspector_scroll = self.inspector.scroll
             if self.body_open:
                 anchor = next((c.value_rect for c in self.inspector.controls if c.kind == 'body'), None)
                 if anchor:
                     objects = sorted((o for o in self._scene.objects if o.type == 'MESH' and
                                     o.get('dd_kind') not in {'panel', 'simulation', 'final'}), key=lambda o: o.name.casefold())
-                    self.body_menu = BodyMenu(self.canvas_layout.panel, anchor, self.canvas_layout.scale, objects, self.body_offset)
+                    bounds = self.canvas_layout.available if self.context_anchor is not None else self.canvas_layout.panel
+                    self.body_menu = BodyMenu(bounds, anchor, self.canvas_layout.scale, objects, self.body_offset)
+
+    def open_section(self, section):
+        self.inspector_tab = section
+        self.inspector_sections = [section]
+        self.search_query = ''
+        self.search_active = False
+        self.inspector_scroll = 0
+        if self.context_anchor is None:
+            self.settings_open = True
+        if section == 'LIBRARY':
+            self.refresh_library()
+        self.canvas_layout = self.make_layout()
+        self.refresh_controls()
+
+    def search_event(self, event):
+        press = event.value == 'PRESS'
+        if press and event.ctrl and event.type == 'F':
+            self.open_context(select=False)
+            self.search_active = True
+            self.canvas_layout = self.make_layout()
+            self.refresh_controls()
+            return RUNNING
+        if not self.search_active:
+            return None
+        if press and event.type in {'ESC', 'RET', 'NUMPAD_ENTER'}:
+            self.search_active = False
+            if event.type == 'ESC':
+                self.search_query = ''
+            self.refresh_controls()
+            return RUNNING
+        if press and event.type == 'LEFTMOUSE':
+            if not self.inspector or not self.inspector.search.contains(*self.pointer):
+                self.search_active = False
+            return None
+        if press and event.ctrl and event.type == 'A':
+            self.search_query = ''
+        elif press and event.type == 'BACK_SPACE':
+            self.search_query = self.search_query[:-1]
+        elif press and getattr(event, 'unicode', '') and not event.ctrl and not event.alt:
+            self.search_query = (self.search_query + event.unicode)[:80]
+        elif event.type in {'MOUSEMOVE', 'INBETWEEN_MOUSEMOVE', 'WHEELUPMOUSE', 'WHEELDOWNMOUSE'}:
+            return None
+        else:
+            return RUNNING
+        self.inspector_scroll = 0
+        self.refresh_controls()
+        return RUNNING
+
+    def perform_action(self, action, confirmed=False):
+        if action == 'CANCEL_ACTION':
+            self.confirm_action = None
+            self.confirm_message = ''
+            self.message = 'Action cancelled. Your work is unchanged.'
+            self.canvas_layout = self.make_layout()
+            self.refresh_controls()
+            return True
+        if action == 'CONFIRM_ACTION':
+            pending = self.confirm_action
+            self.confirm_action = None
+            self.confirm_message = ''
+            return self.perform_action(pending, confirmed=True) if pending else False
+        blocker = self.action_blocker(action)
+        if blocker:
+            self.message = blocker
+            return False
+        if not confirmed:
+            prompt = ''
+            if action == 'LIBRARY_LOAD' and self.session.document.patterns:
+                prompt = 'Replace this garment with the library item? You can undo the source change.'
+            elif action == 'RESET':
+                prompt = 'Discard this drape and restore the positioned panels?'
+            elif action == 'LIBRARY_SAVE':
+                import re
+                from . import library
+                safe = re.sub(r'[^A-Za-z0-9_-]+', '-', self._scene.dd_library_name.strip()).strip('-')[:80]
+                if (library.directory(self._scene) / (safe + '.garment.json')).exists():
+                    prompt = 'Replace the saved garment with this name?'
+            if prompt:
+                self.confirm_action = action
+                self.confirm_message = self.message = prompt
+                return False
+        tools = {'SELECT', 'POLYGON', 'RECTANGLE', 'ELLIPSE', 'INTERNAL', 'DART',
+                 'SEW', 'FREE_SEW', 'PLACE', 'PIN', 'TACK'}
+        if action in tools:
+            return self.choose_tool(action)
+        if action.startswith('DETAIL_'):
+            section = action.removeprefix('DETAIL_')
+            if section in self.inspector_details:
+                self.inspector_details.remove(section)
+            else:
+                self.inspector_details.add(section)
+        elif action == 'CANCEL_DRAFT':
+            self.cancel_gesture()
+            self.chain_a = []
+            self.chain_b = []
+            self.chain_stage = None
+            self.free_clicks = []
+            self.dart_base = []
+            self.pending_place = self.pending_tack = None
+            self.message = 'Pending operation cancelled. Your saved pieces are unchanged.'
+        elif action == 'FINISH_DRAFT':
+            if self.draft:
+                self.finish_polygon(self.tool != 'INTERNAL')
+            elif self.chain_stage:
+                self.design_action('CHAIN_SEW')
+        elif action in {'BUILD', 'ARRANGE', 'SIMULATE', 'STOP', 'RESET', 'KEEP', 'DEMO'}:
+            return self.workflow_action(action)
+        elif action == 'VIEW_3D':
+            self.reveal_3d()
+        elif action in {'UNDO', 'REDO'}:
+            if self.draft:
+                if action == 'UNDO':
+                    self.draft.pop()
+                self.message = 'Drawing updated. Finish or cancel before document undo.'
+            else:
+                history_stack = self.session.redo_stack if action == 'REDO' else self.session.undo_stack
+                if history_stack:
+                    self.clear_interaction_references()
+                self.run_edit(lambda: self.session.history(action == 'REDO'), action.title() + '.')
+        elif action == 'DELETE':
+            if any(anchor.id == self.selected_anchor for anchor in self.session.document.anchors):
+                self.design_action('REMOVE_ANCHOR')
+            elif self.tool == 'SEW':
+                if self.seam_selected:
+                    self.run_edit(lambda: self.session.remove_seam(self.seam_selected), 'Seam removed.')
+                    self.seam_selected = None
+                self.pending_edge = None
+            else:
+                self.run_edit(self.session.delete, 'Selection deleted.')
+        elif action == 'FIT':
+            self.fit()
+        elif action == 'SNAP':
+            self.snap = not self.snap
+        elif action in {'REFERENCE', 'LENGTHS'}:
+            key = 'dd_reference_visible' if action == 'REFERENCE' else 'dd_lengths_visible'
+            setattr(self._scene, key, not getattr(self._scene, key))
+        elif action == 'HELP':
+            self.message = 'Tools: V P R E I D J K T. Ctrl F finds every action and setting. Escape cancels.'
+        elif action == 'GUIDED_NEXT':
+            self.advance_stage()
+        else:
+            self.design_action(action)
+        self.refresh_controls()
+        return True
+
+    def action_blocker(self, action):
+        if action == 'STOP':
+            return ''
+        if self.confirm_action:
+            return 'Confirm the pending action or choose Go back first.'
+        if self.draft and action not in {'FINISH_DRAFT', 'CANCEL_DRAFT', 'UNDO', 'REDO',
+                                        'FIT', 'SNAP', 'LENGTHS', 'REFERENCE', 'HELP', 'POINT_APPLY'}:
+            return 'Finish drawing or cancel before editing other garment data.'
+        if action in {'BUILD', 'ARRANGE', 'SIMULATE', 'STOP', 'RESET', 'KEEP', 'DEMO'}:
+            return self.workflow_blocker('STOP' if action == 'SIMULATE' and bpy.context.screen.is_animation_playing else action)
+        selected = self.session.document.find(self.session.selected)
+        if action in {'DUPLICATE', 'OFFSET', 'UNFOLD', 'MIRROR_SEW', 'CUT', 'TRACE', 'WRAP', 'PLACE', 'PRESET'} or action.startswith('SET_PRESET_'):
+            if selected is None:
+                return 'Select a piece on the canvas first.'
+        if action == 'CURVE' and self.session.corner is None:
+            return 'Select a point to change its corner or curve.'
+        if action in {'SPLIT', 'SET_LENGTH', 'UNFOLD'} and self.session.segment is None:
+            return 'Select an edge on the canvas first.'
+        if action == 'MERGE' and len(self.session.point_selection) < 2:
+            return 'Shift-click at least two points to merge.'
+        if action == 'CHAIN_SEW' and (not self.chain_a or not self.chain_b):
+            return 'Pick an edge chain for both side A and side B first.'
+        if action == 'LIBRARY_SAVE' and not self.session.document.patterns:
+            return 'Create a garment before saving it.'
+        if action in {'LIBRARY_LOAD', 'LIBRARY_PREV', 'LIBRARY_NEXT'} and not self.library_items:
+            return 'The local garment library is empty.'
+        if action == 'REMOVE_ANCHOR' and not any(anchor.id == self.selected_anchor for anchor in self.session.document.anchors):
+            return 'Select a pin or tack using K or T first.'
+        return ''
 
     def set_window(self, rect):
         s = self.canvas_layout.scale
+        if rect.w < 760 * s:
+            self.settings_open = False
         self.window_rect = tuple(value / s for value in (rect.x, rect.y, rect.w, rect.h))
         self.canvas_layout = self.make_layout()
         self.refresh_controls()
@@ -92,8 +367,16 @@ class OverlayControls:
             return False
         setattr(self._scene, key, value)
         self.numeric = None
+        self.apply_local_setting(key)
         self.message = SETTINGS[key].label + ' updated.'
         return True
+
+    def apply_local_setting(self, key):
+        if self.context_anchor is not None:
+            if key in {'dd_point_x', 'dd_point_y'} and self.session.corner is not None:
+                self.perform_action('POINT_APPLY')
+            elif key == 'dd_segment_length' and self.session.segment:
+                self.perform_action('SET_LENGTH')
 
     def step_setting(self, key, direction, event):
         spec = SETTINGS[key]
@@ -142,7 +425,7 @@ class OverlayControls:
             state.update(text=text, cursor=cursor, selected=False)
             return RUNNING
         char = getattr(event, 'unicode', '')
-        if press and char and (state['key'] == 'dd_library_name' or all(c in '0123456789.,eE+-' for c in char)):
+        if press and char and (not hasattr(SETTINGS[state['key']], 'factor') or all(c in '0123456789.,eE+-' for c in char)):
             text, cursor = state['text'], state['cursor']
             if state['selected']:
                 text, cursor = '', 0
@@ -153,6 +436,45 @@ class OverlayControls:
         press = event.value == 'PRESS'
         l = self.canvas_layout
         x, y = self.pointer
+        if self.setting_drag:
+            state = self.setting_drag
+            key = state['key']
+            spec = SETTINGS[key]
+            distance = x - state['pointer'][0]
+            if press and event.type in {'ESC', 'RIGHTMOUSE'}:
+                setattr(self._scene, key, state['value'])
+                self.setting_drag = None
+                return RUNNING
+            if event.type == 'MOUSEMOVE' and abs(distance) >= 4 * l.scale:
+                state['moved'] = True
+                increment = spec.step / spec.factor * (.1 if event.shift else 1)
+                value = max(spec.low, min(spec.high, state['value'] + distance / (8 * l.scale) * increment))
+                if state.get('absolute'):
+                    track = state['absolute']
+                    value = spec.low + (spec.high - spec.low) * max(0, min(1, (x - track.x) / track.w))
+                setattr(self._scene, key, int(round(value)) if spec.integer else round(value, 8))
+                return RUNNING
+            if event.type == 'LEFTMOUSE' and event.value == 'RELEASE':
+                self.setting_drag = None
+                if state['moved']:
+                    self.apply_local_setting(key)
+                else:
+                    text = spec.format(getattr(self._scene, key))
+                    self.numeric = dict(key=key, text=text, cursor=len(text), selected=True)
+                return RUNNING
+            return RUNNING
+        if self.context_anchor is not None and not self.body_menu and not self.numeric:
+            if press and event.type in {'ESC', 'RIGHTMOUSE'}:
+                self.close_context()
+                return RUNNING
+            if press and event.type == 'LEFTMOUSE' and not self.inspector.rect.contains(x, y):
+                self.close_context()
+                return RUNNING
+        if (self.context_anchor is None and press and event.type == 'RIGHTMOUSE'
+                and l.canvas.contains(x, y) and not self.draft and not self.gesture
+                ):
+            self.open_context(select=not (self.pending_edge or self.free_clicks or self.chain_stage))
+            return RUNNING
         if self.window_gesture:
             gesture = self.window_gesture
             if press and event.type in {'ESC', 'RIGHTMOUSE'}:
@@ -194,7 +516,11 @@ class OverlayControls:
                 return result
         if self.body_menu:
             if press and event.type in {'ESC', 'RIGHTMOUSE'}:
+                resume_requested = self.pending_simulation
                 self.body_open = False
+                self.pending_simulation = False
+                if resume_requested and self.context_anchor is not None:
+                    self.close_context()
                 self.refresh_controls()
                 return RUNNING
             if event.type in {'WHEELUPMOUSE', 'WHEELDOWNMOUSE'}:
@@ -203,14 +529,18 @@ class OverlayControls:
                 self.refresh_controls()
                 return RUNNING
             if press and event.type == 'LEFTMOUSE':
+                resume_requested = self.pending_simulation
                 for r, obj, _ in self.body_menu.rows:
                     if r.contains(x, y):
                         self.choose_body(obj, context)
                         self.message = 'Avatar body selected.' if obj else 'Avatar body cleared.'
                         break
                 self.body_open = False
+                self.pending_simulation = False
+                if resume_requested and self.context_anchor is not None:
+                    self.close_context()
                 self.refresh_controls()
-                return RUNNING if l.panel.contains(x, y) else {'PASS_THROUGH'}
+                return RUNNING
             return RUNNING if l.panel.contains(x, y) else None
 
         button = l.button(x, y)
@@ -219,6 +549,8 @@ class OverlayControls:
             return RUNNING
         if press and event.type == 'LEFTMOUSE':
             if button in {'SETTINGS', 'INSPECTOR'}:
+                if self.context_anchor is not None:
+                    self.close_context()
                 self.settings_open = not self.settings_open
                 self.body_open = False
                 self.canvas_layout = self.make_layout()
@@ -254,20 +586,23 @@ class OverlayControls:
                 hit = self.inspector.hit((x, y))
                 if hit:
                     action, key = hit
-                    if action == 'TAB':
-                        tab_to_stage = {'DESIGN': 'DRAFT', 'SEW': 'SEW', 'AVATAR': 'ARRANGE', 'CLOTH': 'SIMULATE', 'LIBRARY': 'LIBRARY'}
-                        self.stage = tab_to_stage.get(key, 'DRAFT')
-                        self.inspector_tab = key
-                        self.inspector_scroll = 0
-                        if key == 'LIBRARY':
-                            self.refresh_library()
-                        self.canvas_layout = self.make_layout()
+                    if action == 'SEARCH':
+                        self.search_active = True
+                    elif action == 'SECTION':
+                        if key in self.inspector_sections:
+                            self.inspector_sections.remove(key)
+                        else:
+                            self.open_section(key)
                     elif action in {'STEP_UP', 'STEP_DOWN'}:
                         self.step_setting(key, 1 if action == 'STEP_UP' else -1, event)
+                        self.apply_local_setting(key)
                     elif action == 'EDIT':
-                        text = SETTINGS[key].format(getattr(self._scene, key))
-                        self.numeric = dict(key=key, text=text, cursor=len(text), selected=True)
-                        self.message = 'Type a value. Enter applies it; Escape cancels.'
+                        if self.context_anchor is not None and hasattr(SETTINGS[key], 'factor'):
+                            self.setting_drag = dict(key=key, value=getattr(self._scene, key), pointer=self.pointer, moved=False)
+                        else:
+                            text = SETTINGS[key].format(getattr(self._scene, key))
+                            self.numeric = dict(key=key, text=text, cursor=len(text), selected=True)
+                        self.message = 'Drag to adjust; click to type. Enter applies; Escape cancels.'
                     elif action == 'TOGGLE':
                         setattr(self._scene, key, not getattr(self._scene, key))
                     elif action == 'BODY':
@@ -296,18 +631,18 @@ class OverlayControls:
                         self.seam_selected = key
                         self.message = 'Seam selected. B: reverse. X: remove.'
                     elif action in {'BUILD', 'ARRANGE', 'SIMULATE', 'STOP', 'RESET', 'KEEP'}:
-                        self.workflow_action(action)
+                        self.perform_action(action)
                     else:
-                        self.design_action(action)
+                        self.perform_action(action)
+                    direct_canvas_actions = {'PLACE', 'PIN', 'TACK', 'SEW', 'FREE_SEW', 'CHAIN_A', 'CHAIN_B',
+                                             'RECTANGLE', 'POLYGON', 'ELLIPSE', 'INTERNAL', 'DART', 'SIMULATE',
+                                             'KEEP', 'RESET', 'DELETE', 'LIBRARY_LOAD', 'CURVE', 'SPLIT',
+                                             'UNFOLD', 'MIRROR_SEW', 'CUT', 'TRACE', 'MERGE', 'OFFSET'}
+                    if self.context_anchor is not None and (action in direct_canvas_actions or self.confirm_action):
+                        if not self.body_open:
+                            self.close_context()
                     self.refresh_controls()
                     return RUNNING
-                if self.canvas_layout.inspector_foot and self.canvas_layout.inspector_foot.contains(x, y):
-                    cta = Rect(self.canvas_layout.inspector_foot.x + 12 * l.scale,
-                               self.canvas_layout.inspector_foot.y + 10 * l.scale,
-                               self.canvas_layout.inspector_foot.w - 24 * l.scale, 36 * l.scale)
-                    if cta.contains(x, y):
-                        self.advance_stage()
-                        return RUNNING
             if event.type not in {'LEFTMOUSE', 'RIGHTMOUSE', 'MIDDLEMOUSE', 'MOUSEMOVE', 'INBETWEEN_MOUSEMOVE'}:
                 return None
             return RUNNING

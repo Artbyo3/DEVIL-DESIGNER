@@ -16,7 +16,11 @@ class Setting:
 
     def format(self, value):
         value = value * self.factor
-        return f"{int(value)}" if self.integer else f"{value:.8g}"
+        return f"{int(value)}" if self.integer else f"{value:.15g}"
+
+    def display(self, value):
+        value = value * self.factor
+        return f"{int(value)}" if self.integer else f"{value:.6g}"
 
     def parse(self, text):
         try:
@@ -71,20 +75,45 @@ class Control:
     btn_b: tuple = None
 
 TABS = ('DESIGN', 'AVATAR', 'SEW', 'CLOTH', 'LIBRARY')
+SECTION_NAMES = {'DESIGN': 'Draw & edit', 'AVATAR': 'Body & placement', 'SEW': 'Sewing',
+                 'CLOTH': 'Fabric & drape', 'LIBRARY': 'Garment library'}
+DIRECT_ACTIONS = (
+    ('SELECT', 'Select and move'), ('POLYGON', 'Draw polygon'), ('RECTANGLE', 'Draw rectangle'),
+    ('ELLIPSE', 'Draw ellipse'), ('INTERNAL', 'Draw internal path'), ('DART', 'Create dart'),
+    ('SEW', 'Sew two edges'), ('FREE_SEW', 'Free range sewing'), ('PLACE', 'Place panel in 3D'),
+    ('PIN', 'Pin fabric'), ('TACK', 'Tack fabric to body'), ('DELETE', 'Delete selection'),
+    ('FINISH_DRAFT', 'Finish drawing'), ('CANCEL_DRAFT', 'Cancel drawing or pending sewing'),
+    ('BUILD', 'Build or update 3D panels'), ('ARRANGE', 'Auto arrange two panels'),
+    ('SIMULATE', 'Start or pause drape'), ('STOP', 'Stop simulation'), ('RESET', 'Reset drape'),
+    ('KEEP', 'Keep draped mesh'), ('VIEW_3D', 'Show 3D viewport'),
+    ('UNDO', 'Undo last edit'), ('REDO', 'Redo last edit'), ('FIT', 'Fit patterns to canvas'),
+    ('SNAP', 'Toggle snapping'), ('REFERENCE', 'Toggle body reference'),
+    ('LENGTHS', 'Toggle measured lengths'), ('HELP', 'Keyboard shortcuts'),
+    ('GUIDED_NEXT', 'Optional guided workflow: next step'),
+    ('SET_PRESET_COTTON', 'Cotton fabric'), ('SET_PRESET_SILK', 'Silk fabric'),
+    ('SET_PRESET_DENIM', 'Denim fabric'), ('SET_PRESET_KNIT', 'Knit fabric'),
+    ('SET_PRESET_LINEN', 'Linen fabric'),
+)
 
 @dataclass(frozen=True)
 class TextSetting:
     key: str
     label: str
     unit: str = ''
+    maximum: int = 80
+    allow_empty: bool = False
     def format(self, value):
         return value
     def parse(self, text):
-        if not text.strip() or len(text) > 80:
-            raise ValueError('Use a name between 1 and 80 characters.')
+        if (not text.strip() and not self.allow_empty) or len(text) > self.maximum:
+            raise ValueError(f'{self.label}: use up to {self.maximum} characters.')
         return text.strip()
 
+    def display(self, value):
+        return value
+
 SETTINGS['dd_library_name'] = TextSetting('dd_library_name', 'Garment name')
+SETTINGS['dd_library_dir'] = TextSetting('dd_library_dir', 'Library folder', maximum=4096, allow_empty=True)
 
 
 class Inspector:
@@ -139,12 +168,14 @@ class Inspector:
                 ('button', 'TRACE', 'Trace path as pattern'),
                 ('hint', '', 'D: two base clicks, then dart apex.'),
                 ('toggle', 'dd_lengths_visible', 'Live segment lengths'),
+                ('button', 'GUIDED_NEXT', 'Optional guide: next step'),
             ]
         elif tab == 'AVATAR':
             rows = [
                 ('title', '', 'AVATAR AND PLACEMENT'),
                 ('body', 'BODY', 'Avatar body'),
                 ('button', 'BODY_USE', 'Use selected body'),
+                ('button', 'ARRANGE', 'Auto arrange front / back'),
                 ('button', 'PLACE', 'Click-place selected piece'),
                 ('number', 'dd_wrap_radius', ''),
                 ('button', 'WRAP', 'Wrap / unwrap selected piece'),
@@ -185,6 +216,7 @@ class Inspector:
             rows = [
                 ('title', '', 'FABRIC AND SIMULATION'),
                 ('cycle', 'PRESET', 'Selected fabric'),
+                ('preset_chips', 'PRESET_CHIP', ''),
                 ('info', 'PRESET_INFO', ''),
                 ('number', 'dd_spacing', ''),
                 ('number', 'dd_clearance', ''),
@@ -209,15 +241,67 @@ class Inspector:
                 ('button', 'LIBRARY_NEXT', 'Next garment'),
                 ('toggle', 'dd_library_refit', 'Scale by body height'),
                 ('button', 'LIBRARY_LOAD', 'Load onto selected avatar'),
+                ('text', 'dd_library_dir', 'Library folder'),
+                ('hint', '', 'Empty folder uses the default local library.'),
                 ('hint', '', 'Source, sewing, UVs and poses saved.'),
                 ('hint', '', 'Avatar meshes are never bundled.'),
             ]
 
         heights = {
+            'fold': 36,
             'title': 32, 'body': 54, 'section': 32, 'number': 56, 'text': 56,
             'toggle': 32, 'button': 31, 'hint': 32, 'seam': 64, 'cycle': 32, 'info': 58,
             'obj_h': 46, 'field_pair': 56, 'pair_buttons': 38, 'preset_chips': 32
         }
+        self.entries = rows
+        self.search = Rect(rect.x + 8 * s, rect.y + rect.h - 34 * s, rect.w - 16 * s, 28 * s)
+        if tab == 'ALL':
+            self.tabs = {}
+            self.content = Rect(rect.x, rect.y, rect.w, max(1.0, rect.h - 42 * s))
+            rows = list(self.context.get('local_rows', ()))
+            query = self.context.get('query', '').casefold().strip()
+            sections = self.context.get('sections', ('DESIGN',))
+            order = list(sections) + [section for section in TABS if section not in sections]
+            for section in order:
+                entries = Inspector(rect, scale, 0, seams, section, self.context).entries
+                if not query and section not in self.context.get('details', set()):
+                    core = {
+                        'DESIGN': {'PATTERN_INFO', 'PRESET_CHIP', 'DUPLICATE', 'NUM_RECT', 'NUM_ELLIPSE'},
+                        'AVATAR': {'BODY', 'BODY_USE', 'ARRANGE', 'PLACE', 'WRAP', 'dd_wrap_radius', 'REMOVE_ANCHOR', 'dd_reference_visible'},
+                        'SEW': {'CHAIN_INFO', 'dd_free_sewing', 'dd_sew_reverse', 'CHAIN_A', 'CHAIN_B', 'CHAIN_SEW', 'CHAIN_CLEAR'},
+                        'CLOTH': {'PRESET', 'PRESET_CHIP', 'PRESET_INFO', 'dd_spacing', 'dd_quality', 'dd_frames', 'dd_self_collision'},
+                        'LIBRARY': {'dd_library_name', 'LIBRARY_SAVE', 'LIBRARY_INFO', 'LIBRARY_PREV', 'LIBRARY_NEXT', 'dd_library_refit', 'LIBRARY_LOAD'},
+                    }[section]
+                    if section == 'DESIGN':
+                        if self.context.get('corner') is not None or self.context.get('tool') in {'POLYGON', 'INTERNAL'}:
+                            core |= {'dd_point_x', 'dd_point_y', 'POINT_APPLY', 'CURVE'}
+                        if self.context.get('segment') is not None:
+                            core |= {'SPLIT', 'dd_segment_length', 'SET_LENGTH', 'UNFOLD', 'MIRROR_SEW'}
+                        if not self.context.get('selection_kind') or self.context.get('tool') in {'RECTANGLE', 'ELLIPSE'}:
+                            core |= {'dd_point_x', 'dd_point_y', 'dd_width', 'dd_height'}
+                    entries = [entry for entry in entries if entry[1] in core or entry[0] in {'obj_h', 'seam'}]
+                    entries.append(('button', 'DETAIL_' + section, 'More ' + SECTION_NAMES[section].lower() + ' controls'))
+                elif not query:
+                    entries.append(('button', 'DETAIL_' + section, 'Show fewer controls'))
+                matches = []
+                for entry in entries:
+                    terms = ' '.join(str(value) for value in entry[1:]) + ' ' + SECTION_NAMES[section]
+                    if entry[0] == 'preset_chips':
+                        terms += ' Cotton Silk Denim Knit Linen fabric presets'
+                    if entry[1] in SETTINGS:
+                        terms += ' ' + SETTINGS[entry[1]].label
+                    if not query or all(word in terms.casefold() for word in query.split()):
+                        matches.append(entry)
+                if query and not matches:
+                    continue
+                rows.append(('fold', section, SECTION_NAMES[section]))
+                if query or section in sections:
+                    rows.extend(entry for entry in matches if entry[0] != 'title')
+            if query:
+                rows.extend(('button', name, label) for name, label in DIRECT_ACTIONS
+                            if all(word in (name + ' ' + label).casefold() for word in query.split()))
+            if not rows:
+                rows = [('hint', '', 'No matches. Try an action or setting.')]
         self.total = (sum(heights[r[0]] for r in rows) + 12) * s
         self.max_scroll = max(0, self.total - self.content.h)
         self.scroll = max(0, min(self.max_scroll, scroll))
@@ -280,6 +364,8 @@ class Inspector:
     def hit(self, point):
         if not self.rect.contains(*point):
             return None
+        if self.tab == 'ALL' and self.search.contains(*point):
+            return 'SEARCH', 'SEARCH'
         for name, r in self.tabs.items():
             if r.contains(*point):
                 return 'TAB', name
@@ -297,6 +383,8 @@ class Inspector:
                     return 'EDIT', item.key
             elif item.kind == 'body' and item.value_rect and item.value_rect.contains(*point):
                 return 'BODY', item.key
+            elif item.kind == 'fold':
+                return 'SECTION', item.key
             elif item.kind in {'button', 'cycle'}:
                 return item.key, item.key
             elif item.kind == 'preset_chips':

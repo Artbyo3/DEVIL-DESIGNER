@@ -1,0 +1,123 @@
+{
+  "GRID": {
+    "collection": "Kenney Game Icons",
+    "file": "PNG/White/2x/menuGrid.png",
+    "sha256": "8afe8dea5bbc99f744482486a197983771afac1ef118aff0d9bd386d413a37c8"
+  },
+  "CLOSE": {
+    "collection": "Kenney Game Icons",
+    "file": "PNG/White/2x/cross.png",
+    "sha256": "8293e3758e7df2eb1c5bb8d6979cccc826e66c28f8c703e6cbb0a54a3c0efc33"
+  },
+  "PLAY": {
+    "collection": "Kenney Game Icons",
+    "file": "PNG/White/1x/forward.png",
+    "sha256": "c6cb584576c5a4638ad6f883ff14700071b56f0bb83980b15ffc1baf6576f03b"
+  },
+  "PAUSE": {
+    "collection": "Kenney Game Icons",
+    "file": "PNG/White/2x/pause.png",
+    "sha256": "5c940ad60dd46b3252d4f991f24e9c21865722fe401947830228629baed28774"
+  },
+  "FIT": {
+    "collection": "Kenney Game Icons",
+    "file": "PNG/White/2x/zoomDefault.png",
+    "sha256": "8fce35e732da436cda923853bcd01b63252e7caed8470055b8d5cf880f36a689"
+  },
+  "MORE": {
+    "collection": "Kenney Game Icons",
+    "file": "PNG/White/2x/barsHorizontal.png",
+    "sha256": "3b8529604d7c8a3a28aa39709b8838031c87062a8e5a5ee0087c7e9d0357a14d"
+  },
+  "SAVE": {
+    "collection": "Kenney Game Icons",
+    "file": "PNG/White/2x/save.png",
+    "sha256": "a8204ded82d12288c3510c8e0c0033e04f26958ef31aba3087f67288e3e1a7ed"
+  },
+  "UNDO": {
+    "collection": "Kenney Game Icons",
+    "file": "PNG/White/2x/return.png",
+    "sha256": "99b425ec6d8e49633ddcea55e7485adf44a4ca8614abf39e59b7a83602ee3866"
+  },
+  "CHEVRON": {
+    "collection": "Kenney Game Icons",
+    "file": "PNG/White/2x/up.png",
+    "sha256": "04c1cf09316420b11cc6ca49950df43dc22be2bd4736ec897e1e102ed7e9edc0"
+  },
+  "DISCLOSURE": {
+    "collection": "Kenney Game Icons",
+    "file": "PNG/White/2x/arrowRight.png",
+    "sha256": "768d7d882448f78554b4a379b2e8f217403e073c9b1735744a8c92ba7d31005f"
+  },
+  "EXPAND": {
+    "collection": "Kenney Game Icons",
+    "file": "PNG/White/2x/larger.png",
+    "sha256": "6c4c23f0323d8a373c41be300d7ab59f82d35e1b1c3f2025e6cc20d71a624fac"
+  },
+  "DOWN": {
+    "collection": "Kenney Game Icons",
+    "file": "PNG/White/2x/arrowDown.png",
+    "sha256": "187df6603922dbde3db15f0f28033e2f7e74435a017095d56cf617bf4eee6c59"
+  },
+  "SETTINGS": {
+    "collection": "Kenney Game Icons",
+    "file": "PNG/White/2x/gear.png",
+    "sha256": "50b313ffe97db1733e529d5b0f5ac91eed5c0c8ffee1034bbb7766508e4f720c"
+  },
+  "CHECK": {
+    "collection": "Kenney Game Icons",
+    "file": "PNG/White/2x/checkmark.png",
+    "sha256": "00e3025322ddb4948598b7fb8d385762073de7b2b534d2cfd44372072608a92a"
+  },
+  "SELECT": {
+    "collection": "Kenney Game Icons Expansion",
+    "file": "PNG/White/2x/pointer.png",
+    "sha256": "dceca1a96ba7165cab435af0c834fa990f5440e9f53c67b315c87f84c6cb3a44"
+  },
+  "POLYGON": {
+    "collection": "Kenney Game Icons Expansion",
+    "file": "PNG/White/2x/toolPencil.png",
+    "sha256": "0fc7ae86cf0782017a88e9fcec345b1c3f7a76ffb25455589deaaa30de999146"
+  },
+  "INTERNAL": {
+    "collection": "Kenney Game Icons Expansion",
+    "file": "PNG/White/2x/toolBrush.png",
+    "sha256": "48365f808b0e459889a77f6c3a13910e0b07d6f0f97ca072ea7e29b736faae0a"
+  },
+  "RECTANGLE": {
+    "collection": "mapbox/maki",
+    "url": "https://raw.githubusercontent.com/mapbox/maki/28e2a3602e4bde033a1dd388e86e9c117b425e34/icons/square-stroked.svg",
+    "sha256": "4ac4ed9f0683dbe9be370c0c19a9f87ae6006d74a04b79672991d92ae6774131"
+  },
+  "ELLIPSE": {
+    "collection": "mapbox/maki",
+    "url": "https://raw.githubusercontent.com/mapbox/maki/28e2a3602e4bde033a1dd388e86e9c117b425e34/icons/circle-stroked.svg",
+    "sha256": "c85d14562018b1a8ca39fe6ee83ce89a73834c02f8906bb029b5b38f4ab2262f"
+  },
+  "DART": {
+    "collection": "mapbox/maki",
+    "url": "https://raw.githubusercontent.com/mapbox/maki/28e2a3602e4bde033a1dd388e86e9c117b425e34/icons/triangle-stroked.svg",
+    "sha256": "75a6348b510186413a832d681f499529062602808548b66972fac9fd7d4ccb0e"
+  },
+  "GARMENT": {
+    "collection": "mapbox/maki",
+    "url": "https://raw.githubusercontent.com/mapbox/maki/28e2a3602e4bde033a1dd388e86e9c117b425e34/icons/clothing-store.svg",
+    "sha256": "34d756d74c62d7a9a642bf252b9f3d20d5308614fdd01f3c4f7d4e09a25871ed"
+  },
+  "SEW": {
+    "collection": "rapideditor/temaki",
+    "url": "https://raw.githubusercontent.com/rapideditor/temaki/6d9ac860d1d615d4449aab049f630d25d036c19e/icons/needle_and_spool.svg",
+    "sha256": "a60bc14c7aecbeca1380961599640a50c169a60e87de6fbd75f741962ce0adbe"
+  },
+  "PIN": {
+    "collection": "rapideditor/temaki",
+    "url": "https://raw.githubusercontent.com/rapideditor/temaki/6d9ac860d1d615d4449aab049f630d25d036c19e/icons/pin.svg",
+    "sha256": "09fc21ead99f63d2afd46c85ba56724adbf288258072699ab148d52c8659d2e0"
+  },
+  "REDO": {
+    "collection": "Kenney Game Icons",
+    "file": "PNG/White/2x/return.png",
+    "sha256": "99b425ec6d8e49633ddcea55e7485adf44a4ca8614abf39e59b7a83602ee3866",
+    "transform": "horizontal reflection"
+  }
+}

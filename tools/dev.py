@@ -32,7 +32,8 @@ def run_cmd(cmd, cwd=str(ROOT), desc=""):
     t0 = time.time()
     res = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
     dt = time.time() - t0
-    if res.returncode != 0:
+    gui_test = any(Path(argument).name == 'run_blender_gui.py' for argument in cmd)
+    if res.returncode != 0 or (gui_test and ('GUI TEST FAILED:' in res.stdout or 'GUI TEST TIMED OUT' in res.stdout)):
         print(f"FAILED in {dt:.2f}s:")
         print(res.stdout)
         print(res.stderr)
@@ -43,7 +44,7 @@ def run_cmd(cmd, cwd=str(ROOT), desc=""):
 def do_quick_tests():
     print("\n=== RUNNING FAST HEADLESS UNIT TESTS ===")
     return run_cmd([sys.executable, "-m", "unittest", "discover", "-s", "tests", "-p", "test_*.py"],
-                   desc="Headless Unit Tests (56 tests)")
+                   desc="Headless Unit Tests")
 
 def do_tests():
     print("\n=== RUNNING ALL TEST SUITES ===")
@@ -56,7 +57,7 @@ def do_tests():
                        desc=f"Blender Background: {t}"):
             return False
 
-    for t in ["gui_preview", "gui_silhouette", "gui_design"]:
+    for t in ["gui_preview", "gui_silhouette", "gui_design", "gui_fast_flow"]:
         if not run_cmd([BLENDER_PATH, "--factory-startup", "--python", "tools/run_blender_gui.py", "--", t],
                        desc=f"In-Engine GUI: {t}"):
             return False
@@ -100,14 +101,24 @@ def do_stage_screenshot(stage):
 def do_screenshots():
     print("\n=== CAPTURING CLEAN IN-ENGINE SCREENSHOTS ===")
     from tools.screenshot import capture
-    stages = ["DRAFT", "SEW", "ARRANGE", "SIMULATE"]
-    for s in stages:
-        out = f"screenshot_{s.lower()}_clean.png"
-        print(f"--> Capturing stage {s} -> {out}...")
-        capture(stage=s, output_name=out, full_mode=False)
-        
-    print(f"--> Capturing full expanded mode -> screenshot_expanded_clean.png...")
-    capture(stage="DRAFT", output_name="screenshot_expanded_clean.png", full_mode=True)
+    scenarios = [
+        ('draft', {'tool': 'SELECT'}),
+        ('empty', {'empty': True, 'tool': 'RECTANGLE'}),
+        ('sew', {'demo': True, 'tool': 'SEW'}),
+        ('arrange', {'demo': True, 'section': 'AVATAR'}),
+        ('simulate', {'demo': True, 'section': 'CLOTH'}),
+        ('library', {'demo': True, 'section': 'LIBRARY'}),
+        ('fabric', {'demo': True, 'tool': 'SELECT', 'card_kind': 'FABRIC'}),
+        ('compact', {'empty': True, 'panel_size': (620, 440), 'tool': 'RECTANGLE'}),
+        ('expanded', {'demo': True, 'full_mode': True, 'tool': 'SELECT'}),
+        ('side_by_side', {'demo': True, 'tool': 'SELECT', 'reveal_3d': True}),
+        ('keep', {'demo': True, 'tool': 'SELECT', 'card_kind': 'KEEP'}),
+    ]
+    for name, options in scenarios:
+        out = f'screenshot_{name}_clean.png'
+        print(f'--> Capturing {name} -> {out}...')
+        if not capture(output_name=out, **options):
+            return False
     print("ALL SCREENSHOTS CAPTURED!\n")
     return True
 
@@ -132,9 +143,9 @@ def do_inspect():
 
     regions = [
         ("01_top_bar.png", (0, 0, w, min(h, 56))),
-        ("02_tool_rail.png", (0, 56, min(w, 65), max(56, h - 35))),
-        ("03_viewbar.png", (65, 56, max(65, w - 280), min(h, 140))),
-        ("04_canvas.png", (65, 140, max(65, w - 280), max(140, h - 35))),
+        ("02_tool_rail.png", (0, 56, min(w, 108), max(56, h - 35))),
+        ("03_viewbar.png", (108, 56, max(108, w - 280), min(h, 150))),
+        ("04_canvas.png", (108, 150, max(108, w - 280), max(150, h - 35))),
         ("05_inspector.png", (max(0, w - 285), 56, w, max(56, h - 35))),
         ("06_status_bar.png", (0, max(0, h - 35), w, h)),
     ]

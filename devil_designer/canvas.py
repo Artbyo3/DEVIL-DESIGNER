@@ -26,7 +26,7 @@ def clamp_window(bounds, available, scale):
 
 
 TOP_BAR_H = 48
-TOOL_RAIL_W = 52
+TOOL_RAIL_W = 104
 STATUS_BAR_H = 28
 VIEWBAR_H = 38
 INSPECTOR_W = 280
@@ -68,7 +68,7 @@ ALL_TOOLS = [
     ('INTERNAL', 'Internal', 'I'),
     ('DART', 'Dart', 'D'),
     ('SEW', 'Sew', 'J'),
-    ('FREE_SEW', 'Free sewing', 'F'),
+    ('FREE_SEW', 'Free sew', ''),
     ('PLACE', 'Place', 'G'),
     ('PIN', 'Pin', 'K'),
     ('TACK', 'Tack', 'T'),
@@ -77,11 +77,13 @@ ALL_TOOLS = [
 
 class Layout:
     def __init__(self, width, height, scale=1.0, full=False, left=0, right=0, top=0, bottom=0,
-                 position=None, settings=False, stage="DRAFT"):
+                 position=None, settings=False, stage="DRAFT", pending=False, confirmation=False, playing=False,
+                 advanced=False):
         self.scale = s = scale
         self.full = full
         self.stage = stage
         self.settings = settings
+        self.advanced = advanced
         usable_h = max(1.0, height - top - bottom)
         usable_w = max(1.0, width - left - right)
         margin = min(12 * s, usable_w / 20, usable_h / 20)
@@ -104,11 +106,11 @@ class Layout:
         else:
             inspector_w = 0
         content_w = max(1.0, p.w - inspector_w)
-        rail_w = min(TOOL_RAIL_W * s, max(36 * s, content_w * 0.16))
+        rail_w = min(TOOL_RAIL_W * s, max(72 * s, content_w * 0.28)) if advanced else 64 * s
         header_h = TOP_BAR_H * s
         footer_h = STATUS_BAR_H * s
         viewbar_h = VIEWBAR_H * s
-        workflow_h = 30 * s
+        workflow_h = (90 if advanced else 70) * s
 
         self.header = Rect(p.x, p.y + p.h - header_h, p.w, header_h)
         self.footer = Rect(p.x, p.y, p.w, footer_h)
@@ -133,21 +135,39 @@ class Layout:
         self.workflow = Rect(work_x, self.viewbar.y - workflow_h, work_w, workflow_h)
         self.utility = self.viewbar
 
-        self.canvas = Rect(p.x + 25 * s, self.footer.y + self.footer.h,
-                           max(1.0, content_w - 25 * s), max(1.0, p.h - 261 * s))
+        self.canvas = Rect(work_x + 25 * s, self.footer.y + self.footer.h,
+                           max(1.0, work_w - 25 * s),
+                           max(1.0, self.workflow.y - 25 * s - self.footer.y - self.footer.h))
         self.ruler_top = Rect(self.canvas.x, self.canvas.y + self.canvas.h, self.canvas.w, 25 * s)
-        self.ruler_left = Rect(p.x, self.canvas.y, 25 * s, self.canvas.h)
+        self.ruler_left = Rect(work_x, self.canvas.y, 25 * s, self.canvas.h)
         self.resize = Rect(p.x + p.w - 18 * s, p.y, 18 * s, 18 * s)
+        center_x = self.canvas.x + self.canvas.w / 2
+        center_y = self.canvas.y + self.canvas.h / 2
+        self.starter_stacked = self.canvas.w < 380 * s
+        card_width = min(170 * s, max(1.0, self.canvas.w - 24 * s))
+        if self.starter_stacked:
+            self.starters = (
+                Rect(center_x - card_width / 2, center_y + 8 * s, card_width, 44 * s),
+                Rect(center_x - card_width / 2, center_y - 44 * s, card_width, 44 * s),
+            )
+        else:
+            self.starters = (
+                Rect(center_x - 175 * s, center_y - 25 * s, card_width, 44 * s),
+                Rect(center_x + 5 * s, center_y - 25 * s, card_width, 44 * s),
+            )
 
         self.buttons = {}
 
         h_right_specs = [
             ("CLOSE", "X", 26),
             ("FULL", "Restore" if full else "Expand", 54),
-            ("SETTINGS", "...", 32),
+            ("SETTINGS", "Details", 64),
             ("LIBRARY", "Library", 62),
+            ("SEARCH", "Find anything", 108),
         ]
-        h_factor = min(1.0, max(0.15, (p.w * 0.40) / (sum(w + 4 for _, _, w in h_right_specs) * s)))
+        if not advanced:
+            h_right_specs = [item for item in h_right_specs if item[0] != 'LIBRARY']
+        h_factor = min(1.0, max(0.15, (p.w * 0.65) / (sum(w + 4 for _, _, w in h_right_specs) * s)))
         hx = p.x + p.w - 6 * s
         for name, label, bw in h_right_specs:
             w_act = bw * s * h_factor
@@ -155,42 +175,19 @@ class Layout:
             bx = max(p.x, min(p.x + p.w - w_act, hx))
             self.buttons[name] = (Rect(bx, self.header.y + 10 * s, w_act, 28 * s), label)
 
-        brand_w = min(130 * s, max(60 * s, p.w * 0.20))
-        pill_avail = max(20 * s, hx - (p.x + brand_w + 10 * s))
-        pills = [
-            ("STAGE_DRAFT", "Draft"),
-            ("STAGE_SEW", "Sew"),
-            ("STAGE_ARRANGE", "Arrange"),
-            ("STAGE_SIMULATE", "Simulate"),
-        ]
-        step_factor = min(1.0, max(0.1, pill_avail / (4 * 72 * s)))
-        step_w = 68 * s * step_factor
-        step_start = p.x + brand_w + 8 * s + max(0.0, (pill_avail - 4 * (step_w + 2 * s)) / 2)
-        for i, (name, label) in enumerate(pills):
-            px = step_start + i * (step_w + 2 * s)
-            bx = max(p.x, min(p.x + p.w - step_w, px))
-            self.buttons[name] = (Rect(bx, self.header.y + 9 * s, step_w, 30 * s), label)
-
-        active_tools = STAGE_TOOLS.get(stage, STAGE_TOOLS['DRAFT'])
-        tool_bw = min(38 * s, rail_w - 8 * s)
-        tool_bh = 34 * s
-        tool_x = self.rail.x + (rail_w - tool_bw) / 2
-        tool_start_y = self.rail.y + self.rail.h - 10 * s - tool_bh
+        active_tools = [tool for tool in ALL_TOOLS if tool[0] not in {'RECTANGLE', 'SEW'}] if advanced else [('SELECT', 'Edit', 'V')]
+        active_tools.append(('MORE_TOOLS', 'Less' if advanced else 'Tools', ''))
+        columns = 2 if advanced else 1
+        tool_bw = (rail_w - 12 * s) / columns
+        tool_bh = 40 * s
+        tool_x = self.rail.x + 4 * s
+        tool_start_y = self.rail.y + self.rail.h - 24 * s - tool_bh
         tool_gap = 4 * s
-
-        for i, (name, label, key) in enumerate(active_tools):
-            ty = tool_start_y - i * (tool_bh + tool_gap)
-            bx = max(p.x, min(p.x + p.w - tool_bw, tool_x))
-            self.buttons[name] = (Rect(bx, ty, tool_bw, tool_bh), f"{label} {key}")
-
-        registered_keys = {name for name, _, _ in active_tools}
-        hidden_idx = len(active_tools)
-        for name, label, key in ALL_TOOLS:
-            if name not in registered_keys:
-                ty = tool_start_y - hidden_idx * (tool_bh + tool_gap)
-                bx = max(p.x, min(p.x + p.w - tool_bw, tool_x))
-                self.buttons[name] = (Rect(bx, max(self.rail.y + 30 * s, ty), tool_bw, tool_bh), f"{label} {key}")
-                hidden_idx += 1
+        for index, (name, label, key) in enumerate(active_tools):
+            column, row = index % columns, index // columns
+            rect = Rect(tool_x + column * (tool_bw + tool_gap),
+                        tool_start_y - row * (tool_bh + tool_gap), tool_bw, tool_bh)
+            self.buttons[name] = (rect, label)
 
         help_w = min(26 * s, tool_bw)
         self.buttons['HELP'] = (Rect(max(p.x, tool_x + (tool_bw - help_w) / 2), self.rail.y + 6 * s, help_w, 22 * s), "?")
@@ -203,6 +200,8 @@ class Layout:
             ('SNAP', 'Snap', 50),
             ('FIT', 'Fit', 42),
         ]
+        if not advanced:
+            u_specs = [item for item in u_specs if item[0] in {'UNDO', 'REDO', 'FIT'}]
         u_factor = min(1.0, max(0.05, (work_w - 20 * s) / (sum(bw + 4 for _, _, bw in u_specs) * s)))
         ux = self.viewbar.x + self.viewbar.w - 6 * s
         for name, label, bw in u_specs:
@@ -211,14 +210,20 @@ class Layout:
             bx = max(p.x, min(p.x + p.w - w_act, ux))
             self.buttons[name] = (Rect(bx, self.viewbar.y + 6 * s, w_act, 26 * s), label)
 
-        self.button_row([
-            ('BUILD', 'Build', 42),
-            ('ARRANGE', 'Arrange', 54),
-            ('SIMULATE', 'Simulate', 60),
-            ('STOP', 'Stop', 42),
-            ('RESET', 'Reset', 44),
-            ('KEEP', 'Keep mesh', 74),
-        ], self.workflow, 2, 24)
+        specs = [('RECTANGLE', '1  Panel', 120), ('SEW', '2  Sew', 120), ('SIMULATE', '3  Simulate', 120)]
+        if advanced:
+            specs += [('KEEP', 'Keep mesh', 74), ('RESET', 'Reset', 54),
+                      ('BUILD', 'Build panels', 82), ('VIEW_3D', 'Show 3D', 72)]
+        if pending:
+            specs = [('FINISH_DRAFT', 'Finish drawing', 108), ('CANCEL_DRAFT', 'Cancel drawing', 108)]
+        if confirmation:
+            specs = [('CONFIRM_ACTION', 'Confirm', 100), ('CANCEL_ACTION', 'Go back', 100)]
+        if playing and (pending or confirmation):
+            specs.append(('STOP', 'Pause drape', 90))
+        row_specs = [specs[:3], specs[3:]] if advanced and len(specs) > 3 else [specs]
+        for index, row in enumerate(row_specs):
+            if row:
+                self.button_row(row, self.workflow, 6 + 32 * (len(row_specs) - index - 1), 28 if advanced else 34)
 
     def button_row(self, specs, region, offset, height):
         s = self.scale

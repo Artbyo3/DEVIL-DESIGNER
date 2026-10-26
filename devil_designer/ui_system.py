@@ -1,4 +1,4 @@
-"""Reusable Apple-inspired UI system for Devil Designer overlay in Blender.
+"""Reusable  UI system for Devil Designer overlay in Blender.
 
 Implements centralized design tokens, reusable components (Button, IconButton,
 Toggle, Dropdown, NumericInput, Slider, Tab, Tooltip, ScrollablePanel, ContextMenu),
@@ -35,8 +35,8 @@ BG_ELEVATED = (0.188, 0.220, 0.251, 1.0)
 BG_WELL = (0.078, 0.094, 0.110, 1.0)
 
 TEXT_PRIMARY = (0.949, 0.957, 0.965, 1.0)
-TEXT_SECONDARY = (0.612, 0.651, 0.690, 1.0)
-TEXT_MUTED = (0.450, 0.490, 0.530, 1.0)
+TEXT_SECONDARY = (0.745, 0.780, 0.816, 1.0)
+TEXT_MUTED = (0.600, 0.647, 0.694, 1.0)
 
 ACCENT = (0.439, 0.835, 0.773, 1.0)
 ACCENT_BG = (0.118, 0.212, 0.200, 1.0)
@@ -45,6 +45,10 @@ ACCENT_HOVER = (0.520, 0.890, 0.830, 1.0)
 
 BORDER = (0.176, 0.208, 0.243, 1.0)
 BORDER_SUBTLE = (0.227, 0.267, 0.310, 1.0)
+SURFACE_FLOATING = (0.118, 0.137, 0.157, .99)
+SURFACE_OUTLINE = (0.267, 0.306, 0.345, 1.0)
+SELECTION = (1.0, .635, .337, 1.0)
+TEXT_ON_ACCENT = (.047, .145, .137, 1.0)
 
 SPACE_4 = 4.0
 SPACE_8 = 8.0

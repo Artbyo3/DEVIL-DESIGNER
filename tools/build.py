@@ -10,7 +10,7 @@ output = root / 'build' / f"{manifest['id']}-{manifest['version']}.zip"
 output.parent.mkdir(exist_ok=True)
 with ZipFile(output,'w',ZIP_DEFLATED) as archive:
     for file in sorted(source.rglob('*')):
-        if file.is_file() and '__pycache__' not in file.parts and file.suffix in {'.py','.toml','.md','.txt'}:
+        if file.is_file() and '__pycache__' not in file.parts and file.suffix in {'.py','.toml','.md','.txt','.json','.svg','.png'}:
             archive.write(file,file.relative_to(source).as_posix())
     for name in ('README.md','LICENSE','SPEC.md'):
         archive.write(root/name,name)

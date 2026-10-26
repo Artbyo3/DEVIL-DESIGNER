@@ -82,6 +82,11 @@ def run():
         with bpy.context.temp_override(area=area,region=region):
             bpy.ops.devil_designer.pattern_editor('INVOKE_DEFAULT')
             op=editor._active
+            op.minimal_ui = False
+            scene.dd_reference_visible = True
+            op.full = False
+            op.advanced_tools = True
+            op.canvas_layout = op.make_layout()
             check(op is not None and bool(op.reference.vertices),'actual avatar silhouette is available on open')
             check(len(op.reference.triangles)>1000,'reference uses actual mesh surface triangles')
             expected=body.dimensions.z
@@ -97,12 +102,15 @@ def run():
                 op.handle_event(bpy.context,event('LEFTMOUSE',point=point))
                 op.handle_event(bpy.context,event('LEFTMOUSE','RELEASE',point=point))
             def control(key):
+                if op.inspector is None:
+                    op.open_section('AVATAR')
+                op.inspector_details.update(('DESIGN', 'SEW', 'AVATAR', 'CLOTH', 'LIBRARY'))
                 op.refresh_controls()
                 if not any(c.key==key for c in op.inspector.controls):
                     from devil_designer.controls import TABS,Inspector
                     for tab in TABS:
                         if any(c.key==key for c in Inspector(op.inspector.rect,op.canvas_layout.scale,0,op.session.document.seams,tab).controls):
-                            op.inspector_tab=tab;op.inspector_scroll=0;op.refresh_controls();break
+                            op.open_section(tab);break
                 for _ in range(100):
                     item=next(c for c in op.inspector.controls if c.key==key)
                     y=item.rect.y+item.rect.h/2

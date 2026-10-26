@@ -82,6 +82,7 @@ class DD_OT_keep_drape(bpy.types.Operator):
     def execute(self,context):
         def action():
             obj,open_seams = garment.keep_drape(context)
+            context.scene['dd_unwelded_seams'] = open_seams
             if open_seams:
                 self.report({'WARNING'},f'Kept {obj.name}; {open_seams} seam pairs remain open. Simulate longer or adjust weld distance.')
             else:
