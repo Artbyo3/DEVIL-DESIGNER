@@ -1,8 +1,3 @@
-"""True-size body reference from the selected avatar's evaluated mesh.
-
-Projection preserves individual triangles and concave gaps (arms/legs), rather
-than replacing the body with a convex hull. No images or scene objects are created.
-"""
 import math
 
 VIEWS = ('FRONT','BACK','LEFT','RIGHT')

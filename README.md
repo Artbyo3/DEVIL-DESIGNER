@@ -9,7 +9,7 @@ Requires Blender 5.2+.
 ## Install and open
 
 Run `python tools/build.py` to create the installable archive, then install
-`build/devil_designer-0.5.0.zip` through **Edit > Preferences > Add-ons >
+`dist/devil_designer-0.5.0.zip` through **Edit > Preferences > Add-ons >
 menu > Install from Disk**. Disable the previous version and restart Blender to
 unload its old Python modules. Enable Devil Designer if necessary.
 
@@ -273,10 +273,39 @@ the actual modal editor and leave isolated factory previews.
 
     python tools/build.py
     python tools/check_public.py
-    blender --background --factory-startup --command extension validate build/devil_designer-0.5.0.zip
+    blender --background --factory-startup --command extension validate dist/devil_designer-0.5.0.zip
 
 [The product specification](SPEC.md) records the intended scope and implementation
 coverage. Temporary scenes, test libraries/reports, Python caches, machine settings,
-and build ZIPs are excluded from Git. No upload occurs unless explicitly requested.
+and installable ZIPs are excluded from Git. No upload occurs unless explicitly requested.
+
+## Disposable development workspace
+
+`dist/` holds the installable extension ZIP and is never auto-deleted. Everything
+disposable belongs in the ignored `scratch/` directory: test scenes and backups,
+reports, screenshots and crops, generated scripts, preview logs, icon downloads,
+temporary dependencies, and test garment libraries. Do not put source, required
+artwork, licenses, user projects, or the installable ZIP in scratch.
+
+Use the developer runner so child processes do not create Python bytecode caches:
+
+    .\dev.cmd --test --build
+
+Successful runner commands automatically delete scratch, including its directory,
+after all requested work finishes. Failed runs retain diagnostics for inspection.
+The ZIP remains available in `dist/` for installation either way.
+
+For a visual audit, explicitly retain screenshots until review is finished:
+
+    .\dev.cmd --shots --keep-scratch
+    .\dev.cmd --inspect --keep-scratch
+    .\dev.cmd --clean
+
+`--clean` only deletes scratch; it never deletes dist, source, or user projects.
+It refuses linked directories and reports locked files rather than force-closing
+Blender or discarding work. Close disposable previews before cleaning. Standalone
+test/screenshot/icon utilities also write to scratch; run `--clean` when finished.
+For icon regeneration, download vendor archives into scratch first as described in
+the icon asset README.
 
 License: [GPL-3.0-or-later](LICENSE).

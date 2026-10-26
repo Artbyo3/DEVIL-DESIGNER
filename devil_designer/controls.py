@@ -1,4 +1,3 @@
-"""Inspector controls inside the floating editor window."""
 from dataclasses import dataclass
 import math
 from .canvas import Rect

@@ -7,6 +7,7 @@ from unittest.mock import patch
 import bpy
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.dont_write_bytecode = True
 sys.path.insert(0, str(ROOT))
 bpy.context.preferences.view.show_splash = False
 
@@ -551,8 +552,8 @@ def run():
     except Exception:
         report = {'passed': passed, 'error': traceback.format_exc()}
         traceback.print_exc()
-    (ROOT / 'build').mkdir(exist_ok=True)
-    (ROOT / 'build' / 'fast_flow-report.json').write_text(json.dumps(report, indent=2))
+    (ROOT / 'scratch').mkdir(exist_ok=True)
+    (ROOT / 'scratch' / 'fast_flow-report.json').write_text(json.dumps(report, indent=2))
     return None
 
 

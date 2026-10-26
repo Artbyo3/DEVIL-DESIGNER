@@ -1,4 +1,3 @@
-"""Viewport-local layout shared by drawing and input handling."""
 from dataclasses import dataclass
 import math
 
@@ -14,7 +13,6 @@ class Rect:
 
 
 def clamp_window(bounds, available, scale):
-    """Keep every window edge accessible after dragging, resizing, or changing monitors."""
     x, y, w, h = bounds
     minimum_w = min(420 * scale, available.w)
     minimum_h = min(420 * scale, available.h)

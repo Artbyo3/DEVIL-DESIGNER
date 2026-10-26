@@ -1,4 +1,3 @@
-"""Portable local garment designs: editable source, UV layout, and body-relative placement."""
 from pathlib import Path
 import json
 import re

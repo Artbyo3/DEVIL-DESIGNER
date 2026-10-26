@@ -1,8 +1,8 @@
-"""Actual Blender checks for curved/holed fabric, slits, M:N sewing, anchors, UVs, presets and refits."""
 from pathlib import Path
 import sys,json,math
 import bpy
 ROOT=Path(__file__).resolve().parents[1]
+sys.dont_write_bytecode = True
 sys.path.insert(0,str(ROOT))
 import devil_designer
 from devil_designer.core import Session,Document,area
@@ -17,7 +17,7 @@ def check(ok,message):
 
 devil_designer.register()
 scene=bpy.context.scene
-scene.dd_library_dir=str(ROOT/'build'/'test-library')
+scene.dd_library_dir=str(ROOT/'scratch'/'test-library')
 scene.dd_spacing=.04
 s=Session();s.add_ellipse((0,0),(.6,.8));first=s.document.find(s.selected)
 s.add_ellipse((.2,.3),(.4,.5),True);s.cut()

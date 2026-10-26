@@ -1,4 +1,3 @@
-"""User-facing garment operations. Generated objects always carry ownership tags."""
 import bpy
 from . import garment
 from .core import Document, Session

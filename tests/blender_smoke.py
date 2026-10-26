@@ -1,9 +1,9 @@
-"""Run: blender --background --factory-startup --python tests/blender_smoke.py"""
 from pathlib import Path
 import sys
 import bpy
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.dont_write_bytecode = True
 sys.path.insert(0,str(ROOT))
 import devil_designer
 from devil_designer.core import Session, Document
@@ -27,7 +27,7 @@ scene.dd_ui_rect=(140,90,680,500)
 scene.dd_ui_settings=False
 expected = scene.dd_document
 check(len(Document.loads(scene.dd_document).patterns)==2,'pattern document in Blender')
-output = ROOT / 'build' / 'smoke.blend'
+output = ROOT / 'scratch' / 'smoke.blend'
 output.parent.mkdir(exist_ok=True)
 bpy.ops.wm.save_as_mainfile(filepath=str(output))
 bpy.ops.wm.open_mainfile(filepath=str(output))

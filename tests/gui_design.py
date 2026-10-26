@@ -1,4 +1,3 @@
-"""Graphical coverage for the complete authoring feature set, in a factory scene."""
 from pathlib import Path
 from types import SimpleNamespace
 import json,traceback
@@ -7,6 +6,7 @@ from mathutils import Vector
 from bpy_extras import view3d_utils
 ROOT=Path(__file__).resolve().parents[1]
 import sys
+sys.dont_write_bytecode = True
 sys.path.insert(0,str(ROOT))
 bpy.context.preferences.view.show_splash=False
 import devil_designer
@@ -24,7 +24,7 @@ def run():
     try:
         devil_designer.register()
         scene=bpy.context.scene
-        scene.dd_library_dir=str(ROOT/'build'/'gui-library')
+        scene.dd_library_dir=str(ROOT/'scratch'/'gui-library')
         scene.dd_spacing=.04
         bpy.ops.mesh.primitive_uv_sphere_add(segments=24,ring_count=16,location=(0,0,1.2))
         body=bpy.context.object;body.name='Authoring test body';body.scale=(.18,.13,.4)
@@ -161,20 +161,20 @@ def run():
             check(abs(op.session.document.find(square_a).points[0][0]-original[0]*1.2)<1e-4,'custom library loads and scales design for another body size')
             op.session.selected=rectangle;op.session.path='OUTER';op.inspector_tab='DESIGN';op.inspector_scroll=0
             op.refresh_controls();op.fit();op.save_window()
-            bpy.ops.wm.save_as_mainfile(filepath=str(ROOT/'build'/'devil-designer-0.5-preview.blend'))
+            bpy.ops.wm.save_as_mainfile(filepath=str(ROOT/'scratch'/'devil-designer-0.5-preview.blend'))
         def after_draw():
             try:
                 check(editor._active is not None and not op._closed,'all advanced curves and holes draw without GPU callback failure')
-                (ROOT/'build'/'design-gui-report.json').write_text(json.dumps({'passed':passed},indent=2))
+                (ROOT/'scratch'/'design-gui-report.json').write_text(json.dumps({'passed':passed},indent=2))
             except Exception:
-                (ROOT/'build'/'design-gui-report.json').write_text(json.dumps({'passed':passed,'error':traceback.format_exc()},indent=2))
+                (ROOT/'scratch'/'design-gui-report.json').write_text(json.dumps({'passed':passed,'error':traceback.format_exc()},indent=2))
             return None
         bpy.app.timers.register(after_draw,first_interval=1)
-        (ROOT/'build'/'design-gui-report.json').write_text(json.dumps({'passed':passed},indent=2))
+        (ROOT/'scratch'/'design-gui-report.json').write_text(json.dumps({'passed':passed},indent=2))
     except Exception:
-        (ROOT/'build'/'design-gui-report.json').write_text(json.dumps({'passed':passed,'error':traceback.format_exc()},indent=2))
+        (ROOT/'scratch'/'design-gui-report.json').write_text(json.dumps({'passed':passed,'error':traceback.format_exc()},indent=2))
         traceback.print_exc()
     return None
 
-(ROOT/'build').mkdir(exist_ok=True)
+(ROOT/'scratch').mkdir(exist_ok=True)
 bpy.app.timers.register(run,first_interval=2)

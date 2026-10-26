@@ -1,4 +1,3 @@
-"""Helper to run a GUI test inside Blender, wait for completion, and quit."""
 import sys
 import os
 import json
@@ -7,16 +6,20 @@ from pathlib import Path
 import bpy
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.dont_write_bytecode = True
 sys.path.insert(0, str(ROOT))
+from tools.workspace import prepare_scratch
+
+scratch = prepare_scratch()
 
 test_name = sys.argv[-1] if len(sys.argv) > 1 and not sys.argv[-1].startswith('-') else "gui_preview"
-report_file = ROOT / "build" / f"{test_name.replace('gui_', '').replace('.py', '')}-report.json"
+report_file = scratch / f"{test_name.replace('gui_', '').replace('.py', '')}-report.json"
 if "preview" in test_name:
-    report_file = ROOT / "build" / "gui-report.json"
+    report_file = scratch / "gui-report.json"
 elif "silhouette" in test_name:
-    report_file = ROOT / "build" / "silhouette-gui-report.json"
+    report_file = scratch / "silhouette-gui-report.json"
 elif "design" in test_name:
-    report_file = ROOT / "build" / "design-gui-report.json"
+    report_file = scratch / "design-gui-report.json"
 
 if report_file.exists():
     try:

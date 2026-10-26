@@ -1,4 +1,3 @@
-"""Modal overlay lifecycle and input. The native 3D scene stays interactive."""
 import math
 import bpy
 from .core import Document, Session, contains, validate_polygon

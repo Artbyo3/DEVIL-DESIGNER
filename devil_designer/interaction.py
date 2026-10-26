@@ -1,4 +1,3 @@
-"""Input for the floating window and its own settings; no native property panels."""
 import bpy
 from .canvas import Rect
 from .controls import Inspector, BodyMenu, SETTINGS

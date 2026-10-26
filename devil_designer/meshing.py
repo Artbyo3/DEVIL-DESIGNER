@@ -1,4 +1,3 @@
-"""Constrained fabric meshing with holes, internal paths, and chain correspondence."""
 import math
 from .core import area,contains,validate_polygon
 from . import curves

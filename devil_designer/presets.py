@@ -1,4 +1,3 @@
-"""Per-piece cloth targets. Native cloth uses one shared mass density."""
 PRESETS={
     'SILK':dict(structural=10.0,shear=5.0,bending=.08,density=.08),
     'KNIT':dict(structural=7.0,shear=4.0,bending=.12,density=.25),

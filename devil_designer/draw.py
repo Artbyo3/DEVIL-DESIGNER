@@ -1,4 +1,3 @@
-"""GPU overlay rendering, clipped to the owning WINDOW region only."""
 import math
 import time
 import blf

@@ -7,18 +7,23 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
     strategy:
       matrix:
         python: ['3.11', '3.13']
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
       - name: Geometry, editing, sewing, and layout tests
         run: python -m unittest discover -s tests -p 'test_*.py' -v
-      - name: Compile add-on source
-        run: python -m compileall -q devil_designer
+      - name: Parse add-on source without generating bytecode
+        run: python -B -c "import ast,pathlib; [ast.parse(source.read_text(encoding='utf-8'),filename=str(source)) for source in pathlib.Path('devil_designer').rglob('*.py')]"
       - name: Build extension archive
         run: python tools/build.py
       - name: Check public source and archive

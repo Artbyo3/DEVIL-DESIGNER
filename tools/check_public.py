@@ -1,12 +1,8 @@
-"""Check publication files without printing private values or file contents.
-
-This is a targeted repository hygiene check, not a general-purpose secret detector.
-Generated artifacts and local settings must never be committed.
-"""
 from pathlib import Path
 import re
 import subprocess
 import sys
+sys.dont_write_bytecode = True
 import struct
 import zlib
 from zipfile import ZipFile
@@ -78,11 +74,11 @@ def main():
         p=ROOT/name
         if not p.is_file():
             continue
-        if p.suffix.lower() in FORBIDDEN_SUFFIXES or name.startswith(('build/','.venv/','.idea/','.vscode/')):
+        if p.suffix.lower() in FORBIDDEN_SUFFIXES or name.startswith(('build/','dist/','scratch/','.venv/','.idea/','.vscode/')):
             errors.append(name+': generated or machine-specific file')
             continue
         inspect_payload(name, p.read_bytes(), errors)
-    for archive in (ROOT/'build').glob('devil_designer-*.zip'):
+    for archive in (ROOT/'dist').glob('devil_designer-*.zip'):
         with ZipFile(archive) as z:
             for member in z.namelist():
                 if member.startswith(('/','\\')) or '..' in Path(member).parts:

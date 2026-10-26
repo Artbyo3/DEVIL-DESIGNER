@@ -1,8 +1,3 @@
-"""One-command screenshot utility for Devil Designer inside Blender.
-
-Usage:
-  python tools/screenshot.py [--stage DRAFT|SEW|ARRANGE|SIMULATE] [--output filename.png] [--full]
-"""
 import os
 import sys
 import json
@@ -11,7 +6,11 @@ import subprocess
 from pathlib import Path
 from PIL import Image
 
+sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from tools.workspace import prepare_scratch
+from tools.check_comments import check_source
 BLENDER_PATH = r"C:\Program Files (x86)\Steam\steamapps\common\Blender\blender.exe"
 if not os.path.exists(BLENDER_PATH):
     for p in [r"C:\Program Files\Blender Foundation\Blender 5.2\blender.exe",
@@ -22,10 +21,11 @@ if not os.path.exists(BLENDER_PATH):
 
 def capture(stage="DRAFT", output_name="screenshot_app.png", full_mode=False,
             empty=False, panel_size=None, demo=False, tool=None, section=None, query='', reveal_3d=False, cursor_controls=False, card_kind=None):
-    build_dir = ROOT / "build"
-    build_dir.mkdir(exist_ok=True)
-    full_path = build_dir / "screenshot_full_raw.png"
-    rect_path = build_dir / "screenshot_rect.json"
+    if Path(output_name).name != output_name or Path(output_name).suffix.lower() != ".png":
+        raise ValueError("Screenshot output must be a PNG filename inside scratch.")
+    scratch_dir = prepare_scratch()
+    full_path = scratch_dir / "screenshot_full_raw.png"
+    rect_path = scratch_dir / "screenshot_rect.json"
     
     if full_path.exists():
         full_path.unlink()
@@ -39,6 +39,7 @@ import bpy
 
 bpy.context.preferences.view.show_splash = False
 
+sys.dont_write_bytecode = True
 ROOT = Path(r'{str(ROOT)}')
 sys.path.insert(0, str(ROOT))
 import devil_designer
@@ -146,7 +147,7 @@ with bpy.context.temp_override(area=area, region=region):
         'panel_w': p.w,
         'panel_h': p.h,
     }}
-    (ROOT / 'build' / 'screenshot_rect.json').write_text(json.dumps(rect_data, indent=2))
+    (ROOT / 'scratch' / 'screenshot_rect.json').write_text(json.dumps(rect_data, indent=2))
     
     def do_shot():
         try:
@@ -159,12 +160,13 @@ with bpy.context.temp_override(area=area, region=region):
         
     bpy.app.timers.register(do_shot, first_interval=1.2)
 """
-    tmp_script = build_dir / "_tmp_shot.py"
+    tmp_script = scratch_dir / "_tmp_shot.py"
+    check_source(script, str(tmp_script))
     tmp_script.write_text(script, encoding="utf-8")
     
     cmd = [BLENDER_PATH, "--factory-startup", "--python", str(tmp_script)]
     print(f"Launching Blender to capture {stage} interface (splash disabled, clean viewport)...")
-    res = subprocess.run(cmd, capture_output=True, text=True)
+    res = subprocess.run(cmd, capture_output=True, text=True, env=dict(os.environ, PYTHONDONTWRITEBYTECODE='1'))
     
     if not full_path.exists():
         print("Failed to capture screenshot. Blender output:")
@@ -175,7 +177,7 @@ with bpy.context.temp_override(area=area, region=region):
     try:
         rect = json.loads(rect_path.read_text(encoding="utf-8"))
         img = Image.open(full_path)
-        img.save(build_dir / (Path(output_name).stem + '_workspace.png'))
+        img.save(scratch_dir / (Path(output_name).stem + '_workspace.png'))
         win_w, win_h = img.size
         x = max(0, int(rect['panel_x']))
         w = min(win_w - x, int(rect['panel_w']))
@@ -192,7 +194,7 @@ with bpy.context.temp_override(area=area, region=region):
         )
         cropped = img.crop(crop_box)
         
-        out_app = build_dir / output_name
+        out_app = scratch_dir / output_name
         cropped.save(out_app)
         print(f"Saved clean app screenshot: {out_app} ({cropped.size[0]}x{cropped.size[1]})")
         return out_app

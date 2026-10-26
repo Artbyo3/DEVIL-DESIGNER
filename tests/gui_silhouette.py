@@ -1,4 +1,3 @@
-"""Local graphical reference test with a procedural mannequin; no external avatar assets."""
 from pathlib import Path
 from types import SimpleNamespace
 import json
@@ -8,6 +7,7 @@ import traceback
 import bpy
 from mathutils import Vector
 ROOT=Path(__file__).resolve().parents[1]
+sys.dont_write_bytecode = True
 sys.path.insert(0,str(ROOT))
 bpy.context.preferences.view.show_splash=False
 import devil_designer
@@ -151,18 +151,18 @@ def run():
             area.spaces.active.region_3d.view_rotation=Vector((.3,-4,1)).to_track_quat('Z','Y')
             area.spaces.active.region_3d.view_location=Vector((1.25,0,.95))
             area.spaces.active.region_3d.view_distance=3.8
-            bpy.ops.wm.save_as_mainfile(filepath=str(ROOT/'build'/'body-reference-preview.blend'))
+            bpy.ops.wm.save_as_mainfile(filepath=str(ROOT/'scratch'/'body-reference-preview.blend'))
         def verify_draw():
             check(editor._active is not None and not op._closed,'reference GPU draw callback stays active')
             check(op.renderer.reference_batch is not None,'reference GPU batch was built and drawn')
-            (ROOT/'build'/'silhouette-gui-report.json').write_text(json.dumps({'passed':checks},indent=2))
+            (ROOT/'scratch'/'silhouette-gui-report.json').write_text(json.dumps({'passed':checks},indent=2))
             return None
         bpy.app.timers.register(verify_draw,first_interval=1)
-        (ROOT/'build'/'silhouette-gui-report.json').write_text(json.dumps({'passed':checks},indent=2))
+        (ROOT/'scratch'/'silhouette-gui-report.json').write_text(json.dumps({'passed':checks},indent=2))
     except Exception:
-        (ROOT/'build'/'silhouette-gui-report.json').write_text(json.dumps({'passed':checks,'error':traceback.format_exc()},indent=2))
+        (ROOT/'scratch'/'silhouette-gui-report.json').write_text(json.dumps({'passed':checks,'error':traceback.format_exc()},indent=2))
         traceback.print_exc()
     return None
 
-(ROOT/'build').mkdir(exist_ok=True)
+(ROOT/'scratch').mkdir(exist_ok=True)
 bpy.app.timers.register(run,first_interval=2)

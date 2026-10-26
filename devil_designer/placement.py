@@ -1,4 +1,3 @@
-"""Avatar-only ray placement and garment bend helpers."""
 from mathutils import Vector,Matrix
 from mathutils.bvhtree import BVHTree
 from bpy_extras import view3d_utils
