@@ -724,7 +724,10 @@ class Renderer:
                      'INTERNAL': 'I', 'SEW': 'J', 'PIN': 'K', 'DART': 'D',
                      'UNDO': 'Ctrl Z', 'REDO': 'Ctrl Shift Z',
                      'CLOSE': 'Esc', 'WORKSPACE_PANEL': 'Workspace',
-                     'GARMENT': 'Garment settings', 'HELP': '?'}
+                     'GARMENT': 'Garment settings', 'HELP': '?',
+                     'RESTORE_CANVAS': 'Expand'}
+        self.lines([(layout.rail.x + 6 * scale, layout.rail.y + 28 * scale),
+                    (layout.rail.x + layout.rail.w - 6 * scale, layout.rail.y + 28 * scale)], BORDER_SUBTLE)
         tooltip = None
         for key, (rect, label) in layout.buttons.items():
             hover = rect.contains(*ed.pointer)
@@ -745,6 +748,14 @@ class Renderer:
             elif key == 'WORKSPACE_PANEL':
                 self.round_rect(rect, ELEVATED if hover or ed.workspace_panel_open else FIELD_BG, radius=7)
                 self.text(rect.x + rect.w / 2, rect.y + 8 * scale, label, 10, TEXT_SUB, True)
+            elif key == 'RESTORE_CANVAS':
+                self.round_rect(rect, ELEVATED if hover else FIELD_BG, radius=7)
+                self.text(rect.x + rect.w / 2, rect.y + 8 * scale, label, 10, TEXT_SUB, True)
+            elif key.startswith('TOGGLE_'):
+                active = ed.snap if key == 'TOGGLE_SNAP' else ed._scene.dd_reference_visible if key == 'TOGGLE_GUIDE' else ed._scene.dd_lengths_visible
+                self.round_rect(rect, ACCENT_BG if active else (ELEVATED if hover else FIELD_BG), radius=5)
+                char = 'S' if key == 'TOGGLE_SNAP' else 'H' if key == 'TOGGLE_GUIDE' else 'L'
+                self.text(rect.x + rect.w / 2, rect.y + 6 * scale, char, 10, ACCENT if active else TEXT_SUB, True)
             elif key.endswith('_OPTIONS'):
                 self.lines([(rect.x, rect.y + 10 * scale), (rect.x, rect.y + rect.h - 10 * scale)],
                            ACCENT_BORDER if key == 'SIMULATE_OPTIONS' else SURFACE_OUTLINE)
@@ -771,11 +782,13 @@ class Renderer:
                 position = (rect.x + rect.w + 8 * scale, rect.y + rect.h / 2)
                 if key in {'SIMULATE', 'KEEP'}:
                     position = (max(layout.panel.x + 8 * scale, rect.x - (220 if blocker else 60) * scale), rect.y + rect.h + 20 * scale)
-                elif key in {'CLOSE', 'WORKSPACE_PANEL'}:
+                elif key in {'CLOSE', 'WORKSPACE_PANEL', 'RESTORE_CANVAS'}:
                     position = (rect.x - 70 * scale, rect.y - 18 * scale)
                 elif key == 'GARMENT':
                     position = (rect.x + 20 * scale, rect.y - 18 * scale)
-                tooltip = (blocker or label, shortcuts.get(key, 'Right-click for options' if key == 'SEW' else ''), position)
+                tip_label = ('Snap: On' if ed.snap else 'Snap: Off') if key == 'TOGGLE_SNAP' else                             ('Body guide: On' if ed._scene.dd_reference_visible else 'Body guide: Off') if key == 'TOGGLE_GUIDE' else                             ('Lengths: On' if ed._scene.dd_lengths_visible else 'Lengths: Off') if key == 'TOGGLE_LENGTHS' else blocker or label
+                tip_shortcut = 'S' if key == 'TOGGLE_SNAP' else 'H' if key == 'TOGGLE_GUIDE' else 'L' if key == 'TOGGLE_LENGTHS' else shortcuts.get(key, 'Right-click for options' if key == 'SEW' else '')
+                tooltip = (tip_label, tip_shortcut, position)
         for rect, identity, label in ed.seam_badges():
             self.round_rect(rect, ACCENT_BG, radius=10)
             self.round_rect_outline(rect, ACCENT_BORDER, radius=10)

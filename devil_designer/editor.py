@@ -171,7 +171,15 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         self.set_window(Rect(available.x + available.w - width, panel.y, width, panel.h))
         self.save_window()
         self.fit()
-        self.message = '3D viewport revealed on the left. Orbit and position panels there; expand to return.'
+        self.message = '3D viewport revealed on the left. Orbit and position panels there; click Full canvas to return.'
+
+    def restore_canvas(self):
+        self.full = True
+        self.window_rect = None
+        self.canvas_layout = self.make_layout()
+        self.save_window()
+        self.fit()
+        self.message = 'Full canvas restored.'
 
     def make_layout(self):
         region, space = self._region, self._area.spaces.active
@@ -544,10 +552,12 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         canvas = self.canvas_layout.canvas.contains(*self.pointer)
         press = event.value == 'PRESS'
         if event.type == 'TIMER':
-            if self.update_reference(context):
+            self._timer_ticks = getattr(self, '_timer_ticks', 0) + 1
+            if self._timer_ticks % 10 == 0 and self.update_reference(context):
                 self._area.tag_redraw()
             return {'PASS_THROUGH'}
-        self._area.tag_redraw()
+        if panel or canvas or self.gesture or self.draft or self.setting_drag or press or event.type in {'WHEELUPMOUSE', 'WHEELDOWNMOUSE'}:
+            self._area.tag_redraw()
         if self.trace_points is not None:
             if press and event.type in {'ESC', 'RIGHTMOUSE'}:
                 self.trace_points = None

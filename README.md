@@ -15,7 +15,7 @@ unload its old Python modules. Enable Devil Designer if necessary.
 
 In a 3D Viewport use **Ctrl+Alt+D**, **F3 > Devil Designer**, or **View > Devil Designer**.
 There is no full-height sidebar or all-settings popup. The workspace opens as a full canvas with
-a compact tool dock and an optional Workspace side card. Use Expand / Restore or Tab to switch layouts. Other Blender
+a compact tool dock, persistent micro-indicators for Snapping `[S]`, Body Guide `[H]`, and Lengths `[L]`, and an optional Workspace side card. When the 3D viewport is revealed for placement or drape inspection, click Full canvas to return. Other Blender
 controls remain available outside the editor when the 3D view is revealed.
 
 The compact **Workspace** card controls snapping, measured edge labels, body-guide
@@ -24,9 +24,9 @@ the guide is shown. Pin keeps the card open while working; unpin dismisses it on
 canvas input. Close hides it, and Workspace at the top right reopens it without
 changing the canvas layout or the active piece/task card. Other controls stay in
 their existing contextual locations.
-The pinned card remains visible while drawing. Escape cancels the current edit or
-closes a contextual popover; it does not exit the minimal workspace. Use Close or
-Ctrl+Alt+D to leave the editor explicitly.
+The pinned card remains visible while drawing. Escape cancels active drafting or gestures
+first, dismisses open context cards next, and exits the editor when idle without blocking or trapping the artist.
+Use Close or Ctrl+Alt+D to leave the editor explicitly.
 
 The default workspace has three primary actions: **Panel > Sew > Simulate**.
 Panel drawing is ready on open: drag the canvas to create pieces, click Sew and
@@ -228,8 +228,9 @@ presets are practical starting values, not measured textile calibration.
 **Build 3D** preserves existing panel transforms. Named arrangement layouts position
 multiple pieces around a Z-up, -Y-facing body; they are starting placements, not
 anatomical fitting or collision prevention. Adjust them before simulation.
-Body clearance, quality, self collision, frame limit, and optional top-point pinning
-are in Cloth. The chosen body gets Collision if needed; an existing collision
+Simulation quality and mesh density are adjusted directly on the **Simulate** options popover.
+Fabric presets live on the piece **Fabric** card. Body clearance, self collision, and automatic defaults
+are program decisions, not settings the artist must configure. The chosen body gets Collision if needed; an existing collision
 modifier is left unchanged.
 
 Use the bottom bar **Pause**, then click **Keep mesh** when needed. Keep mesh copies the evaluated drape, removes
@@ -258,28 +259,27 @@ VRChat/Unity setup remain separate finishing tasks.
 
 ## Local garment library and refitting
 
-In Library, type a garment name and choose **Save editable garment**. It saves the
-Bezier source, internal features, sewing, anchors, presets, wrap state, UV layout,
-and body-relative panel placements. It never bundles the avatar mesh or its name.
-Files live in Blender's user datafiles folder under `devil_designer/garments`.
-Saving an existing name asks before replacing that named library entry. A custom
-Library folder can be entered through More garment library controls or search.
+In Library, choose **Save garment** to store the Bezier source, internal features,
+sewing, anchors, presets, wrap state, UV layout, and body-relative panel placements.
+It never bundles the avatar mesh or its name. Files live in Blender's user datafiles
+folder under `devil_designer/garments`.
 
-Choose another body, select an entry with Previous/Next, and **Load onto selected
-avatar**. With **Scale by body height** enabled, the source dimensions scale
-uniformly by height while preserving UV coordinates. Placement and tacks remap to
-the new body bounds. This is a starting refit, not automatic tailoring to every
-body proportion; adjust the 2D design, place pieces, and simulate again. Loading
-without a body still restores an editable design for later arrangement. Loading
-over an existing garment requires confirmation; Go back or Escape preserves it.
+Choose another body in the body picker card, open **Library**, and click **Load** on
+the desired garment. The body and library pickers display up to 8 items per view with
+mouse-wheel scrolling and instant page navigation. With **Scale by body height**
+enabled, source dimensions scale uniformly by height while preserving UV coordinates.
+Placement and tacks remap to the new body bounds. Loading over an existing garment
+automatically saves a backup snapshot (`scene['dd_backup_document']`) and can be
+undone immediately with Ctrl+Z; Go back or Escape cancels before loading.
 
 ## Saving and compatibility
 
 Save the `.blend` normally. Versioned source paths, sewing ranges, constraints,
-cloth choices, UV layout, body selection, editor placement, and kept meshes save
-with it. Earlier straight-edge documents migrate to the new schema. The current
-overlay's drafting history resets when the editor is reopened; unfinished drafts
-and drag previews are not saved. Topology edits report sewing that requires repair.
+cloth choices, UV layout, body selection, editor placement, kept meshes, and
+drafting undo/redo history (`dd_history`) save with it. Inside the editor,
+Ctrl+Z and Ctrl+Shift+Z step through private 2D pattern geometry and seam history
+(up to 100 edits) across editor sessions. In the 3D viewport outside the editor,
+Blender's native undo operates on scene objects and meshes. Topology edits report sewing that requires repair.
 
 ## Validation
 
