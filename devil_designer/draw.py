@@ -9,418 +9,847 @@ from .core import area, triangulate, contains
 from . import curves
 from .controls import SETTINGS
 
-BG = (.065,.078,.10,1)
-CHROME = (.088,.103,.13,1)
-TEXT = (.88,.91,.96,1)
-MUTED = (.46,.53,.63,1)
-ACCENT = (.37,.84,.77,1)
-PALETTE = [(.35,.69,.83),(.66,.54,.84),(.83,.66,.39),(.43,.74,.59)]
+# Refined Apple-inspired design tokens
+BG = (0.071, 0.090, 0.110, 1.0)          # #12171C Canvas drafting background
+SHELL = (0.078, 0.098, 0.118, 1.0)       # #14191E Base window shell
+CHROME = (0.102, 0.125, 0.149, 1.0)      # #1A2026 Header / footer chrome
+RAIL_BG = (0.090, 0.114, 0.137, 1.0)     # #171D23 Tool rail background
+VIEWBAR = (0.086, 0.110, 0.133, 1.0)     # #161C22 Canvas utility strip
+INSPECTOR = (0.110, 0.137, 0.165, 1.0)   # #1C232A Inspector background
+FIELD_BG = (0.078, 0.106, 0.129, 1.0)    # #141B21 Field background
+ELEVATED = (0.145, 0.188, 0.224, 1.0)    # #253039 Elevated control
+BORDER = (0.204, 0.251, 0.290, 1.0)      # #34404A Structural border
+BORDER_SUBTLE = (0.165, 0.208, 0.243, 1.0) # #2A353E Quiet border
+TEXT = (0.929, 0.941, 0.949, 1.0)        # #EDF0F2 Primary text
+TEXT_SUB = (0.643, 0.686, 0.725, 1.0)    # #A4AFB9 Secondary text
+MUTED = (0.467, 0.522, 0.573, 1.0)       # #778592 Muted text
+ACCENT = (0.475, 0.855, 0.780, 1.0)      # #79DAC7 Primary Mint Accent
+ACCENT_BG = (0.133, 0.243, 0.235, 1.0)   # #223E3C Soft accent background
+ACCENT_BORDER = (0.227, 0.396, 0.373, 1.0)# #3A655F Accent border
+ACCENT_TEXT = (0.063, 0.169, 0.165, 1.0) # #102B2A Dark contrast text on accent
+STEP_ACTIVE_BG = (0.188, 0.231, 0.267, 1.0)# #303B44 Active step pill
+
+# Pattern identity line colors
+PALETTE = [
+    (0.741, 0.651, 0.914),  # #BDA6E9 Violet
+    (0.843, 0.694, 0.482),  # #D7B17B Sand / Gold
+    (0.475, 0.733, 0.816),  # #79BBD0 Cyan
+    (0.486, 0.804, 0.659),  # #7CCEA8 Emerald
+]
+
 
 class Renderer:
     def __init__(self):
         self.shader = None
         self.line_shader = None
         self.s = 1
-        self.offset = (0,0)
+        self.offset = (0, 0)
         self.triangle_cache = {}
-        self.reference_batch=None
-        self.reference_revision=-1
+        self.reference_batch = None
+        self.reference_revision = -1
 
-    def triangles(self,points,color,indices=None):
+    def triangles(self, points, color, indices=None):
         if not points:
             return
         if self.shader is None:
             self.shader = gpu.shader.from_builtin('UNIFORM_COLOR')
         gpu.state.blend_set('ALPHA')
-        batch = batch_for_shader(self.shader,'TRIS',{"pos":points},indices=indices)
+        batch = batch_for_shader(self.shader, 'TRIS', {"pos": points}, indices=indices)
         self.shader.bind()
-        self.shader.uniform_float("color",color)
+        self.shader.uniform_float("color", color)
         batch.draw(self.shader)
 
-    def rect(self,r,color):
-        self.triangles([(r.x,r.y),(r.x+r.w,r.y),(r.x+r.w,r.y+r.h),(r.x,r.y+r.h)],
-                       color,[(0,1,2),(0,2,3)])
+    def rect(self, r, color):
+        self.triangles([(r.x, r.y), (r.x + r.w, r.y), (r.x + r.w, r.y + r.h), (r.x, r.y + r.h)],
+                       color, [(0, 1, 2), (0, 2, 3)])
 
-    def lines(self,points,color,width=1,strip=False):
-        if len(points)<2:
+    def round_rect(self, r, color, radius=8):
+        rad = min(radius * self.s, r.w / 2, r.h / 2)
+        if rad <= 1.5:
+            self.rect(r, color)
+            return
+        x, y, w, h = r.x, r.y, r.w, r.h
+        pts = [
+            (x + rad, y), (x + w - rad, y), (x + w - rad, y + h), (x + rad, y + h),
+            (x, y + rad), (x + rad, y + rad), (x + rad, y + h - rad), (x, y + h - rad),
+            (x + w - rad, y + rad), (x + w, y + rad), (x + w, y + h - rad), (x + w - rad, y + h - rad),
+        ]
+        indices = [(0, 1, 2), (0, 2, 3), (4, 5, 6), (4, 6, 7), (8, 9, 10), (8, 10, 11)]
+        corners = [
+            (x + rad, y + rad, math.pi, 1.5 * math.pi),
+            (x + w - rad, y + rad, 1.5 * math.pi, 2 * math.pi),
+            (x + w - rad, y + h - rad, 0, 0.5 * math.pi),
+            (x + rad, y + h - rad, 0.5 * math.pi, math.pi),
+        ]
+        for cx, cy, a0, a1 in corners:
+            pts.append((cx, cy))
+            c_idx = len(pts) - 1
+            n = 4
+            for i in range(n + 1):
+                angle = a0 + (a1 - a0) * i / n
+                pts.append((cx + math.cos(angle) * rad, cy + math.sin(angle) * rad))
+                if i > 0:
+                    indices.append((c_idx, len(pts) - 2, len(pts) - 1))
+        self.triangles(pts, color, indices)
+
+    def round_rect_outline(self, r, color, radius=8, width=1):
+        rad = min(radius * self.s, r.w / 2, r.h / 2)
+        if rad <= 1.5:
+            self.lines([(r.x, r.y), (r.x + r.w, r.y), (r.x + r.w, r.y + r.h), (r.x, r.y + r.h)],
+                       color, width, strip=True)
+            return
+        x, y, w, h = r.x, r.y, r.w, r.h
+        pts = []
+        corners = [
+            (x + rad, y + rad, math.pi, 1.5 * math.pi),
+            (x + w - rad, y + rad, 1.5 * math.pi, 2 * math.pi),
+            (x + w - rad, y + h - rad, 0, 0.5 * math.pi),
+            (x + rad, y + h - rad, 0.5 * math.pi, math.pi),
+        ]
+        for cx, cy, a0, a1 in corners:
+            n = 4
+            for i in range(n + 1):
+                angle = a0 + (a1 - a0) * i / n
+                pts.append((cx + math.cos(angle) * rad, cy + math.sin(angle) * rad))
+        self.lines(pts + pts[:1], color, width, strip=True)
+
+    def lines(self, points, color, width=1, strip=False):
+        if len(points) < 2:
             return
         if self.line_shader is None:
             self.line_shader = gpu.shader.from_builtin('POLYLINE_UNIFORM_COLOR')
         gpu.state.blend_set('ALPHA')
         sh = self.line_shader
-        batch = batch_for_shader(sh,'LINE_STRIP' if strip else 'LINES',{"pos":points})
+        batch = batch_for_shader(sh, 'LINE_STRIP' if strip else 'LINES', {"pos": points})
         sh.bind()
-        sh.uniform_float("viewportSize",gpu.state.viewport_get()[2:])
-        sh.uniform_float("lineWidth",width*self.s)
-        sh.uniform_float("color",color)
+        sh.uniform_float("viewportSize", gpu.state.viewport_get()[2:])
+        sh.uniform_float("lineWidth", width * self.s)
+        sh.uniform_float("color", color)
         batch.draw(sh)
 
-    def dot(self,point,radius,color):
-        x,y = point
+    def dot(self, point, radius, color):
+        x, y = point
         n = 16
-        pts = [(x,y)]+[(x+math.cos(i*math.tau/n)*radius*self.s,
-                       y+math.sin(i*math.tau/n)*radius*self.s) for i in range(n)]
-        self.triangles(pts,color,[(0,i+1,(i+1)%n+1) for i in range(n)])
+        pts = [(x, y)] + [(x + math.cos(i * math.tau / n) * radius * self.s,
+                           y + math.sin(i * math.tau / n) * radius * self.s) for i in range(n)]
+        self.triangles(pts, color, [(0, i + 1, (i + 1) % n + 1) for i in range(n)])
 
-    def text(self,x,y,label,size=11,color=TEXT,center=False,max_width=None):
-        blf.size(0,size*self.s)
+    def text(self, x, y, label, size=11, color=TEXT, center=False, max_width=None):
+        blf.size(0, size * self.s)
         if max_width is not None:
             original = label
-            while label and blf.dimensions(0,label)[0]>max_width:
+            while label and blf.dimensions(0, label)[0] > max_width:
                 original = original[:-1]
-                label = original+"..." if original else ""
+                label = original + "..." if original else ""
         if center:
-            x -= blf.dimensions(0,label)[0]/2
-        blf.color(0,*color)
-        blf.position(0,x,y,0)
-        blf.draw(0,label)
+            x -= blf.dimensions(0, label)[0] / 2
+        blf.color(0, *color)
+        blf.position(0, x, y, 0)
+        blf.draw(0, label)
 
-    def clip(self,r):
-        gpu.state.scissor_set(int(self.offset[0]+r.x),int(self.offset[1]+r.y),max(1,int(r.w)),max(1,int(r.h)))
-        # BLF can rebind state during text drawing, so explicitly clip text too.
-        blf.enable(0,blf.CLIPPING)
-        blf.clipping(0,r.x,r.y,r.x+r.w,r.y+r.h)
+    def clip(self, r):
+        gpu.state.scissor_set(int(self.offset[0] + r.x), int(self.offset[1] + r.y), max(1, int(r.w)), max(1, int(r.h)))
+        blf.enable(0, blf.CLIPPING)
+        blf.clipping(0, r.x, r.y, r.x + r.w, r.y + r.h)
 
-    def fill_pattern(self,identity,world,screen,color,holes=(),view=None,canvas=None):
-        key=(identity,tuple(world),tuple(tuple(loop) for loop in holes))
+    def draw_icon(self, name, cx, cy, size, color):
+        s = size * self.s
+        if name in {'SELECT', 'cursor'}:
+            pts = [(cx - 0.3 * s, cy + 0.45 * s), (cx - 0.3 * s, cy - 0.45 * s),
+                   (cx - 0.05 * s, cy - 0.15 * s), (cx + 0.25 * s, cy - 0.45 * s),
+                   (cx + 0.38 * s, cy - 0.35 * s), (cx + 0.08 * s, cy - 0.05 * s),
+                   (cx + 0.35 * s, cy - 0.05 * s)]
+            self.lines(pts + pts[:1], color, 1.4, strip=True)
+        elif name in {'POLYGON', 'poly'}:
+            pts = [(cx - 0.35 * s, cy - 0.35 * s), (cx + 0.35 * s, cy - 0.30 * s),
+                   (cx + 0.20 * s, cy + 0.35 * s), (cx - 0.25 * s, cy + 0.30 * s)]
+            self.lines(pts + pts[:1], color, 1.3, strip=True)
+            for p in pts:
+                self.dot(p, 2.2, color)
+        elif name in {'RECTANGLE', 'rect'}:
+            r = Rect(cx - 0.38 * s, cy - 0.30 * s, 0.76 * s, 0.60 * s)
+            self.round_rect_outline(r, color, radius=3, width=1.3)
+            self.dot((r.x, r.y + r.h), 2, color)
+            self.dot((r.x + r.w, r.y), 2, color)
+        elif name in {'ELLIPSE', 'ellipse'}:
+            pts = [(cx + math.cos(i * math.tau / 24) * 0.42 * s,
+                    cy + math.sin(i * math.tau / 24) * 0.30 * s) for i in range(25)]
+            self.lines(pts, color, 1.4, strip=True)
+        elif name in {'INTERNAL', 'internal'}:
+            r = Rect(cx - 0.38 * s, cy - 0.38 * s, 0.76 * s, 0.76 * s)
+            self.rect(r, (*color[:3], 0.15))
+            self.round_rect_outline(r, (*color[:3], 0.5), radius=2, width=1)
+            pts = [(cx - 0.25 * s, cy - 0.2 * s), (cx, cy + 0.2 * s), (cx + 0.25 * s, cy)]
+            self.lines(pts, color, 1.5, strip=True)
+        elif name in {'DART', 'dart'}:
+            pts = [(cx - 0.35 * s, cy + 0.35 * s), (cx, cy - 0.40 * s), (cx + 0.35 * s, cy + 0.35 * s)]
+            self.lines(pts, color, 1.4, strip=True)
+            self.lines([(cx - 0.42 * s, cy + 0.35 * s), (cx + 0.42 * s, cy + 0.35 * s)], color, 1.3)
+            self.dot((cx, cy - 0.40 * s), 2.2, color)
+        elif name in {'SEW', 'sew', 'FREE_SEW'}:
+            self.lines([(cx - 0.35 * s, cy + 0.28 * s), (cx + 0.35 * s, cy + 0.28 * s)], color, 1.3)
+            self.lines([(cx - 0.35 * s, cy - 0.28 * s), (cx + 0.35 * s, cy - 0.28 * s)], color, 1.3)
+            stitch = [(cx - 0.3 * s, cy + 0.28 * s), (cx - 0.1 * s, cy - 0.28 * s),
+                      (cx + 0.1 * s, cy + 0.28 * s), (cx + 0.3 * s, cy - 0.28 * s)]
+            self.lines(stitch, (*color[:3], 0.75), 1.2, strip=True)
+        elif name in {'PIN', 'pin'}:
+            self.round_rect(Rect(cx - 0.25 * s, cy + 0.18 * s, 0.5 * s, 0.18 * s), color, radius=2)
+            self.lines([(cx, cy + 0.18 * s), (cx, cy - 0.42 * s)], color, 1.5)
+            self.dot((cx, cy - 0.42 * s), 1.5, color)
+        elif name in {'TACK', 'tack'}:
+            self.dot((cx, cy), 3.5, color)
+            self.lines([(cx - 0.35 * s, cy), (cx + 0.35 * s, cy)], color, 1.2)
+            self.lines([(cx, cy - 0.35 * s), (cx, cy + 0.35 * s)], color, 1.2)
+        elif name in {'PLACE', 'place'}:
+            self.round_rect_outline(Rect(cx - 0.35 * s, cy - 0.25 * s, 0.70 * s, 0.65 * s), color, radius=3, width=1.2)
+            self.lines([(cx, cy + 0.25 * s), (cx, cy - 0.15 * s)], color, 1.4)
+            self.lines([(cx - 0.18 * s, cy - 0.05 * s), (cx, cy - 0.20 * s), (cx + 0.18 * s, cy - 0.05 * s)], color, 1.4, strip=True)
+        elif name in {'BODY', 'REFERENCE', 'body'}:
+            self.dot((cx, cy + 0.30 * s), 2.5, color)
+            body = [(cx, cy + 0.20 * s), (cx, cy - 0.15 * s), (cx - 0.25 * s, cy - 0.42 * s),
+                    (cx, cy - 0.15 * s), (cx + 0.25 * s, cy - 0.42 * s)]
+            arms = [(cx - 0.35 * s, cy + 0.05 * s), (cx, cy + 0.15 * s), (cx + 0.35 * s, cy + 0.05 * s)]
+            self.lines(body, color, 1.3, strip=True)
+            self.lines(arms, color, 1.3, strip=True)
+        elif name in {'RULER', 'LENGTHS', 'ruler'}:
+            self.lines([(cx - 0.35 * s, cy - 0.20 * s), (cx + 0.35 * s, cy + 0.25 * s)], color, 1.4)
+            for t in (-0.18, 0.0, 0.18):
+                px, py = cx + t * s, cy + (t + 0.05) * s
+                self.lines([(px, py), (px - 0.12 * s, py + 0.12 * s)], color, 1.2)
+        elif name in {'GRID', 'SNAP', 'grid'}:
+            d = 0.25 * s
+            self.lines([(cx - d, cy - 0.35 * s), (cx - d, cy + 0.35 * s)], color, 1.2)
+            self.lines([(cx + d, cy - 0.35 * s), (cx + d, cy + 0.35 * s)], color, 1.2)
+            self.lines([(cx - 0.35 * s, cy - d), (cx + 0.35 * s, cy - d)], color, 1.2)
+            self.lines([(cx - 0.35 * s, cy + d), (cx + 0.35 * s, cy + d)], color, 1.2)
+        elif name in {'FIT', 'fit'}:
+            d = 0.32 * s
+            arm = 0.14 * s
+            self.lines([(cx - d, cy + d - arm), (cx - d, cy + d), (cx - d + arm, cy + d)], color, 1.3, strip=True)
+            self.lines([(cx + d - arm, cy + d), (cx + d, cy + d), (cx + d, cy + d - arm)], color, 1.3, strip=True)
+            self.lines([(cx - d, cy - d + arm), (cx - d, cy - d), (cx - d + arm, cy - d)], color, 1.3, strip=True)
+            self.lines([(cx + d - arm, cy - d), (cx + d, cy - d), (cx + d, cy - d + arm)], color, 1.3, strip=True)
+        elif name in {'BOOK', 'LIBRARY', 'library'}:
+            self.lines([(cx, cy - 0.30 * s), (cx, cy + 0.25 * s)], color, 1.3)
+            self.lines([(cx - 0.35 * s, cy - 0.22 * s), (cx, cy - 0.30 * s), (cx + 0.35 * s, cy - 0.22 * s)], color, 1.3, strip=True)
+            self.lines([(cx - 0.35 * s, cy + 0.32 * s), (cx, cy + 0.25 * s), (cx + 0.35 * s, cy + 0.32 * s)], color, 1.3, strip=True)
+            self.lines([(cx - 0.35 * s, cy - 0.22 * s), (cx - 0.35 * s, cy + 0.32 * s)], color, 1.3)
+            self.lines([(cx + 0.35 * s, cy - 0.22 * s), (cx + 0.35 * s, cy + 0.32 * s)], color, 1.3)
+        elif name in {'MORE', 'SETTINGS', 'dots'}:
+            self.dot((cx - 0.25 * s, cy), 1.8, color)
+            self.dot((cx, cy), 1.8, color)
+            self.dot((cx + 0.25 * s, cy), 1.8, color)
+        elif name in {'CLOSE', 'close'}:
+            d = 0.26 * s
+            self.lines([(cx - d, cy - d), (cx + d, cy + d)], color, 1.5)
+            self.lines([(cx - d, cy + d), (cx + d, cy - d)], color, 1.5)
+        elif name in {'FULL', 'expand'}:
+            r = Rect(cx - 0.28 * s, cy - 0.28 * s, 0.56 * s, 0.56 * s)
+            self.round_rect_outline(r, color, radius=2, width=1.3)
+
+    def fill_pattern(self, identity, world, screen, color, holes=(), view=None, canvas=None):
+        key = (identity, tuple(world), tuple(tuple(loop) for loop in holes))
         if key not in self.triangle_cache:
             try:
                 if holes:
                     from mathutils import Vector
                     from mathutils.geometry import delaunay_2d_cdt
-                    coords=list(world);edges=[];outer=list(range(len(coords)))
-                    for loop in [world]+list(holes):
-                        start=0 if loop is world else len(coords)
-                        if loop is not world:coords.extend(loop)
-                        edges.extend((start+i,start+(i+1)%len(loop)) for i in range(len(loop)))
-                    if area(world)<0:outer.reverse()
-                    out,_,faces,_,_,_=delaunay_2d_cdt([Vector(v) for v in coords],edges,[outer],1,1e-7,False)
-                    points=[tuple(v) for v in out]
-                    faces=[tuple(f) for f in faces if not any(contains(tuple(sum(points[i][j] for i in f)/len(f) for j in (0,1)),hole) for hole in holes)]
-                    self.triangle_cache[key]=(points,faces)
-                else:self.triangle_cache[key]=(list(world),triangulate(world))
-            except ValueError:return False
-        points,indices=self.triangle_cache[key]
-        projected=[view.screen(pt,canvas) for pt in points] if view else screen
-        self.triangles(projected,color,indices)
+                    coords = list(world)
+                    edges = []
+                    outer = list(range(len(coords)))
+                    for loop in [world] + list(holes):
+                        start = 0 if loop is world else len(coords)
+                        if loop is not world:
+                            coords.extend(loop)
+                        edges.extend((start + i, start + (i + 1) % len(loop)) for i in range(len(loop)))
+                    if area(world) < 0:
+                        outer.reverse()
+                    out, _, faces, _, _, _ = delaunay_2d_cdt([Vector(v) for v in coords], edges, [outer], 1, 1e-7, False)
+                    points = [tuple(v) for v in out]
+                    faces = [tuple(f) for f in faces if not any(contains(tuple(sum(points[i][j] for i in f) / len(f) for j in (0, 1)), hole) for hole in holes)]
+                    self.triangle_cache[key] = (points, faces)
+                else:
+                    self.triangle_cache[key] = (list(world), triangulate(world))
+            except ValueError:
+                return False
+        points, indices = self.triangle_cache[key]
+        projected = [view.screen(pt, canvas) for pt in points] if view else screen
+        self.triangles(projected, color, indices)
         return True
 
-    def draw(self,ed):
+    def draw(self, ed):
         self.s = s = ed.canvas_layout.scale
-        l,view = ed.canvas_layout,ed.view
-        p,c = l.panel,l.canvas
+        l, view = ed.canvas_layout, ed.view
+        p, c = l.panel, l.canvas
         blend = gpu.state.blend_get()
         depth = gpu.state.depth_test_get()
         scissor = gpu.state.scissor_get()
         viewport = gpu.state.viewport_get()
-        # POST_PIXEL vertices are WINDOW-local; scissors use framebuffer coordinates.
         self.offset = viewport[:2]
         gpu.state.blend_set('ALPHA')
         gpu.state.depth_test_set('NONE')
         gpu.state.scissor_test_set(True)
+
         try:
+            # 1. Base window shell & border
             self.clip(p)
-            self.rect(p,CHROME)
-            self.rect(Rect(p.x,p.y+p.h-2*s,p.w,2*s),ACCENT)
-            self.rect(c,BG)
+            self.rect(p, SHELL)
+            self.round_rect_outline(p, BORDER, radius=12, width=1.2)
+
+            # 2. Canvas surface
+            self.rect(c, BG)
             self.clip(c)
             self.body_reference(ed)
-            self.grid(view,c)
+            self.grid(view, c)
+
+            # Canvas empty guide
             if not ed.session.document.patterns and not ed.draft and not ed.gesture and not ed.reference_corners():
-                midx,midy = c.x+c.w/2,c.y+c.h/2
-                self.text(midx,midy+25*s,"Start with a silhouette",18,TEXT,True,max_width=c.w-32*s)
-                self.text(midx,midy-2*s,"P  Draw a polygon    /    R  Drag a rectangle",11,MUTED,True,max_width=c.w-24*s)
-                self.text(midx,midy-24*s,"Real dimensions. Your own pattern pieces.",10,MUTED,True,max_width=c.w-24*s)
-            for index,source in enumerate(ed.session.document.patterns):
-                pat=ed.preview_pattern(source)
-                selected=ed.session.selected==pat.id
-                world=pat.outline();outline=[view.screen(point,c) for point in world]
-                holes=[path.outline() for path in pat.paths if path.role=='HOLE']
-                color=PALETTE[index%len(PALETTE)]
-                self.fill_pattern(pat.id,world,outline,(*color,.24 if selected else .12),holes,view,c)
-                for path,nodes,closed,role in pat.loops():
-                    points=world if path=='OUTER' else pat.path(path).outline()
-                    screen=[view.screen(point,c) for point in points]
-                    active=selected and ed.session.path==path
-                    line_color=ACCENT if active else (.9,.48,.48,.9) if role in {'HOLE','SLIT'} else (*color,.85)
-                    self.lines(screen+(screen[:1] if closed else []),line_color,2 if active else 1.3,True)
-                    for i,v in enumerate(nodes):
-                        point=view.screen((v.x,v.y),c)
-                        chosen=active and (ed.session.corner==i or i in ed.session.point_selection)
-                        self.dot(point,5 if chosen else 3.5,ACCENT if chosen else (*color,1))
+                midx, midy = c.x + c.w / 2, c.y + c.h / 2
+                self.text(midx, midy + 24 * s, "Start Drafting Patterns", 16, TEXT, True, max_width=c.w - 32 * s)
+                self.text(midx, midy - 2 * s, "P  Polygon    /    R  Rectangle    /    E  Ellipse", 11, TEXT_SUB, True, max_width=c.w - 24 * s)
+                self.text(midx, midy - 22 * s, "Real measured coordinates with Bezier curves", 10, MUTED, True, max_width=c.w - 24 * s)
+
+            # Draw patterns
+            for index, source in enumerate(ed.session.document.patterns):
+                pat = ed.preview_pattern(source)
+                selected = ed.session.selected == pat.id
+                world = pat.outline()
+                outline = [view.screen(point, c) for point in world]
+                holes = [path.outline() for path in pat.paths if path.role == 'HOLE']
+                color = PALETTE[index % len(PALETTE)]
+
+                # Clean fill
+                self.fill_pattern(pat.id, world, outline, (*color, 0.22 if selected else 0.12), holes, view, c)
+
+                # Loops and outlines
+                for path, nodes, closed, role in pat.loops():
+                    points = world if path == 'OUTER' else pat.path(path).outline()
+                    screen = [view.screen(point, c) for point in points]
+                    active = selected and ed.session.path == path
+                    line_color = ACCENT if active else (0.9, 0.48, 0.48, 0.9) if role in {'HOLE', 'SLIT'} else (*color, 0.95)
+                    self.lines(screen + (screen[:1] if closed else []), line_color, 2.2 if (active or selected) else 1.5, True)
+
+                    for i, v in enumerate(nodes):
+                        point = view.screen((v.x, v.y), c)
+                        chosen = active and (ed.session.corner == i or i in ed.session.point_selection)
+                        # Selection handle: clean handle dot
+                        self.dot(point, 5.5 if chosen else 3.8, ACCENT if chosen else (*color, 1))
                         if chosen:
-                            for name in ('incoming','outgoing'):
-                                handle=getattr(v,name)
+                            for name in ('incoming', 'outgoing'):
+                                handle = getattr(v, name)
                                 if handle is not None:
-                                    end=view.screen(curves.add((v.x,v.y),handle),c)
-                                    self.lines([point,end],(.65,.75,.8,.7))
-                                    self.dot(end,4,(.98,.73,.32,1))
+                                    end = view.screen(curves.add((v.x, v.y), handle), c)
+                                    self.lines([point, end], (0.65, 0.75, 0.8, 0.75), 1.2)
+                                    self.dot(end, 4, (0.98, 0.73, 0.32, 1))
+
                     if selected and ed._scene.dd_lengths_visible:
-                        for edge in ed.session.document.edges(source.id,path):
-                            # Preview curves share source IDs, so length labels track handle drags.
-                            a=next(v for v in nodes if v.id==edge.start);b=next(v for v in nodes if v.id==edge.end)
-                            control=curves.controls(a,b);mid=view.screen(curves.at_length(control,.5),c)
-                            self.text(mid[0]+7*s,mid[1]+7*s,f'{curves.length(control)*100:.2f} cm',9,TEXT)
-                xs,ys=[pt[0] for pt in outline],[pt[1] for pt in outline]
-                self.text((min(xs)+max(xs))/2,max(ys)+15*s,pat.name+' / '+pat.preset.title(),11,TEXT if selected else MUTED,True)
+                        for edge in ed.session.document.edges(source.id, path):
+                            a = next(v for v in nodes if v.id == edge.start)
+                            b = next(v for v in nodes if v.id == edge.end)
+                            control = curves.controls(a, b)
+                            mid = view.screen(curves.at_length(control, 0.5), c)
+                            length_cm = curves.length(control) * 100
+                            self.text(mid[0] + 6 * s, mid[1] + 6 * s, f"{length_cm:.1f} cm", 10, TEXT_SUB)
+
+                xs, ys = [pt[0] for pt in outline], [pt[1] for pt in outline]
+                # Pattern label
+                label_txt = pat.name + ' / ' + pat.preset.title()
+                self.text((min(xs) + max(xs)) / 2, max(ys) + 14 * s, label_txt, 11, TEXT if selected else MUTED, True)
+
+            # Anchors (pins / tacks)
             for anchor in ed.session.document.anchors:
-                point=view.screen((anchor.x,anchor.y),c)
-                color=(1,.42,.3,1) if anchor.kind=='PIN' else (1,.78,.3,1)
-                self.dot(point,6 if ed.selected_anchor==anchor.id else 4,color)
-                self.lines([(point[0]-3*s,point[1]-3*s),(point[0]+3*s,point[1]+3*s),
-                            (point[0]-3*s,point[1]+3*s),(point[0]+3*s,point[1]-3*s)],BG)
+                point = view.screen((anchor.x, anchor.y), c)
+                color = (1, 0.42, 0.3, 1) if anchor.kind == 'PIN' else (1, 0.78, 0.3, 1)
+                self.dot(point, 6 if ed.selected_anchor == anchor.id else 4.5, color)
+                self.lines([(point[0] - 3 * s, point[1] - 3 * s), (point[0] + 3 * s, point[1] + 3 * s),
+                            (point[0] - 3 * s, point[1] + 3 * s), (point[0] + 3 * s, point[1] - 3 * s)], BG)
+
             self.seams(ed)
-            if len(self.triangle_cache)>250:
+
+            if len(self.triangle_cache) > 250:
                 self.triangle_cache.clear()
+
+            # Active drafting
             if ed.draft:
-                pts = [view.screen(point,c) for point in ed.draft]
-                self.lines(pts,ACCENT,2,True)
+                pts = [view.screen(point, c) for point in ed.draft]
+                self.lines(pts, ACCENT, 2.2, True)
                 if ed.preview:
-                    end = view.screen(ed.preview[-1],c)
-                    self.lines([pts[-1],end],(*ACCENT[:3],.5),1.3)
-                    length = math.dist(ed.draft[-1],ed.preview[-1])*100
-                    self.text(end[0]+10*s,end[1]+10*s,f"{length:.1f} cm",10,ACCENT)
+                    end = view.screen(ed.preview[-1], c)
+                    self.lines([pts[-1], end], (*ACCENT[:3], 0.6), 1.4)
+                    length = math.dist(ed.draft[-1], ed.preview[-1]) * 100
+                    self.text(end[0] + 10 * s, end[1] + 10 * s, f"{length:.1f} cm", 10, ACCENT)
                 for point in pts:
-                    self.dot(point,4,ACCENT)
-                self.dot(pts[0],7,(*ACCENT[:3],.25))
-                self.dot(pts[0],3.5,ACCENT)
-            elif ed.gesture and ed.gesture['mode'] in {'RECT','ELLIPSE'} and ed.preview:
-                pts = [view.screen(point,c) for point in ed.preview]
-                if ed.gesture['mode']=='ELLIPSE':
-                    a,b=pts[0],pts[2];cx,cy=(a[0]+b[0])/2,(a[1]+b[1])/2;rx,ry=abs(b[0]-a[0])/2,abs(b[1]-a[1])/2
-                    shape=[(cx+math.cos(i*math.tau/64)*rx,cy+math.sin(i*math.tau/64)*ry) for i in range(65)]
-                    self.lines(shape,ACCENT,2,True)
-                else:self.lines(pts+pts[:1],ACCENT,2,True)
-                a,b = ed.preview[0],ed.preview[2]
-                self.text(pts[2][0]+10*s,pts[2][1]+10*s,
-                          f"{abs(b[0]-a[0])*100:.1f} x {abs(b[1]-a[1])*100:.1f} cm",11,ACCENT)
+                    self.dot(point, 4, ACCENT)
+                self.dot(pts[0], 7, (*ACCENT[:3], 0.25))
+                self.dot(pts[0], 3.5, ACCENT)
+            elif ed.gesture and ed.gesture['mode'] in {'RECT', 'ELLIPSE'} and ed.preview:
+                pts = [view.screen(point, c) for point in ed.preview]
+                if ed.gesture['mode'] == 'ELLIPSE':
+                    a, b = pts[0], pts[2]
+                    cx, cy = (a[0] + b[0]) / 2, (a[1] + b[1]) / 2
+                    rx, ry = abs(b[0] - a[0]) / 2, abs(b[1] - a[1]) / 2
+                    shape = [(cx + math.cos(i * math.tau / 64) * rx, cy + math.sin(i * math.tau / 64) * ry) for i in range(65)]
+                    self.lines(shape, ACCENT, 2, True)
+                else:
+                    self.lines(pts + pts[:1], ACCENT, 2, True)
+                a, b = ed.preview[0], ed.preview[2]
+                self.text(pts[2][0] + 10 * s, pts[2][1] + 10 * s,
+                          f"{abs(b[0] - a[0]) * 100:.1f} x {abs(b[1] - a[1]) * 100:.1f} cm", 11, ACCENT)
+
+            # Canvas floating HUD badges
+            guide_txt = f"{ed.tool.title()}: {ed.message}" if ed.tool != 'SELECT' else "Drag a point to reshape · Shift to constrain"
+            hud_r = Rect(c.x + 16 * s, c.y + 14 * s, min(360 * s, c.w - 32 * s), 28 * s)
+            self.round_rect(hud_r, (0.098, 0.129, 0.153, 0.92), radius=6)
+            self.round_rect_outline(hud_r, BORDER_SUBTLE, radius=6, width=1)
+            # Shortcut pill
+            key_pill = Rect(hud_r.x + 5 * s, hud_r.y + 4 * s, 18 * s, 20 * s)
+            self.round_rect(key_pill, (0.188, 0.231, 0.267, 1.0), radius=4)
+            tool_key = {'SELECT': 'V', 'POLYGON': 'P', 'RECTANGLE': 'R', 'ELLIPSE': 'E',
+                        'INTERNAL': 'I', 'DART': 'D', 'SEW': 'J', 'PIN': 'K', 'TACK': 'T'}.get(ed.tool, 'V')
+            self.text(key_pill.x + key_pill.w / 2, key_pill.y + 5 * s, tool_key, 9, TEXT, True)
+            self.text(hud_r.x + 28 * s, hud_r.y + 7 * s, guide_txt, 10, TEXT_SUB, max_width=hud_r.w - 34 * s)
+
+            # Bottom-right zoom & grid HUD
+            grid_txt = f"1 cm grid  ·  {int(view.zoom / 8)}%"
+            blf.size(0, 10 * s)
+            gw = blf.dimensions(0, grid_txt)[0]
+            self.text(c.x + c.w - gw - 14 * s, c.y + 18 * s, grid_txt, 10, MUTED)
+
+            # Top-left view HUD
+            self.text(c.x + 14 * s, c.y + c.h - 18 * s, "FRONT VIEW  ·  Centimetres", 9, MUTED)
+
+            # 3. Canvas Rulers
             self.clip(p)
             self.rulers(ed)
-            self.rect(l.header,CHROME)
-            self.rect(l.toolbar,CHROME)
-            self.rect(l.workflow,CHROME)
-            self.rect(l.utility,CHROME)
-            self.rect(l.footer,CHROME)
-            self.text(p.x+14*s,l.header.y+28*s,"DEVIL DESIGNER",13,TEXT,max_width=p.w-205*s)
-            self.text(p.x+14*s,l.header.y+11*s,"DRAG HEADER TO MOVE",9,MUTED,max_width=p.w-205*s)
-            for name,(r,label) in l.buttons.items():
-                active = name == ed.tool or name == 'SNAP' and ed.snap or name == 'SETTINGS' and ed.settings_open or name=='REFERENCE' and ed._scene.dd_reference_visible or name=='LENGTHS' and ed._scene.dd_lengths_visible
+
+            # 4. Viewbar (Canvas utility strip)
+            self.rect(l.viewbar, VIEWBAR)
+            self.lines([(l.viewbar.x, l.viewbar.y), (l.viewbar.x + l.viewbar.w, l.viewbar.y)], BORDER_SUBTLE)
+            # Left context title and subtitle
+            stage_names = {
+                'DRAFT': ('Pattern canvas', f"{len(ed.session.document.patterns)} piece{'s' if len(ed.session.document.patterns) != 1 else ''} · Cotton"),
+                'SEW': ('Sewing workspace', f"{len(ed.session.document.seams)} seam pair{'s' if len(ed.session.document.seams) != 1 else ''} · {len(ed.session.document.patterns)} pieces"),
+                'ARRANGE': ('Arrangement workspace', 'Avatar body · Ready for placement'),
+                'SIMULATE': ('Cloth simulation', 'Native Blender cloth'),
+                'LIBRARY': ('Pattern library', 'Editable garments stored locally'),
+            }
+            v_title, v_sub = stage_names.get(ed.stage, ('Pattern canvas', 'Cotton'))
+            self.text(l.viewbar.x + 16 * s, l.viewbar.y + 24 * s, v_title, 13, TEXT, max_width=l.viewbar.w * 0.4)
+            self.text(l.viewbar.x + 16 * s, l.viewbar.y + 9 * s, v_sub, 10, MUTED, max_width=l.viewbar.w * 0.4)
+
+            # 5. Header chrome
+            self.rect(l.header, CHROME)
+            self.lines([(p.x, l.header.y), (p.x + p.w, l.header.y)], BORDER)
+            # Brand DD logo mark
+            dd_box = Rect(p.x + 14 * s, l.header.y + 11 * s, 34 * s, 34 * s)
+            self.round_rect(dd_box, ELEVATED, radius=8)
+            self.round_rect_outline(dd_box, BORDER, radius=8, width=1)
+            self.text(dd_box.x + dd_box.w / 2, dd_box.y + 9 * s, "DD", 13, TEXT, True)
+            self.text(p.x + 56 * s, l.header.y + 27 * s, "Devil Designer", 12, TEXT)
+            self.text(p.x + 56 * s, l.header.y + 13 * s, "PATTERN STUDIO · 0.5", 9, MUTED)
+
+            # 6. Tool Rail (Left vertical bar)
+            self.rect(l.rail, RAIL_BG)
+            self.lines([(l.rail.x + l.rail.w, l.rail.y), (l.rail.x + l.rail.w, l.rail.y + l.rail.h)], BORDER)
+            self.text(l.rail.x + l.rail.w / 2, l.rail.y + l.rail.h - 16 * s, "TOOLS", 9, MUTED, True)
+
+            # 7. Render all layout buttons (Rail tools, Header stage pills, Utilities)
+            cur_stage = getattr(ed, 'stage', 'DRAFT')
+            stage_map = {'STAGE_DRAFT': 'DRAFT', 'STAGE_SEW': 'SEW', 'STAGE_ARRANGE': 'ARRANGE', 'STAGE_SIMULATE': 'SIMULATE'}
+
+            for name, (r, label) in l.buttons.items():
                 hover = r.contains(*ed.pointer)
-                self.rect(r,(.17,.30,.31,1) if active else (.16,.19,.24,1) if hover else (.12,.14,.18,1))
-                if active:
-                    self.rect(Rect(r.x,r.y,r.w,2*s),ACCENT)
-                self.text(r.x+r.w/2,r.y+9*s,label,10,ACCENT if active else TEXT,True,max_width=r.w-6*s)
+                if name.startswith('STAGE_'):
+                    active = stage_map.get(name) == cur_stage
+                    if active:
+                        self.round_rect(r, STEP_ACTIVE_BG, radius=7)
+                        self.round_rect_outline(r, (0.24, 0.30, 0.36, 1.0), radius=7, width=1)
+                    elif hover:
+                        self.round_rect(r, ELEVATED, radius=7)
+                    num_prefix = label[:2]
+                    stage_title = label[3:]
+                    self.text(r.x + 12 * s, r.y + 9 * s, num_prefix, 9, ACCENT if active else MUTED)
+                    self.text(r.x + 30 * s, r.y + 9 * s, stage_title, 11, TEXT if active else TEXT_SUB)
+                elif name in {'LIBRARY', 'CLOSE', 'FULL', 'SETTINGS'}:
+                    if hover:
+                        self.round_rect(r, ELEVATED, radius=7)
+                    if name == 'LIBRARY':
+                        self.draw_icon('LIBRARY', r.x + 14 * s, r.y + r.h / 2, 14, TEXT_SUB if not hover else TEXT)
+                        self.text(r.x + 28 * s, r.y + 8 * s, "Library", 11, TEXT_SUB if not hover else TEXT)
+                    elif name == 'CLOSE':
+                        self.draw_icon('CLOSE', r.x + r.w / 2, r.y + r.h / 2, 12, MUTED if not hover else TEXT)
+                    elif name == 'FULL':
+                        self.draw_icon('FULL', r.x + 14 * s, r.y + r.h / 2, 12, MUTED if not hover else TEXT)
+                        self.text(r.x + 24 * s, r.y + 8 * s, "Restore" if ed.full else "Expand", 10, MUTED if not hover else TEXT)
+                    elif name == 'SETTINGS':
+                        self.draw_icon('MORE', r.x + r.w / 2, r.y + r.h / 2, 14, MUTED if not hover else TEXT)
+                elif name in {'REFERENCE', 'LENGTHS', 'SNAP', 'FIT', 'INSPECTOR', 'UNDO', 'REDO'}:
+                    # Utility chips in viewbar
+                    active = (name == 'SNAP' and ed.snap) or \
+                             (name == 'REFERENCE' and ed._scene.dd_reference_visible) or \
+                             (name == 'LENGTHS' and ed._scene.dd_lengths_visible) or \
+                             (name == 'INSPECTOR' and ed.settings_open)
+                    if active:
+                        self.round_rect(r, ACCENT_BG, radius=6)
+                        self.round_rect_outline(r, ACCENT_BORDER, radius=6, width=1)
+                    elif hover:
+                        self.round_rect(r, ELEVATED, radius=6)
+                    else:
+                        self.round_rect_outline(r, BORDER_SUBTLE, radius=6, width=0.8)
+
+                    icon_name = {'REFERENCE': 'BODY', 'LENGTHS': 'RULER', 'SNAP': 'GRID', 'FIT': 'FIT',
+                                 'INSPECTOR': 'SETTINGS'}.get(name)
+                    color = ACCENT if active else (TEXT if hover else TEXT_SUB)
+                    if icon_name and r.w > 40 * s:
+                        self.draw_icon(icon_name, r.x + 12 * s, r.y + r.h / 2, 12, color)
+                        self.text(r.x + 22 * s, r.y + 8 * s, label.split()[0], 10, color)
+                    else:
+                        self.text(r.x + r.w / 2, r.y + 8 * s, label.split()[0], 10, color, True)
+                elif name in {'SELECT', 'POLYGON', 'RECTANGLE', 'ELLIPSE', 'INTERNAL', 'DART',
+                              'SEW', 'PIN', 'TACK', 'PLACE', 'FREE_SEW', 'HELP'}:
+                    # Tool rail buttons
+                    active = (name == ed.tool)
+                    if active:
+                        self.round_rect(r, ACCENT_BG, radius=8)
+                        self.round_rect_outline(r, ACCENT_BORDER, radius=8, width=1.2)
+                    elif hover:
+                        self.round_rect(r, ELEVATED, radius=8)
+
+                    color = ACCENT if active else (TEXT if hover else TEXT_SUB)
+                    if name != 'HELP':
+                        # Centered icon
+                        self.draw_icon(name, r.x + r.w / 2, r.y + r.h * 0.60, 16, color)
+                        # Short label
+                        short_lbl = label.split()[0]
+                        self.text(r.x + r.w / 2, r.y + 4 * s, short_lbl, 8, color, True, max_width=r.w - 4 * s)
+                        # Shortcut in top-right
+                        shortcut = {'SELECT': 'V', 'POLYGON': 'P', 'RECTANGLE': 'R', 'ELLIPSE': 'E',
+                                    'INTERNAL': 'I', 'DART': 'D', 'SEW': 'J', 'PIN': 'K', 'TACK': 'T'}.get(name, '')
+                        if shortcut:
+                            self.text(r.x + r.w - 5 * s, r.y + r.h - 9 * s, shortcut, 7, (*ACCENT[:3], 0.8) if active else MUTED, True)
+                    else:
+                        self.text(r.x + r.w / 2, r.y + 6 * s, "?", 12, color, True)
+
+            # 8. Inspector panel rendering
             self.settings(ed)
+
+            # 9. Status footer
             self.clip(p)
-            self.lines([(p.x,l.footer.y+l.footer.h),(p.x+p.w,l.footer.y+l.footer.h)],(.19,.23,.28,1))
-            self.text(p.x+12*s,p.y+29*s,ed.message,10,TEXT,max_width=p.w-24*s)
-            world = view.world(ed.pointer,c)
+            self.rect(l.footer, CHROME)
+            self.lines([(p.x, l.footer.y + l.footer.h), (p.x + p.w, l.footer.y + l.footer.h)], BORDER)
+            # Mint status dot
+            self.dot((p.x + 18 * s, l.footer.y + l.footer.h / 2), 3, ACCENT)
+            # Message and piece counts
+            world = view.world(ed.pointer, c)
             count = len(ed.session.document.patterns)
-            self.text(p.x+12*s,p.y+10*s,
-                      f"{count} piece{'s' if count!=1 else ''}   |   X {world[0]*100:.1f}  Y {world[1]*100:.1f} cm",9,MUTED,max_width=p.w*.60)
-            nav = "MMB pan  /  Wheel zoom" if p.w>480*s else "F: fit"
-            blf.size(0,9*s)
-            self.text(p.x+p.w-28*s-blf.dimensions(0,nav)[0],p.y+10*s,nav,9,MUTED)
+            stat_msg = f"Ready  ·  {count} piece{'s' if count != 1 else ''}  ·  X {world[0] * 100:.1f}  Y {world[1] * 100:.1f} cm"
+            self.text(p.x + 30 * s, l.footer.y + 10 * s, stat_msg, 10, TEXT_SUB, max_width=p.w * 0.58)
+
+            # Target note
+            target_note = "Blender native overlay target"
+            blf.size(0, 9 * s)
+            tw = blf.dimensions(0, target_note)[0]
+            self.text(p.x + p.w - tw - 20 * s, l.footer.y + 10 * s, target_note, 9, MUTED)
+
+            # Corner resize grip
             if not ed.full:
-                for inset in (4,8,12):
-                    self.lines([(p.x+p.w-inset*s,p.y+3*s),(p.x+p.w-3*s,p.y+inset*s)],MUTED)
+                for inset in (4, 8, 12):
+                    self.lines([(p.x + p.w - inset * s, p.y + 3 * s), (p.x + p.w - 3 * s, p.y + inset * s)], MUTED)
+
             self.body_picker(ed)
         finally:
-            blf.disable(0,blf.CLIPPING)
+            blf.disable(0, blf.CLIPPING)
             gpu.state.scissor_set(*scissor)
             gpu.state.scissor_test_set(False)
             gpu.state.depth_test_set(depth)
             gpu.state.blend_set(blend)
 
-    def grid(self,view,c):
+    def grid(self, view, c):
         step = grid_step(view.zoom)
-        low,high = view.world((c.x,c.y),c),view.world((c.x+c.w,c.y+c.h),c)
-        minor,major = [],[]
-        for axis in (0,1):
-            for i in range(math.floor(low[axis]/step),math.ceil(high[axis]/step)+1):
-                val = i*step
+        low, high = view.world((c.x, c.y), c), view.world((c.x + c.w, c.y + c.h), c)
+        minor, major = [], []
+        for axis in (0, 1):
+            for i in range(math.floor(low[axis] / step), math.ceil(high[axis] / step) + 1):
+                val = i * step
                 if axis == 0:
-                    x = view.screen((val,0),c)[0]
-                    pts = [(x,c.y),(x,c.y+c.h)]
+                    x = view.screen((val, 0), c)[0]
+                    pts = [(x, c.y), (x, c.y + c.h)]
                 else:
-                    y = view.screen((0,val),c)[1]
-                    pts = [(c.x,y),(c.x+c.w,y)]
-                (major if i%5==0 else minor).extend(pts)
-        self.lines(minor,(.15,.18,.23,.55))
-        self.lines(major,(.20,.24,.30,.7))
-        origin = view.screen((0,0),c)
-        self.lines([(origin[0],c.y),(origin[0],c.y+c.h),
-                    (c.x,origin[1]),(c.x+c.w,origin[1])],(.29,.39,.43,.55))
+                    y = view.screen((0, val), c)[1]
+                    pts = [(c.x, y), (c.x + c.w, y)]
+                (major if i % 5 == 0 else minor).extend(pts)
+        self.lines(minor, (0.15, 0.18, 0.22, 0.55))
+        self.lines(major, (0.22, 0.27, 0.32, 0.75))
+        origin = view.screen((0, 0), c)
+        self.lines([(origin[0], c.y), (origin[0], c.y + c.h),
+                    (c.x, origin[1]), (c.x + c.w, origin[1])], (0.29, 0.44, 0.42, 0.6))
 
-    def rulers(self,ed):
-        l,v = ed.canvas_layout,ed.view
-        c,p,s = l.canvas,l.panel,self.s
-        self.rect(l.ruler_top,(.10,.12,.15,1))
-        self.rect(Rect(p.x,c.y,25*s,c.h),(.10,.12,.15,1))
+    def rulers(self, ed):
+        l, v = ed.canvas_layout, ed.view
+        c, p, s = l.canvas, l.panel, self.s
+        self.rect(l.ruler_top, (0.09, 0.11, 0.13, 1.0))
+        self.rect(l.ruler_left, (0.09, 0.11, 0.13, 1.0))
         step = grid_step(v.zoom)
-        low,high = v.world((c.x,c.y),c),v.world((c.x+c.w,c.y+c.h),c)
+        low, high = v.world((c.x, c.y), c), v.world((c.x + c.w, c.y + c.h), c)
         self.clip(l.ruler_top)
-        for i in range(math.floor(low[0]/step),math.ceil(high[0]/step)+1):
-            x = v.screen((i*step,0),c)[0]
-            self.lines([(x,l.ruler_top.y),(x,l.ruler_top.y+5*s)],MUTED)
-            self.text(x+4*s,l.ruler_top.y+9*s,f"{i*step*100:g}",9,MUTED)
-        self.clip(Rect(p.x,c.y,25*s,c.h))
-        for i in range(math.floor(low[1]/step),math.ceil(high[1]/step)+1):
-            y = v.screen((0,i*step),c)[1]
-            self.text(p.x+3*s,y+3*s,f"{i*step*100:g}",8,MUTED,max_width=22*s)
+        for i in range(math.floor(low[0] / step), math.ceil(high[0] / step) + 1):
+            x = v.screen((i * step, 0), c)[0]
+            self.lines([(x, l.ruler_top.y), (x, l.ruler_top.y + 4 * s)], MUTED)
+            self.text(x + 3 * s, l.ruler_top.y + 6 * s, f"{i * step * 100:g}", 8, MUTED)
+        self.clip(l.ruler_left)
+        for i in range(math.floor(low[1] / step), math.ceil(high[1] / step) + 1):
+            y = v.screen((0, i * step), c)[1]
+            self.text(l.ruler_left.x + 2 * s, y + 2 * s, f"{i * step * 100:g}", 8, MUTED, max_width=18 * s)
         self.clip(p)
-        self.text(p.x+4*s,l.ruler_top.y+9*s,"cm",8,ACCENT)
+        self.text(l.ruler_left.x + 3 * s, l.ruler_top.y + 6 * s, "cm", 8, ACCENT)
 
-    def seams(self,ed):
-        doc=ed.session.document;c=ed.canvas_layout.canvas
-        for index,seam in enumerate(doc.seams):
-            mids=[];selected=ed.seam_selected==seam.id
-            mismatch=doc.seam_stats(seam)[3]>1
-            color=(1,.67,.31,1) if selected or mismatch else (.83,.48,.75,.85)
-            for side in (0,1):
-                chain=seam.side(side);total=doc.chain_length(chain);n=max(8,min(160,int(total*ed.view.zoom/8)))
-                points=[]
-                for i in range(n+1):
-                    edge,fraction=doc.chain_position(chain,i/n)
-                    points.append(ed.view.screen(doc.edge_point(edge,fraction),c))
-                self.lines(points,color,3,True)
-                first=points[-1] if side==1 and seam.reverse else points[0]
-                self.dot(first,5,color)
-                middle=points[len(points)//2];mids.append(middle)
-                if ed.tool=='SEW':self.text(middle[0]+8*self.s,middle[1]+8*self.s,str(index+1),11,color)
-            if ed.tool=='SEW':
-                a,b=mids;steps=max(2,int(math.dist(a,b)/(10*self.s)))
-                for i in range(0,steps,2):
-                    self.lines([curves.mix(a,b,i/steps),curves.mix(a,b,min(i+1,steps)/steps)],(*color[:3],.35))
-        for edge in ([ed.pending_edge] if ed.pending_edge else [])+ed.chain_a+ed.chain_b:
-            points=[ed.view.screen(doc.edge_point(edge,edge.t0+(edge.t1-edge.t0)*i/16),c) for i in range(17)]
-            self.lines(points,(1,.82,.3,1),3,True)
-        for edge,t in ed.free_clicks+ed.dart_base:
-            self.dot(ed.view.screen(doc.edge_point(edge,t),c),6,(1,.82,.3,1))
+    def seams(self, ed):
+        doc = ed.session.document
+        c = ed.canvas_layout.canvas
+        for index, seam in enumerate(doc.seams):
+            mids = []
+            selected = ed.seam_selected == seam.id
+            mismatch = doc.seam_stats(seam)[3] > 1
+            color = (1, 0.67, 0.31, 1) if selected or mismatch else (0.83, 0.48, 0.75, 0.85)
+            for side in (0, 1):
+                chain = seam.side(side)
+                total = doc.chain_length(chain)
+                n = max(8, min(160, int(total * ed.view.zoom / 8)))
+                points = []
+                for i in range(n + 1):
+                    edge, fraction = doc.chain_position(chain, i / n)
+                    points.append(ed.view.screen(doc.edge_point(edge, fraction), c))
+                self.lines(points, color, 3, True)
+                first = points[-1] if side == 1 and seam.reverse else points[0]
+                self.dot(first, 5, color)
+                middle = points[len(points) // 2]
+                mids.append(middle)
+                if ed.tool == 'SEW':
+                    self.text(middle[0] + 8 * self.s, middle[1] + 8 * self.s, str(index + 1), 11, color)
+            if ed.tool == 'SEW':
+                a, b = mids
+                steps = max(2, int(math.dist(a, b) / (10 * self.s)))
+                for i in range(0, steps, 2):
+                    self.lines([curves.mix(a, b, i / steps), curves.mix(a, b, min(i + 1, steps) / steps)], (*color[:3], 0.35))
+        for edge in ([ed.pending_edge] if ed.pending_edge else []) + ed.chain_a + ed.chain_b:
+            points = [ed.view.screen(doc.edge_point(edge, edge.t0 + (edge.t1-edge.t0) * i / 16), c) for i in range(17)]
+            self.lines(points, (1, 0.82, 0.3, 1), 3, True)
+        for edge, t in ed.free_clicks + ed.dart_base:
+            self.dot(ed.view.screen(doc.edge_point(edge, t), c), 6, (1, 0.82, 0.3, 1))
 
-    def settings(self,ed):
-        inspector=ed.inspector
+    def settings(self, ed):
+        inspector = ed.inspector
         if inspector is None:
             return
-        s=self.s
-        r=inspector.rect
+        s = self.s
+        r = inspector.rect
         self.clip(r)
-        self.rect(r,(.078,.092,.12,1))
-        self.lines([(r.x,r.y),(r.x,r.y+r.h)],(.22,.27,.33,1))
-        for name,tab in inspector.tabs.items():
-            self.rect(tab,(.15,.26,.29,1) if name==ed.inspector_tab else CHROME)
-            self.text(tab.x+tab.w/2,tab.y+12*s,name.title(),9,ACCENT if name==ed.inspector_tab else MUTED,True,max_width=tab.w-4*s)
+        self.rect(r, INSPECTOR)
+        self.lines([(r.x, r.y), (r.x, r.y + r.h)], BORDER)
+
+        # Header of inspector
+        head_title = {
+            'DESIGN': 'INSPECTOR',
+            'AVATAR': 'ARRANGEMENT',
+            'SEW': 'SEWING',
+            'CLOTH': 'SIMULATION',
+            'LIBRARY': 'GARMENT LIBRARY',
+        }.get(ed.inspector_tab, 'INSPECTOR')
+        self.text(r.x + 18 * s, r.y + r.h - 32 * s, head_title, 11, TEXT_SUB)
+        self.lines([(r.x, r.y + r.h - 44 * s), (r.x + r.w, r.y + r.h - 44 * s)], BORDER_SUBTLE)
+
+        # Tabs for test mode / fallback
+        for name, tab in inspector.tabs.items():
+            self.rect(tab, (0.16, 0.28, 0.29, 1.0) if name == ed.inspector_tab else CHROME)
+            self.text(tab.x + tab.w / 2, tab.y + 11 * s, name.title(), 9, ACCENT if name == ed.inspector_tab else MUTED, True, max_width=tab.w - 4 * s)
+
+        # Scrollable inspector content
         self.clip(inspector.content)
-        r=inspector.content
+        cr = inspector.content
         for item in inspector.controls:
-            box=item.rect
-            if box.y>r.y+r.h or box.y+box.h<r.y:
+            box = item.rect
+            if box.y > cr.y + cr.h or box.y + box.h < cr.y:
                 continue
-            if item.kind in {'title','section'}:
-                self.text(box.x,box.y+9*s,item.label,11 if item.kind=='title' else 9,ACCENT if item.kind=='title' else MUTED)
-                if item.kind=='section':
-                    self.lines([(box.x,box.y+27*s),(box.x+box.w,box.y+27*s)],(.15,.19,.24,1))
-            elif item.kind in {'number','text'}:
-                self.text(box.x,box.y+36*s,item.label,10,TEXT,max_width=box.w)
-                spec=SETTINGS[item.key]
-                field=item.value_rect
-                editing=ed.numeric and ed.numeric['key']==item.key
-                self.rect(field,(.16,.27,.29,1) if editing else (.115,.14,.18,1))
-                text=ed.numeric['text'] if editing else spec.format(getattr(ed._scene,item.key))
+
+            if item.kind == 'obj_h':
+                # Swatch + Object Title + Meta
+                swatch_box = Rect(box.x, box.y + 18 * s, 14 * s, 14 * s)
+                self.round_rect(swatch_box, (*item.swatch, 0.4), radius=4)
+                self.round_rect_outline(swatch_box, (*item.swatch, 1.0), radius=4, width=1.4)
+                self.text(box.x + 22 * s, box.y + 18 * s, item.label, 15, TEXT)
+                self.text(box.x + 22 * s, box.y + 4 * s, item.meta, 10, MUTED)
+            elif item.kind == 'field_pair':
+                # 2-column card for Width / Height or X / Y
+                hw = (box.w - 8 * s) / 2
+                for fx, lab, key in [(box.x, item.label, item.key), (box.x + hw + 8 * s, item.sub, item.meta)]:
+                    card_r = Rect(fx, box.y + 4 * s, hw, 48 * s)
+                    editing = ed.numeric and ed.numeric['key'] == key
+                    self.round_rect(card_r, (0.15, 0.26, 0.28, 1.0) if editing else FIELD_BG, radius=7)
+                    self.round_rect_outline(card_r, ACCENT_BORDER if editing else BORDER_SUBTLE, radius=7, width=1)
+                    self.text(card_r.x + 10 * s, card_r.y + 30 * s, lab, 9, MUTED)
+                    spec = SETTINGS[key]
+                    val_str = ed.numeric['text'] if editing else spec.format(getattr(ed._scene, key))
+                    self.text(card_r.x + 10 * s, card_r.y + 12 * s, val_str, 13, TEXT)
+                    self.text(card_r.x + card_r.w - 24 * s, card_r.y + 12 * s, spec.unit, 10, MUTED)
+            elif item.kind == 'pair_buttons':
+                # Two elevated buttons side by side
+                for btn_rect, btn_key, btn_lbl in (item.btn_a, item.btn_b):
+                    hover = btn_rect.contains(*ed.pointer)
+                    self.round_rect(btn_rect, (0.18, 0.23, 0.28, 1.0) if hover else ELEVATED, radius=7)
+                    self.round_rect_outline(btn_rect, BORDER, radius=7, width=1)
+                    self.text(btn_rect.x + btn_rect.w / 2, btn_rect.y + 8 * s, btn_lbl, 10, TEXT if hover else TEXT_SUB, True)
+            elif item.kind in {'title', 'section'}:
+                self.text(box.x, box.y + 9 * s, item.label, 11 if item.kind == 'title' else 9, ACCENT if item.kind == 'title' else MUTED)
+                if item.kind == 'section':
+                    self.lines([(box.x, box.y + 26 * s), (box.x + box.w, box.y + 26 * s)], BORDER_SUBTLE)
+            elif item.kind in {'number', 'text'}:
+                self.text(box.x, box.y + 36 * s, item.label, 10, TEXT_SUB, max_width=box.w)
+                spec = SETTINGS[item.key]
+                field = item.value_rect
+                editing = ed.numeric and ed.numeric['key'] == item.key
+                self.round_rect(field, (0.16, 0.27, 0.29, 1.0) if editing else FIELD_BG, radius=6)
+                self.round_rect_outline(field, ACCENT_BORDER if editing else BORDER_SUBTLE, radius=6, width=1)
+                text = ed.numeric['text'] if editing else spec.format(getattr(ed._scene, item.key))
                 if editing and ed.numeric['selected']:
-                    self.rect(Rect(field.x+4*s,field.y+4*s,field.w-8*s,field.h-8*s),(.23,.39,.45,1))
-                self.text(field.x+7*s,field.y+8*s,text if editing else text+' '+spec.unit,11,TEXT,max_width=field.w-10*s)
+                    self.rect(Rect(field.x + 4 * s, field.y + 4 * s, field.w - 8 * s, field.h - 8 * s), (0.23, 0.39, 0.45, 1.0))
+                self.text(field.x + 8 * s, field.y + 8 * s, text if editing else text + ' ' + spec.unit, 11, TEXT, max_width=field.w - 12 * s)
                 if editing and not ed.numeric['selected']:
-                    blf.size(0,11*s)
-                    cursor_x=field.x+7*s+blf.dimensions(0,text[:ed.numeric['cursor']])[0]
-                    if cursor_x<field.x+field.w-3*s:
-                        self.lines([(cursor_x,field.y+5*s),(cursor_x,field.y+20*s)],ACCENT)
-                for button,label in ((item.minus,'-'),(item.plus,'+')):
-                    if button is None:continue
-                    self.rect(button,(.14,.18,.23,1))
-                    self.text(button.x+button.w/2,button.y+8*s,label,12,TEXT,True)
-            elif item.kind=='body':
-                self.text(box.x,box.y+36*s,item.label,10,TEXT)
-                field=item.value_rect
-                self.rect(field,(.12,.15,.19,1))
-                obj=ed._scene.dd_avatar
-                self.text(field.x+7*s,field.y+9*s,obj.name if obj else 'Choose body mesh...',10,TEXT,max_width=field.w-25*s)
-                self.text(field.x+field.w-12*s,field.y+9*s,'v',10,MUTED,True)
-            elif item.kind=='button':
-                field=Rect(box.x,box.y+3*s,box.w,25*s)
-                disabled=item.key=='DEMO' and bool(ed.session.document.patterns)
-                self.rect(field,(.10,.12,.15,1) if disabled else (.13,.22,.25,1))
-                self.text(field.x+field.w/2,field.y+8*s,item.label,10,MUTED if disabled else TEXT,True,max_width=field.w-10*s)
-            elif item.kind=='cycle':
-                self.text(box.x,box.y+11*s,item.label,10,TEXT,max_width=box.w-70*s)
-                chip=Rect(box.x+box.w-65*s,box.y+4*s,65*s,23*s)
-                self.rect(chip,(.13,.22,.25,1))
-                pattern=ed.session.document.find(ed.session.selected)
-                value=ed._scene.dd_reference_view.title() if item.key=='REFERENCE_VIEW' else pattern.preset.title() if pattern else 'Select'
-                self.text(chip.x+chip.w/2,chip.y+7*s,value+' >',10,ACCENT,True,max_width=chip.w-4*s)
-            elif item.kind=='toggle':
-                self.text(box.x,box.y+11*s,item.label,10,TEXT,max_width=box.w-44*s)
-                active=getattr(ed._scene,item.key)
-                chip=Rect(box.x+box.w-39*s,box.y+4*s,39*s,23*s)
-                self.rect(chip,(.16,.31,.31,1) if active else (.115,.14,.18,1))
-                self.text(chip.x+chip.w/2,chip.y+7*s,'On' if active else 'Off',10,ACCENT if active else MUTED,True)
-            elif item.kind=='seam':
-                seam=next((seam for seam in ed.session.document.seams if seam.id==item.key),None)
+                    blf.size(0, 11 * s)
+                    cursor_x = field.x + 8 * s + blf.dimensions(0, text[:ed.numeric['cursor']])[0]
+                    if cursor_x < field.x + field.w - 3 * s:
+                        self.lines([(cursor_x, field.y + 5 * s), (cursor_x, field.y + 20 * s)], ACCENT)
+                for button, label in ((item.minus, '-'), (item.plus, '+')):
+                    if button is None:
+                        continue
+                    b_hover = button.contains(*ed.pointer)
+                    self.round_rect(button, ELEVATED if b_hover else (0.12, 0.16, 0.20, 1.0), radius=5)
+                    self.round_rect_outline(button, BORDER_SUBTLE, radius=5, width=1)
+                    self.text(button.x + button.w / 2, button.y + 7 * s, label, 12, TEXT, True)
+            elif item.kind == 'body':
+                self.text(box.x, box.y + 36 * s, item.label, 10, TEXT_SUB)
+                field = item.value_rect
+                self.round_rect(field, FIELD_BG, radius=6)
+                self.round_rect_outline(field, BORDER_SUBTLE, radius=6, width=1)
+                obj = ed._scene.dd_avatar
+                self.text(field.x + 8 * s, field.y + 9 * s, obj.name if obj else 'Choose body mesh...', 10, TEXT, max_width=field.w - 25 * s)
+                self.text(field.x + field.w - 14 * s, field.y + 9 * s, 'v', 10, MUTED, True)
+            elif item.kind == 'button':
+                field = Rect(box.x, box.y + 3 * s, box.w, 28 * s)
+                disabled = item.key == 'DEMO' and bool(ed.session.document.patterns)
+                b_hover = field.contains(*ed.pointer) and not disabled
+                self.round_rect(field, ELEVATED if b_hover else (0.12, 0.16, 0.20, 1.0), radius=7)
+                self.round_rect_outline(field, BORDER, radius=7, width=1)
+                self.text(field.x + field.w / 2, field.y + 8 * s, item.label, 10, MUTED if disabled else TEXT, True, max_width=field.w - 10 * s)
+            elif item.kind == 'cycle':
+                self.text(box.x, box.y + 11 * s, item.label, 10, TEXT_SUB, max_width=box.w - 75 * s)
+                chip = Rect(box.x + box.w - 75 * s, box.y + 4 * s, 75 * s, 26 * s)
+                self.round_rect(chip, ELEVATED, radius=6)
+                self.round_rect_outline(chip, BORDER, radius=6, width=1)
+                pattern = ed.session.document.find(ed.session.selected)
+                value = ed._scene.dd_reference_view.title() if item.key == 'REFERENCE_VIEW' else pattern.preset.title() if pattern else 'Select'
+                self.text(chip.x + chip.w / 2, chip.y + 8 * s, value + ' >', 10, ACCENT, True, max_width=chip.w - 4 * s)
+            elif item.kind == 'toggle':
+                self.text(box.x, box.y + 11 * s, item.label, 10, TEXT_SUB, max_width=box.w - 48 * s)
+                active = getattr(ed._scene, item.key)
+                chip = Rect(box.x + box.w - 44 * s, box.y + 4 * s, 44 * s, 25 * s)
+                self.round_rect(chip, ACCENT_BG if active else (0.12, 0.16, 0.20, 1.0), radius=6)
+                self.round_rect_outline(chip, ACCENT_BORDER if active else BORDER_SUBTLE, radius=6, width=1)
+                self.text(chip.x + chip.w / 2, chip.y + 7 * s, 'On' if active else 'Off', 10, ACCENT if active else MUTED, True)
+            elif item.kind == 'seam':
+                seam = next((seam for seam in ed.session.document.seams if seam.id == item.key), None)
                 if seam is None:
                     continue
-                a,b=ed.session.document.find(seam.a.pattern),ed.session.document.find(seam.b.pattern)
-                self.text(box.x,box.y+46*s,item.label+'. '+a.name,9,ACCENT if ed.seam_selected==item.key else TEXT,max_width=box.w-72*s)
-                self.text(box.x,box.y+31*s,b.name,9,MUTED,max_width=box.w-72*s)
-                lengths=ed.session.document.seam_stats(seam)
-                self.text(box.x,box.y+10*s,f'{lengths[0]*100:.2f} / {lengths[1]*100:.2f} cm  ({lengths[3]:.1f}%)',9,(1,.72,.31,1) if lengths[3]>1 else MUTED,max_width=box.w-5*s)
-                for rect,label in [(Rect(box.x+box.w-66*s,box.y+5*s,40*s,28*s),'Flip'),
-                                   (Rect(box.x+box.w-23*s,box.y+5*s,23*s,28*s),'X')]:
-                    self.rect(rect,(.14,.17,.22,1))
-                    self.text(rect.x+rect.w/2,rect.y+9*s,label,9,TEXT,True)
-            elif item.kind=='info':
-                first,second=ed.design_info(item.key)
-                self.text(box.x,box.y+34*s,first,10,TEXT,max_width=box.w)
-                self.text(box.x,box.y+15*s,second,9,MUTED,max_width=box.w)
-            elif item.kind=='hint':
-                self.text(box.x,box.y+10*s,item.label,9,MUTED,max_width=box.w)
-        if inspector.max_scroll:
-            self.rect(inspector.scrollbar,(.11,.14,.18,1))
-            self.rect(inspector.thumb,(.31,.40,.46,1))
+                a, b = ed.session.document.find(seam.a.pattern), ed.session.document.find(seam.b.pattern)
+                card_r = Rect(box.x, box.y + 2 * s, box.w, box.h - 4 * s)
+                self.round_rect(card_r, FIELD_BG, radius=7)
+                self.round_rect_outline(card_r, BORDER_SUBTLE, radius=7, width=1)
+                self.text(card_r.x + 8 * s, card_r.y + 42 * s, f"{item.label}. {a.name}", 10, ACCENT if ed.seam_selected == item.key else TEXT, max_width=card_r.w - 74 * s)
+                self.text(card_r.x + 8 * s, card_r.y + 27 * s, b.name, 9, MUTED, max_width=card_r.w - 74 * s)
+                lengths = ed.session.document.seam_stats(seam)
+                self.text(card_r.x + 8 * s, card_r.y + 9 * s, f"{lengths[0] * 100:.1f} / {lengths[1] * 100:.1f} cm ({lengths[3]:.1f}%)", 9, (1, 0.72, 0.31, 1) if lengths[3] > 1 else MUTED, max_width=card_r.w - 10 * s)
+                for rect, lbl in [(Rect(card_r.x + card_r.w - 68 * s, card_r.y + 6 * s, 40 * s, 28 * s), 'Flip'),
+                                   (Rect(card_r.x + card_r.w - 24 * s, card_r.y + 6 * s, 22 * s, 28 * s), 'X')]:
+                    self.round_rect(rect, ELEVATED, radius=5)
+                    self.round_rect_outline(rect, BORDER, radius=5, width=1)
+                    self.text(rect.x + rect.w / 2, rect.y + 9 * s, lbl, 9, TEXT, True)
+            elif item.kind == 'info':
+                first, second = ed.design_info(item.key)
+                self.text(box.x, box.y + 34 * s, first, 10, TEXT, max_width=box.w)
+                self.text(box.x, box.y + 15 * s, second, 9, MUTED, max_width=box.w)
+            elif item.kind == 'hint':
+                self.text(box.x, box.y + 10 * s, item.label, 9, MUTED, max_width=box.w)
 
-    def body_picker(self,ed):
-        menu=ed.body_menu
+        # Scrollbar
+        if inspector.max_scroll:
+            self.round_rect(inspector.scrollbar, (0.11, 0.14, 0.18, 1.0), radius=2)
+            self.round_rect(inspector.thumb, (0.35, 0.44, 0.50, 1.0), radius=2)
+
+        # Fixed bottom footer of Inspector (Primary Next-Task Action)
+        self.clip(r)
+        if ed.canvas_layout.inspector_foot:
+            foot_r = ed.canvas_layout.inspector_foot
+            self.rect(foot_r, INSPECTOR)
+            self.lines([(foot_r.x, foot_r.y + foot_r.h), (foot_r.x + foot_r.w, foot_r.y + foot_r.h)], BORDER)
+
+            # Contextual hint text
+            stage_hints = {
+                'DRAFT': f"{len(ed.session.document.patterns)} pattern pieces ready for sewing",
+                'SEW': "Edge length mismatch is a warning, not a block",
+                'ARRANGE': "Adjust panel placement in the 3D viewport",
+                'SIMULATE': "Simulate, inspect the drape, then keep the result",
+                'LIBRARY': "Editable source, sewing, UVs and poses",
+            }
+            hint_msg = stage_hints.get(ed.stage, "Next action")
+            self.text(foot_r.x + 14 * s, foot_r.y + 50 * s, hint_msg, 9, MUTED, max_width=foot_r.w - 28 * s)
+
+            # Prominent mint primary button
+            cta_btn = Rect(foot_r.x + 12 * s, foot_r.y + 10 * s, foot_r.w - 24 * s, 36 * s)
+            cta_labels = {
+                'DRAFT': "Continue to sewing  ->",
+                'SEW': "Continue to arranging  ->",
+                'ARRANGE': "Continue to simulation  ->",
+                'SIMULATE': "Stop simulation" if getattr(ed._scene, 'is_animation_playing', False) else "Start simulation  ->",
+                'LIBRARY': "Save editable garment",
+            }
+            cta_text = cta_labels.get(ed.stage, "Continue  ->")
+            b_hover = cta_btn.contains(*ed.pointer)
+            self.round_rect(cta_btn, (0.54, 0.90, 0.82, 1.0) if b_hover else ACCENT, radius=8)
+            self.round_rect_outline(cta_btn, (0.60, 0.95, 0.88, 1.0), radius=8, width=1.2)
+            self.text(cta_btn.x + cta_btn.w / 2, cta_btn.y + 11 * s, cta_text, 11, ACCENT_TEXT, True)
+
+    def body_picker(self, ed):
+        menu = ed.body_menu
         if menu is None:
             return
         self.clip(menu.rect)
-        self.rect(menu.rect,(.15,.19,.24,1))
-        for r,obj,label in menu.rows:
-            selected=obj==ed._scene.dd_avatar
+        self.round_rect(menu.rect, CHROME, radius=8)
+        self.round_rect_outline(menu.rect, BORDER, radius=8, width=1.2)
+        for r, obj, label in menu.rows:
+            selected = obj == ed._scene.dd_avatar
             if r.contains(*ed.pointer) or selected:
-                self.rect(r,(.21,.33,.36,1))
-            self.text(r.x+7*self.s,r.y+10*self.s,label,10,ACCENT if selected else TEXT,max_width=r.w-14*self.s)
+                self.round_rect(r, ACCENT_BG if selected else ELEVATED, radius=5)
+            self.text(r.x + 8 * self.s, r.y + 10 * self.s, label, 10, ACCENT if selected else TEXT, max_width=r.w - 16 * self.s)
 
-    def body_reference(self,ed):
-        scene=ed._scene
-        reference=ed.reference
-        if not scene.dd_reference_visible or not reference.vertices or scene.dd_reference_opacity<=0:
+    def body_reference(self, ed):
+        scene = ed._scene
+        reference = ed.reference
+        if not scene.dd_reference_visible or not reference.vertices or scene.dd_reference_opacity <= 0:
             return
-        if self.reference_revision!=reference.revision:
-            self.reference_batch=batch_for_shader(self.shader,'TRIS',{'pos':reference.vertices},indices=reference.triangles)
-            self.reference_revision=reference.revision
-        alpha=scene.dd_reference_opacity
-        tint=(.48,.56,.64)
-        # Draw the union with one flat, premixed colour. Overlapping projected faces
-        # cannot accumulate opacity or reveal a distracting triangle wire pattern.
-        color=tuple(BG[i]*(1-alpha)+tint[i]*alpha for i in range(3))+(1,)
-        origin=ed.view.screen((scene.dd_reference_x,scene.dd_reference_y),ed.canvas_layout.canvas)
-        zoom=ed.view.zoom
-        transform=Matrix(((zoom,0,0,origin[0]),(0,zoom,0,origin[1]),(0,0,1,0),(0,0,0,1)))
+        if self.reference_revision != reference.revision:
+            self.reference_batch = batch_for_shader(self.shader, 'TRIS', {'pos': reference.vertices}, indices=reference.triangles)
+            self.reference_revision = reference.revision
+        alpha = scene.dd_reference_opacity
+        tint = (0.48, 0.56, 0.64)
+        color = tuple(BG[i] * (1 - alpha) + tint[i] * alpha for i in range(3)) + (1,)
+        origin = ed.view.screen((scene.dd_reference_x, scene.dd_reference_y), ed.canvas_layout.canvas)
+        zoom = ed.view.zoom
+        transform = Matrix(((zoom, 0, 0, origin[0]), (0, zoom, 0, origin[1]), (0, 0, 1, 0), (0, 0, 0, 1)))
         with gpu.matrix.push_pop():
             gpu.matrix.multiply_matrix(transform)
             self.shader.bind()
-            self.shader.uniform_float('color',color)
+            self.shader.uniform_float('color', color)
             self.reference_batch.draw(self.shader)
-        c=ed.canvas_layout.canvas
-        height=reference.bounds[1][1]-reference.bounds[0][1]
-        self.text(c.x+10*self.s,c.y+c.h-18*self.s,
-                  f'{scene.dd_reference_view.title()} body reference / {height*100:.1f} cm',9,MUTED,max_width=c.w-20*self.s)
+        c = ed.canvas_layout.canvas
+        height = reference.bounds[1][1] - reference.bounds[0][1]
+        self.text(c.x + 10 * self.s, c.y + c.h - 32 * self.s,
+                  f"{scene.dd_reference_view.title()} body reference / {height * 100:.1f} cm", 9, MUTED, max_width=c.w - 20 * self.s)

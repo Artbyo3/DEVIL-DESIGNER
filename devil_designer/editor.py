@@ -15,11 +15,10 @@ def close_active():
         _active.cleanup()
 
 
-class DD_OT_pattern_editor(DesignTools,OverlayControls,bpy.types.Operator):
+class DD_OT_pattern_editor(DesignTools, OverlayControls, bpy.types.Operator):
     bl_idname = "devil_designer.pattern_editor"
     bl_label = "Devil Designer"
     bl_description = "Open a dedicated 2D pattern canvas beside the 3D scene"
-    # Documents use their own transaction history while this overlay has focus.
     _closed = True
     _handle = None
     _timer = None
@@ -39,11 +38,13 @@ class DD_OT_pattern_editor(DesignTools,OverlayControls,bpy.types.Operator):
             self.session = Session(Document.loads(self._scene.dd_document))
         except ValueError as exc:
             self.report({'ERROR'}, str(exc))
-            return {'CANCELLED'}
+            return {'CANCELLED'}\
+
         self._stored = self._scene.dd_document
+        self.stage = 'DRAFT'
         self.initialize_controls()
         self.initialize_design()
-        self.reference=BodyReference()
+        self.reference = BodyReference()
         self.view = View()
         self.tool, self.snap, self.full = 'POLYGON', True, False
         self.draft, self.preview = [], None
@@ -69,6 +70,58 @@ class DD_OT_pattern_editor(DesignTools,OverlayControls,bpy.types.Operator):
         self._area.tag_redraw()
         return {'RUNNING_MODAL'}
 
+    def set_stage(self, stage):
+        if self.draft:
+            self.message = "Finish or cancel the current draft before changing stages."
+            return False
+        stage_to_tab = {
+            'DRAFT': 'DESIGN',
+            'SEW': 'SEW',
+            'ARRANGE': 'AVATAR',
+            'SIMULATE': 'CLOTH',
+            'LIBRARY': 'LIBRARY'
+        }
+        self.stage = stage
+        self.inspector_tab = stage_to_tab.get(stage, 'DESIGN')
+        if stage == 'DRAFT':
+            if self.tool not in {'SELECT', 'POLYGON', 'RECTANGLE', 'ELLIPSE', 'INTERNAL', 'DART'}:
+                self.choose_tool('SELECT')
+        elif stage == 'SEW':
+            self.choose_tool('SEW')
+        elif stage == 'ARRANGE':
+            if self.tool not in {'SELECT', 'PLACE', 'PIN', 'TACK'}:
+                self.choose_tool('SELECT')
+        elif stage == 'SIMULATE':
+            self.choose_tool('SELECT')
+        elif stage == 'LIBRARY':
+            self.choose_tool('SELECT')
+            self.refresh_library()
+        self.canvas_layout = self.make_layout()
+        self.refresh_controls()
+        self.message = {
+            'DRAFT': "Drafting workspace. Reshape, add points, or draw pieces.",
+            'SEW': "Sewing workspace. Pair edges to create seams before arranging.",
+            'ARRANGE': "Arrangement workspace. Position panels in 3D around the avatar.",
+            'SIMULATE': "Simulation workspace. Drape clothing with Blender cloth physics.",
+            'LIBRARY': "Library workspace. Save and load editable garments."
+        }.get(stage, "Ready.")
+        return True
+
+    def advance_stage(self):
+        if self.stage == 'DRAFT':
+            self.set_stage('SEW')
+        elif self.stage == 'SEW':
+            self.set_stage('ARRANGE')
+        elif self.stage == 'ARRANGE':
+            self.set_stage('SIMULATE')
+        elif self.stage == 'SIMULATE':
+            if bpy.context.screen.is_animation_playing:
+                self.workflow_action('STOP')
+            else:
+                self.workflow_action('SIMULATE')
+        elif self.stage == 'LIBRARY':
+            self.workflow_action('LIBRARY_SAVE')
+
     def make_layout(self):
         region, space = self._region, self._area.spaces.active
         left = right = top = bottom = 0
@@ -84,65 +137,66 @@ class DD_OT_pattern_editor(DesignTools,OverlayControls,bpy.types.Operator):
                 if region.y <= r.y < region.y + region.height / 2:
                     bottom = max(bottom, r.y + r.height - region.y)
         scale = max(.5, bpy.context.preferences.system.ui_scale)
-        position=tuple(v*scale for v in self.window_rect) if self.window_rect else None
+        position = tuple(v * scale for v in self.window_rect) if self.window_rect else None
+        stage = getattr(self, 'stage', 'DRAFT')
         return Layout(region.width, region.height, scale, self.full, max(0, left), max(0, right), top, bottom,
-                      position=position,settings=self.settings_open)
+                      position=position, settings=self.settings_open, stage=stage)
 
-    def update_reference(self,context,force=False,align=False):
-        changed=self.reference.refresh(context,force)
+    def update_reference(self, context, force=False, align=False):
+        changed = self.reference.refresh(context, force)
         if self.reference.bounds and (align or not self._scene.dd_reference_placed):
-            points=self.reference_pattern_points()
-            x,y=torso_alignment(self.reference.bounds,points)
-            self._scene.dd_reference_x,self._scene.dd_reference_y=x,y
-            self._scene.dd_reference_placed=True
+            points = self.reference_pattern_points()
+            x, y = torso_alignment(self.reference.bounds, points)
+            self._scene.dd_reference_x, self._scene.dd_reference_y = x, y
+            self._scene.dd_reference_placed = True
         return changed
 
     def reference_pattern_points(self):
-        patterns=self.session.document.patterns
-        selected=self.session.document.find(self.session.selected)
-        pattern=selected or (patterns[0] if patterns else None)
+        patterns = self.session.document.patterns
+        selected = self.session.document.find(self.session.selected)
+        pattern = selected or (patterns[0] if patterns else None)
         return pattern.points if pattern else []
 
     def align_reference(self):
-        points=self.reference_pattern_points()
+        points = self.reference_pattern_points()
         if not self.reference.bounds:
-            self.message='Choose an avatar body before aligning its silhouette.'
+            self.message = 'Choose an avatar body before aligning its silhouette.'
             return
-        x,y=torso_alignment(self.reference.bounds,points)
-        self._scene.dd_reference_x,self._scene.dd_reference_y=x,y
-        self._scene.dd_reference_placed=True
-        self.message='Body reference aligned to the pattern torso area.'
+        x, y = torso_alignment(self.reference.bounds, points)
+        self._scene.dd_reference_x, self._scene.dd_reference_y = x, y
+        self._scene.dd_reference_placed = True
+        self.message = 'Body reference aligned to the pattern torso area.'
 
     def reference_corners(self):
         if not self._scene.dd_reference_visible:
             return []
-        return self.reference.corners(self._scene.dd_reference_x,self._scene.dd_reference_y)
+        return self.reference.corners(self._scene.dd_reference_x, self._scene.dd_reference_y)
 
     def fit(self):
-        points=[p for pat in self.session.document.patterns for p in pat.points]
-        self.view.fit(points+self.reference_corners(),self.canvas_layout.canvas)
+        points = [p for pat in self.session.document.patterns for p in pat.points]
+        self.view.fit(points + self.reference_corners(), self.canvas_layout.canvas)
 
-    def reference_action(self,action):
-        if action=='REFERENCE_VIEW':
-            current=VIEWS.index(self._scene.dd_reference_view)
-            self._scene.dd_reference_view=VIEWS[(current+1)%len(VIEWS)]
+    def reference_action(self, action):
+        if action == 'REFERENCE_VIEW':
+            current = VIEWS.index(self._scene.dd_reference_view)
+            self._scene.dd_reference_view = VIEWS[(current + 1) % len(VIEWS)]
             self.update_reference(bpy.context)
-        elif action=='REFERENCE_ALIGN':
+        elif action == 'REFERENCE_ALIGN':
             self.align_reference()
-        elif action=='REFERENCE_FRAME':
+        elif action == 'REFERENCE_FRAME':
             if self.reference.bounds:
-                self._scene.dd_reference_visible=True
-                self.view.fit(self.reference_corners(),self.canvas_layout.canvas)
-                self.message='Framed the body at its real-world scale.'
+                self._scene.dd_reference_visible = True
+                self.view.fit(self.reference_corners(), self.canvas_layout.canvas)
+                self.message = 'Framed the body at its real-world scale.'
             else:
-                self.message='Choose an avatar body to display its silhouette.'
-        elif action=='REFERENCE_REFRESH':
-            self.update_reference(bpy.context,force=True)
-            self.message=self.reference.error or 'Body reference refreshed from the current evaluated mesh.'
+                self.message = 'Choose an avatar body to display its silhouette.'
+        elif action == 'REFERENCE_REFRESH':
+            self.update_reference(bpy.context, force=True)
+            self.message = self.reference.error or 'Body reference refreshed from the current evaluated mesh.'
 
-    def choose_body(self,body,context):
-        self._scene.dd_avatar=body
-        self.update_reference(context,align=True)
+    def choose_body(self, body, context):
+        self._scene.dd_avatar = body
+        self.update_reference(context, align=True)
         if body:
             self.fit()
 
@@ -157,7 +211,8 @@ class DD_OT_pattern_editor(DesignTools,OverlayControls,bpy.types.Operator):
             changed = action()
             self.persist()
             self.message = message if changed is not False else "Nothing to change."
-            if self.session.last_repairs:self.message+=f" {self.session.last_repairs} affected sewing pair(s) removed; re-pair edited edges."
+            if self.session.last_repairs:
+                self.message += f" {self.session.last_repairs} affected sewing pair(s) removed; re-pair edited edges."
             return True
         except ValueError as exc:
             self.message = str(exc)
@@ -168,23 +223,27 @@ class DD_OT_pattern_editor(DesignTools,OverlayControls,bpy.types.Operator):
         self.preview = None
         self.draft = []
         self.pending_edge = None
-        self.handle_preview=None
+        self.handle_preview = None
 
     def choose_tool(self, name):
         self.cancel_gesture()
         self.tool = name
-        if name!='SEW':self.chain_stage=None;self.free_clicks=[]
-        if name!='DART':self.dart_base=[]
+        if name != 'SEW':
+            self.chain_stage = None
+            self.free_clicks = []
+        if name != 'DART':
+            self.dart_base = []
         self.session.corner = None
         self.message = {'SELECT': "Drag a corner to reshape, or drag inside a piece to move it.",
                         'POLYGON': "Click corners. Click the first corner or press Enter to close.",
                         'RECTANGLE': "Drag on the canvas to create a rectangular pattern.",
-                        'ELLIPSE':'Drag an ellipse; edit its Bezier handles with V.',
-                        'INTERNAL':'Click internal points. Enter makes a line; click its first point for a closed shape.',
-                        'PIN':'Click fabric to pin it. Click an existing pin to select it.',
-                        'TACK':'Click fabric, then click the avatar in 3D to attach a tack.',
-                        'DART':'Click two base positions on one edge, then the dart apex.',
-                        'SEW': "Click an edge, then its partner. Select a seam: B reverses it, X removes it."}[name]
+                        'ELLIPSE': 'Drag an ellipse; edit its Bezier handles with V.',
+                        'INTERNAL': 'Click internal points. Enter makes a line; click its first point for a closed shape.',
+                        'PIN': 'Click fabric to pin it. Click an existing pin to select it.',
+                        'TACK': 'Click fabric, then click the avatar in 3D to attach a tack.',
+                        'DART': 'Click two base positions on one edge, then the dart apex.',
+                        'PLACE': 'Click to place the selected garment panel in 3D.',
+                        'SEW': "Click an edge, then its partner. Select a seam: B reverses it, X removes it."}.get(name, "Ready.")
 
     def world_pointer(self, event, anchor=None):
         x, y = self.view.world(self.pointer, self.canvas_layout.canvas)
@@ -197,45 +256,49 @@ class DD_OT_pattern_editor(DesignTools,OverlayControls,bpy.types.Operator):
                 x = anchor[0]
         return x, y
 
-    def hit(self): return self.design_hit()
+    def hit(self):
+        return self.design_hit()
 
-    def hit_edge(self): return self.design_hit_edge()
+    def hit_edge(self):
+        return self.design_hit_edge()
 
-    def sew_click(self): self.design_sew_click()
+    def sew_click(self):
+        self.design_sew_click()
 
-    def workflow_action(self,button):
+    def workflow_action(self, button):
         if self.draft or self.gesture:
             self.message = "Finish or cancel the current draft before building clothing."
             return
-        names = {'BUILD':'build_panels','ARRANGE':'arrange','SIMULATE':'simulate',
-                 'STOP':'stop','RESET':'reset','KEEP':'keep_drape','DEMO':'demo'}
+        names = {'BUILD': 'build_panels', 'ARRANGE': 'arrange', 'SIMULATE': 'simulate',
+                 'STOP': 'stop', 'RESET': 'reset', 'KEEP': 'keep_drape', 'DEMO': 'demo'}
         try:
-            op = getattr(bpy.ops.devil_designer,names[button])
+            op = getattr(bpy.ops.devil_designer, names[button])
             result = op('EXEC_DEFAULT')
             if 'FINISHED' in result:
-                if self._scene.dd_document!=self._stored:
-                    self.session.document=Document.loads(self._scene.dd_document)
-                    self._stored=self._scene.dd_document
-                if button=='DEMO':
-                    self.update_reference(bpy.context,align=True)
+                if self._scene.dd_document != self._stored:
+                    self.session.document = Document.loads(self._scene.dd_document)
+                    self._stored = self._scene.dd_document
+                if button == 'DEMO':
+                    self.update_reference(bpy.context, align=True)
                     self.fit()
-                self.message = {'DEMO':'Sewing demo ready. Simulate to drape the bodice around the torso.',
-                                'BUILD':'Panels ready. Use G / R in the 3D scene to arrange them.',
-                                'ARRANGE':'Panels arranged around the body. Adjust placement before simulation.',
-                                'SIMULATE':'Simulation running. Stop on the frame you want to keep.',
-                                'STOP':'Simulation paused. Keep mesh saves the current shape.',
-                                'RESET':'Restored the positioned panels. Edit or arrange, then simulate again.',
-                                'KEEP':'Draped mesh kept. Check the Blender report for any open seam pairs.'}[button]
+                self.message = {'DEMO': 'Sewing demo ready. Simulate to drape the bodice around the torso.',
+                                'BUILD': 'Panels ready. Use G / R in the 3D scene to arrange them.',
+                                'ARRANGE': 'Panels arranged around the body. Adjust placement before simulation.',
+                                'SIMULATE': 'Simulation running. Stop on the frame you want to keep.',
+                                'STOP': 'Simulation paused. Keep mesh saves the current shape.',
+                                'RESET': 'Restored the positioned panels. Edit or arrange, then simulate again.',
+                                'KEEP': 'Draped mesh kept. Check the Blender report for any open seam pairs.'}[button]
         except RuntimeError as exc:
-            self.message = str(exc).replace('Error: ','').strip()
+            self.message = str(exc).replace('Error: ', '').strip()
 
-    def finish_polygon(self,closed=True):
-        points=list(self.draft)
-        if self.tool=='INTERNAL' or self._scene.dd_internal_mode:
-            action=lambda:self.session.add_path(points,closed)
-        else:action=lambda:self.session.add(points)
-        if self.run_edit(action,'Shape created. V edits points; C changes corner / curve.'):
-            self.draft,self.preview=[],None
+    def finish_polygon(self, closed=True):
+        points = list(self.draft)
+        if self.tool == 'INTERNAL' or self._scene.dd_internal_mode:
+            action = lambda: self.session.add_path(points, closed)
+        else:
+            action = lambda: self.session.add(points)
+        if self.run_edit(action, 'Shape created. V edits points; C changes corner / curve.'):
+            self.draft, self.preview = [], None
 
     def draw_overlay(self):
         if self._closed:
@@ -248,7 +311,6 @@ class DD_OT_pattern_editor(DesignTools,OverlayControls,bpy.types.Operator):
             self.refresh_controls()
             self.renderer.draw(self)
         except Exception as exc:
-            # Never leave a repeatedly failing GPU callback installed.
             print("Devil Designer drawing error:", exc)
             self.cleanup()
 
@@ -266,7 +328,6 @@ class DD_OT_pattern_editor(DesignTools,OverlayControls,bpy.types.Operator):
             return {'CANCELLED'}
 
     def handle_event(self, context, event):
-        # Closing/switching editors, files, scenes or windows cannot leave orphan handlers.
         if (self._area not in list(self._window.screen.areas) or self._area.type != 'VIEW_3D'
                 or self._window.scene != self._scene):
             self.cleanup()
@@ -286,16 +347,16 @@ class DD_OT_pattern_editor(DesignTools,OverlayControls,bpy.types.Operator):
                 self._area.tag_redraw()
             return {'PASS_THROUGH'}
         self._area.tag_redraw()
-        result=self.design_pending_event(context,event,panel)
-        if result is not None:return result
-        if press and event.ctrl and event.alt and event.type=='D':
+        result = self.design_pending_event(context, event, panel)
+        if result is not None:
+            return result
+        if press and event.ctrl and event.alt and event.type == 'D':
             self.cleanup()
             return {'FINISHED'}
         if not self.gesture:
-            result=self.controls_event(context,event)
+            result = self.controls_event(context, event)
             if result is not None:
                 return result
-        # File save and standard nonediting shortcuts still work while drawing.
         if event.ctrl and event.type == 'S':
             return {'PASS_THROUGH'}
         if self.gesture:
@@ -309,14 +370,14 @@ class DD_OT_pattern_editor(DesignTools,OverlayControls,bpy.types.Operator):
                     previous = self.gesture['last']
                     self.view.pan(self.pointer[0] - previous[0], self.pointer[1] - previous[1])
                     self.gesture['last'] = self.pointer
-                elif mode in {'RECT','ELLIPSE'}:
+                elif mode in {'RECT', 'ELLIPSE'}:
                     a = self.gesture['start']
                     b = self.world_pointer(event)
                     self.preview = [a, (b[0], a[1]), b, (a[0], b[1])]
-                elif mode=='HANDLE':
-                    target=self.view.world(self.pointer,self.canvas_layout.canvas)
-                    self.handle_preview=(self.session.corner,self.gesture['handle'],
-                        (target[0]-self.gesture['anchor'][0],target[1]-self.gesture['anchor'][1]))
+                elif mode == 'HANDLE':
+                    target = self.view.world(self.pointer, self.canvas_layout.canvas)
+                    self.handle_preview = (self.session.corner, self.gesture['handle'],
+                        (target[0] - self.gesture['anchor'][0], target[1] - self.gesture['anchor'][1]))
                 else:
                     target = self.world_pointer(event)
                     source = self.gesture['start']
@@ -325,16 +386,16 @@ class DD_OT_pattern_editor(DesignTools,OverlayControls,bpy.types.Operator):
                                     else (x, y) for i, (x, y) in enumerate(self.gesture['points'])]
                 return {'RUNNING_MODAL'}
             if event.value == 'RELEASE' and event.type == ('MIDDLEMOUSE' if mode == 'PAN' else 'LEFTMOUSE'):
-                if mode=='ELLIPSE' and self.preview:
-                    self.run_edit(lambda:self.session.add_ellipse(self.preview[0],self.preview[2],self._scene.dd_internal_mode),'Ellipse created.')
-                elif mode=='RECT' and self.preview:
-                    action=(lambda:self.session.add_path(self.preview,True)) if self._scene.dd_internal_mode else (lambda:self.session.add(self.preview))
-                    self.run_edit(action,'Rectangle created.')
-                elif mode=='HANDLE' and self.handle_preview:
-                    self.run_edit(lambda:self.session.set_handle(*self.handle_preview),'Bezier handle updated.')
+                if mode == 'ELLIPSE' and self.preview:
+                    self.run_edit(lambda: self.session.add_ellipse(self.preview[0], self.preview[2], self._scene.dd_internal_mode), 'Ellipse created.')
+                elif mode == 'RECT' and self.preview:
+                    action = (lambda: self.session.add_path(self.preview, True)) if self._scene.dd_internal_mode else (lambda: self.session.add(self.preview))
+                    self.run_edit(action, 'Rectangle created.')
+                elif mode == 'HANDLE' and self.handle_preview:
+                    self.run_edit(lambda: self.session.set_handle(*self.handle_preview), 'Bezier handle updated.')
                 elif mode == 'MOVE' and self.preview:
                     self.run_edit(lambda: self.session.move(self.preview), "Pattern updated.")
-                self.gesture,self.preview,self.handle_preview=None,None,None
+                self.gesture, self.preview, self.handle_preview = None, None, None
                 return {'RUNNING_MODAL'}
             return {'RUNNING_MODAL'}
         if not panel:
@@ -352,23 +413,53 @@ class DD_OT_pattern_editor(DesignTools,OverlayControls,bpy.types.Operator):
                 if button == 'CLOSE':
                     self.cleanup()
                     return {'FINISHED'}
-                if button in {'SELECT','POLYGON','RECTANGLE','ELLIPSE','INTERNAL','SEW','PIN','TACK','DART'}:
-                    self.choose_tool(button)
-                elif button in {'BUILD','ARRANGE','SIMULATE','STOP','RESET','KEEP'}:
+                if button.startswith('STAGE_'):
+                    st = {'STAGE_DRAFT': 'DRAFT', 'STAGE_SEW': 'SEW', 'STAGE_ARRANGE': 'ARRANGE', 'STAGE_SIMULATE': 'SIMULATE'}.get(button)
+                    if st:
+                        self.set_stage(st)
+                    return {'RUNNING_MODAL'}
+                if button == 'STAGE_NEXT':
+                    self.advance_stage()
+                    return {'RUNNING_MODAL'}
+                if button == 'LIBRARY':
+                    self.set_stage('LIBRARY')
+                    return {'RUNNING_MODAL'}
+                if button in {'SETTINGS', 'INSPECTOR'}:
+                    self.settings_open = not self.settings_open
+                    self.canvas_layout = self.make_layout()
+                    self.refresh_controls()
+                    self.save_window()
+                    return {'RUNNING_MODAL'}
+                if button in {'SELECT', 'POLYGON', 'RECTANGLE', 'ELLIPSE', 'INTERNAL', 'SEW', 'PIN', 'TACK', 'DART', 'PLACE', 'FREE_SEW'}:
+                    self.choose_tool(button if button != 'FREE_SEW' else 'SEW')
+                    if button == 'FREE_SEW':
+                        self._scene.dd_free_sewing = True
+                    return {'RUNNING_MODAL'}
+                if button in {'BUILD', 'ARRANGE', 'SIMULATE', 'STOP', 'RESET', 'KEEP'}:
                     self.workflow_action(button)
-                elif button in {'UNDO', 'REDO'}:
+                    return {'RUNNING_MODAL'}
+                if button in {'UNDO', 'REDO'}:
                     self.cancel_gesture()
                     self.run_edit(lambda: self.session.history(button == 'REDO'), 'Redo.' if button == 'REDO' else 'Undo.')
-                elif button=='LENGTHS':
-                    self._scene.dd_lengths_visible=not self._scene.dd_lengths_visible
-                elif button=='REFERENCE':
-                    self._scene.dd_reference_visible=not self._scene.dd_reference_visible
-                elif button == 'SNAP':
+                    return {'RUNNING_MODAL'}
+                if button == 'LENGTHS':
+                    self._scene.dd_lengths_visible = not self._scene.dd_lengths_visible
+                    return {'RUNNING_MODAL'}
+                if button == 'REFERENCE':
+                    self._scene.dd_reference_visible = not self._scene.dd_reference_visible
+                    return {'RUNNING_MODAL'}
+                if button == 'SNAP':
                     self.snap = not self.snap
-                elif button == 'FIT':
+                    return {'RUNNING_MODAL'}
+                if button == 'FIT':
                     self.fit()
-                elif button == 'FULL':
+                    return {'RUNNING_MODAL'}
+                if button == 'FULL':
                     self.toggle_full()
+                    return {'RUNNING_MODAL'}
+                if button == 'HELP':
+                    self.message = "Shortcuts: V select, P polygon, R rect, E ellipse, I internal, D dart, J sew, K pin, T tack, F fit, S snap, Z undo."
+                    return {'RUNNING_MODAL'}
                 return {'RUNNING_MODAL'}
         if event.type == 'TAB' and press:
             self.toggle_full()
@@ -378,21 +469,21 @@ class DD_OT_pattern_editor(DesignTools,OverlayControls,bpy.types.Operator):
             redo = event.type == 'Y' or event.shift
             self.run_edit(lambda: self.session.history(redo), "Redo." if redo else "Undo.")
             return {'RUNNING_MODAL'}
-        if press and event.type=='H' and not event.ctrl:
-            self._scene.dd_reference_visible=not self._scene.dd_reference_visible
+        if press and event.type == 'H' and not event.ctrl:
+            self._scene.dd_reference_visible = not self._scene.dd_reference_visible
             return {'RUNNING_MODAL'}
         if press and event.type == 'S' and not event.ctrl:
             self.snap = not self.snap
             return {'RUNNING_MODAL'}
         if press and event.type in {'V', 'P', 'R', 'J'}:
-            self.choose_tool({'V': 'SELECT', 'P': 'POLYGON', 'R': 'RECTANGLE', 'J':'SEW'}[event.type])
+            self.choose_tool({'V': 'SELECT', 'P': 'POLYGON', 'R': 'RECTANGLE', 'J': 'SEW'}[event.type])
             return {'RUNNING_MODAL'}
         if press and event.type in {'HOME', 'F'}:
             self.fit()
             return {'RUNNING_MODAL'}
         if self.draft:
             if press and event.type in {'RET', 'NUMPAD_ENTER'}:
-                self.finish_polygon(self.tool!='INTERNAL')
+                self.finish_polygon(self.tool != 'INTERNAL')
             elif press and event.type == 'BACK_SPACE':
                 self.draft.pop()
             elif press and event.type == 'RIGHTMOUSE':
@@ -400,13 +491,13 @@ class DD_OT_pattern_editor(DesignTools,OverlayControls,bpy.types.Operator):
                 self.message = "Draft cancelled."
             elif event.type == 'MOUSEMOVE':
                 self.preview = [self.world_pointer(event, self.draft[-1])]
-        if self.tool=='SEW' and self.seam_selected and press and event.type=='B':
-            self.run_edit(lambda: self.session.reverse_seam(self.seam_selected),'Seam direction reversed.')
+        if self.tool == 'SEW' and self.seam_selected and press and event.type == 'B':
+            self.run_edit(lambda: self.session.reverse_seam(self.seam_selected), 'Seam direction reversed.')
             return {'RUNNING_MODAL'}
         if press and event.type in {'X', 'DEL'} and not self.draft:
-            if self.tool=='SEW':
+            if self.tool == 'SEW':
                 if self.seam_selected:
-                    self.run_edit(lambda: self.session.remove_seam(self.seam_selected),'Seam removed.')
+                    self.run_edit(lambda: self.session.remove_seam(self.seam_selected), 'Seam removed.')
                     self.seam_selected = None
                 self.pending_edge = None
                 return {'RUNNING_MODAL'}
@@ -425,10 +516,12 @@ class DD_OT_pattern_editor(DesignTools,OverlayControls,bpy.types.Operator):
         elif event.type == 'LEFTMOUSE' and press:
             if self.tool == 'SEW':
                 self.sew_click()
-            elif self.tool in {'POLYGON','INTERNAL'}:
-                if self.tool=='INTERNAL' and not self.draft and self.session.selected is None:
-                    owner,_=self.hit()
-                    if owner:self.session.selected=owner.id;self.session.path='OUTER'
+            elif self.tool in {'POLYGON', 'INTERNAL'}:
+                if self.tool == 'INTERNAL' and not self.draft and self.session.selected is None:
+                    owner, _ = self.hit()
+                    if owner:
+                        self.session.selected = owner.id
+                        self.session.path = 'OUTER'
                 if len(self.draft) >= 3 and math.dist(self.pointer, self.view.screen(self.draft[0], self.canvas_layout.canvas)) < 12 * self.canvas_layout.scale:
                     self.finish_polygon(True)
                 else:
@@ -436,30 +529,36 @@ class DD_OT_pattern_editor(DesignTools,OverlayControls,bpy.types.Operator):
                     if not self.draft or math.dist(point, self.draft[-1]) > 1e-6:
                         self.draft.append(point)
                         self.preview = [point]
-            elif self.tool in {'RECTANGLE','ELLIPSE'}:
-                self.gesture = {'mode': 'RECT' if self.tool=='RECTANGLE' else 'ELLIPSE', 'start': self.world_pointer(event)}
-            elif self.tool in {'PIN','TACK','DART'}:
-                try:self.design_canvas_click(event)
-                except ValueError as exc:self.message=str(exc)
+            elif self.tool in {'RECTANGLE', 'ELLIPSE'}:
+                self.gesture = {'mode': 'RECT' if self.tool == 'RECTANGLE' else 'ELLIPSE', 'start': self.world_pointer(event)}
+            elif self.tool in {'PIN', 'TACK', 'DART'}:
+                try:
+                    self.design_canvas_click(event)
+                except ValueError as exc:
+                    self.message = str(exc)
             else:
-                p,corner=self.hit()
-                if p is None or p.id!=self.session.selected:self.session.point_selection=[]
-                self.session.selected,self.session.corner=(p.id if p else None),corner
-                self.session.path=self.hit_path
-                self.session.segment=self.hit_segment
+                p, corner = self.hit()
+                if p is None or p.id != self.session.selected:
+                    self.session.point_selection = []
+                self.session.selected, self.session.corner = (p.id if p else None), corner
+                self.session.path = self.hit_path
+                self.session.segment = self.hit_segment
                 if p:
                     if corner is not None and self.hit_handle:
-                        v=p.path(self.session.path).vertices[corner]
-                        self.gesture=dict(mode='HANDLE',handle=self.hit_handle,anchor=(v.x,v.y))
+                        v = p.path(self.session.path).vertices[corner]
+                        self.gesture = dict(mode='HANDLE', handle=self.hit_handle, anchor=(v.x, v.y))
                     elif corner is not None and event.shift:
-                        if corner in self.session.point_selection:self.session.point_selection.remove(corner)
-                        else:self.session.point_selection.append(corner)
+                        if corner in self.session.point_selection:
+                            self.session.point_selection.remove(corner)
+                        else:
+                            self.session.point_selection.append(corner)
                     else:
-                        self.session.point_selection=[corner] if corner is not None else []
-                        self.gesture=dict(mode='MOVE',start=self.world_pointer(event),points=p.path(self.session.path).points)
+                        self.session.point_selection = [corner] if corner is not None else []
+                        self.gesture = dict(mode='MOVE', start=self.world_pointer(event), points=p.path(self.session.path).points)
                     if corner is not None:
-                        edges=self.session.document.edges(p.id,self.session.path)
-                        if edges:self.session.segment=edges[min(corner,len(edges)-1)]
+                        edges = self.session.document.edges(p.id, self.session.path)
+                        if edges:
+                            self.session.segment = edges[min(corner, len(edges) - 1)]
                     self.sync_selection()
         return {'RUNNING_MODAL'}
 
