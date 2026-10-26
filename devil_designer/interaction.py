@@ -275,13 +275,19 @@ class OverlayControls:
                 if history_stack:
                     self.clear_interaction_references()
                 self.run_edit(lambda: self.session.history(action == 'REDO'), action.title() + '.')
+        elif action == 'DELETE_PIECE':
+            self.session.corner = None
+            self.session.path = 'OUTER'
+            if self.run_edit(self.session.delete, 'Piece deleted.'):
+                self.clear_interaction_references()
         elif action == 'DELETE':
             if any(anchor.id == self.selected_anchor for anchor in self.session.document.anchors):
                 self.design_action('REMOVE_ANCHOR')
+            elif any(seam.id == self.seam_selected for seam in self.session.document.seams):
+                self.run_edit(lambda: self.session.remove_seam(self.seam_selected), 'Seam removed.')
+                self.seam_selected = None
+                self.pending_edge = None
             elif self.tool == 'SEW':
-                if self.seam_selected:
-                    self.run_edit(lambda: self.session.remove_seam(self.seam_selected), 'Seam removed.')
-                    self.seam_selected = None
                 self.pending_edge = None
             else:
                 self.run_edit(self.session.delete, 'Selection deleted.')
@@ -297,7 +303,8 @@ class OverlayControls:
         elif action == 'GUIDED_NEXT':
             self.advance_stage()
         else:
-            self.design_action(action)
+            if self.design_action(action) is False:
+                return False
         self.refresh_controls()
         return True
 
@@ -306,13 +313,17 @@ class OverlayControls:
             return ''
         if self.confirm_action:
             return 'Confirm the pending action or choose Go back first.'
+        if self.gesture and action not in {'CANCEL_DRAFT', 'HELP'}:
+            return 'Finish the current drag or press Escape before another edit.'
+        if action == 'START_PANEL' and self.session.document.patterns:
+            return 'The starter panel is available for an empty garment. Draw or duplicate another piece instead.'
         if self.draft and action not in {'FINISH_DRAFT', 'CANCEL_DRAFT', 'UNDO', 'REDO',
                                         'FIT', 'SNAP', 'LENGTHS', 'REFERENCE', 'HELP', 'POINT_APPLY'}:
             return 'Finish drawing or cancel before editing other garment data.'
         if action in {'BUILD', 'ARRANGE', 'SIMULATE', 'STOP', 'RESET', 'KEEP', 'DEMO'}:
             return self.workflow_blocker('STOP' if action == 'SIMULATE' and bpy.context.screen.is_animation_playing else action)
         selected = self.session.document.find(self.session.selected)
-        if action in {'DUPLICATE', 'OFFSET', 'UNFOLD', 'MIRROR_SEW', 'CUT', 'TRACE', 'WRAP', 'PLACE', 'PRESET'} or action.startswith('SET_PRESET_'):
+        if action in {'DELETE_PIECE', 'DUPLICATE', 'OFFSET', 'UNFOLD', 'MIRROR_SEW', 'CUT', 'TRACE', 'WRAP', 'PLACE', 'PRESET'} or action.startswith('SET_PRESET_'):
             if selected is None:
                 return 'Select a piece on the canvas first.'
         if action == 'CURVE' and self.session.corner is None:
@@ -364,18 +375,22 @@ class OverlayControls:
         except ValueError as exc:
             self.message = str(exc)
             return False
+        previous = getattr(self._scene, key)
         setattr(self._scene, key, value)
+        if self.apply_local_setting(key) is False:
+            setattr(self._scene, key, previous)
+            self.sync_selection()
+            return False
         self.numeric = None
-        self.apply_local_setting(key)
         self.message = SETTINGS[key].label + ' updated.'
         return True
 
     def apply_local_setting(self, key):
         if self.context_anchor is not None:
             if key in {'dd_point_x', 'dd_point_y'} and self.session.corner is not None:
-                self.perform_action('POINT_APPLY')
+                return self.perform_action('POINT_APPLY')
             elif key == 'dd_segment_length' and self.session.segment:
-                self.perform_action('SET_LENGTH')
+                return self.perform_action('SET_LENGTH')
 
     def step_setting(self, key, direction, event):
         spec = SETTINGS[key]
@@ -456,7 +471,9 @@ class OverlayControls:
             if event.type == 'LEFTMOUSE' and event.value == 'RELEASE':
                 self.setting_drag = None
                 if state['moved']:
-                    self.apply_local_setting(key)
+                    if self.apply_local_setting(key) is False:
+                        setattr(self._scene, key, state['value'])
+                        self.sync_selection()
                 else:
                     text = spec.format(getattr(self._scene, key))
                     self.numeric = dict(key=key, text=text, cursor=len(text), selected=True)

@@ -45,6 +45,24 @@ def check_interaction_regressions(workspace, event, point, check):
 
     try:
         workspace.session = Session(Document())
+        workspace.persist()
+        workspace.card_kind = None
+        workspace.context_card_hidden = False
+        starter = workspace.minimal_card()
+        check(starter[1] == 'Start garment' and len(starter[2]) == 3 and starter[2][0][1][0] == 'START_PANEL',
+              'the empty garment offers a compact one-click starter alongside custom drawing and the library')
+        workspace.minimal_action('START_PANEL')
+        created = workspace.session.document.patterns[0]
+        check(created.name == 'Front panel' and abs(created.points[1][0] - created.points[0][0] - .4) < 1e-6 and
+              abs(created.points[2][1] - created.points[1][1] - .45) < 1e-6 and workspace.tool == 'SELECT',
+              'one-click starter creates and frames an editable 40 by 45 cm panel ready for selection')
+        check(workspace.perform_action('START_PANEL') is False and len(workspace.session.document.patterns) == 1,
+              'starter creation cannot silently add another template to an existing garment')
+        workspace.perform_action('UNDO')
+        check(not workspace.session.document.patterns, 'one Undo removes the complete starter panel')
+        workspace.perform_action('REDO')
+        check(len(workspace.session.document.patterns) == 1, 'Redo restores the editable starter panel')
+        workspace.session = Session(Document())
         workspace.session.add([(0, 0), (.3, 0), (.3, .4), (0, .4)])
         workspace.persist()
         edge = workspace.session.document.edges(workspace.session.selected)[0]
@@ -70,6 +88,114 @@ def check_interaction_regressions(workspace, event, point, check):
         check(workspace.pending_edge == edge and workspace.chain_stage == 'A',
               'an unavailable document undo does not discard pending interaction work')
         workspace.clear_interaction_references()
+
+        workspace.choose_tool('SELECT')
+        workspace.session.selected = workspace.session.document.patterns[0].id
+        workspace.session.corner = 0
+        workspace.session.path = 'OUTER'
+        workspace.sync_selection()
+        before_numeric = workspace.session.document.dumps()
+        history_size = len(workspace.session.undo_stack)
+        original_x = workspace._scene.dd_point_x
+        workspace.numeric = dict(key='dd_point_x', text='60', cursor=2, selected=False)
+        check(workspace.commit_numeric() is False and workspace.numeric is not None and
+              workspace.session.document.dumps() == before_numeric and
+              abs(workspace._scene.dd_point_x - original_x) < 1e-6 and
+              len(workspace.session.undo_stack) == history_size and 'updated' not in workspace.message,
+              'invalid numeric geometry retains the editable input and error without changing source or undo history')
+        workspace.numeric.update(text='5', cursor=1)
+        check(workspace.commit_numeric() and workspace.numeric is None and
+              abs(workspace.session.document.patterns[0].vertices[0].x - .05) < 1e-6 and
+              len(workspace.session.undo_stack) == history_size + 1,
+              'correcting a rejected numeric point applies exactly one undoable edit')
+        workspace.perform_action('UNDO')
+        workspace.session.selected = workspace.session.document.patterns[0].id
+        workspace.session.corner = 0
+        workspace.sync_selection()
+        workspace.setting_drag = dict(key='dd_point_x', value=original_x, pointer=point, moved=True)
+        workspace._scene.dd_point_x = .6
+        workspace.pointer = point
+        workspace.controls_event(bpy.context, event('LEFTMOUSE', point, 'RELEASE'))
+        check(workspace.setting_drag is None and workspace.session.document.dumps() == before_numeric and
+              abs(workspace._scene.dd_point_x - original_x) < 1e-6 and 'updated' not in workspace.message,
+              'a rejected numeric drag restores the displayed source value and preserves its validation error')
+
+        edge = workspace.session.document.edges(workspace.session.selected)[0]
+        seed_references(edge)
+        workspace.pending_place = workspace.pending_tack = None
+        workspace.handle_event(bpy.context, event('ESC', point))
+        check(not workspace.chain_a and not workspace.chain_b and not workspace.chain_stage and
+              not workspace.free_clicks and not workspace.dart_base and workspace.pending_edge is None,
+              'Escape cancels all pending chain range dart and paired-edge picks together')
+        workspace.gesture = dict(mode='HANDLE')
+        workspace.handle_preview = (0, 'outgoing', (.1, .1))
+        workspace.handle_event(bpy.context, event('ESC', point))
+        check(workspace.gesture is None and workspace.handle_preview is None,
+              'Escape removes the Bezier handle preview as well as its gesture')
+
+        seed_references(edge)
+        workspace.numeric = dict(key='dd_point_x', text='10', cursor=2, selected=True)
+        workspace.card_kind = 'POINT'
+        workspace.confirm_action = 'LIBRARY_LOAD'
+        replacement_source = Session(Document())
+        replacement_source.add([(1, 0), (1.3, 0), (1.3, .4), (1, .4)])
+        workspace._scene.dd_document = replacement_source.document.dumps()
+        workspace.handle_event(bpy.context, event('TIMER', point))
+        check(all(not getattr(workspace, name) for name in reference_names) and workspace.numeric is None and
+              workspace.confirm_action is None and workspace.card_kind is None,
+              'external document replacement clears stale picks numeric edits cards and destructive confirmations')
+        workspace.session = Session(Document.loads(before_numeric))
+        workspace.session.selected = workspace.session.document.patterns[0].id
+        edge = workspace.session.document.edges(workspace.session.selected)[0]
+        workspace.persist()
+
+        workspace.session.add([(.5, 0), (.8, 0), (.8, .4), (.5, .4)])
+        other_edge = workspace.session.document.edges(workspace.session.selected)[0]
+        workspace.session.sew(edge, other_edge)
+        seam = workspace.session.document.seams[0]
+        workspace.persist()
+        workspace.choose_tool('SELECT')
+        badge = workspace.seam_badges()[0][0]
+        workspace.selected_anchor = 'old-anchor'
+        workspace.card_kind = None
+        workspace.handle_event(bpy.context, event('LEFTMOUSE', (badge.x + badge.w / 2, badge.y + badge.h / 2)))
+        check(workspace.seam_selected == seam.id and workspace.selected_anchor is None and workspace.card_kind == 'SEAM',
+              'a seam badge selects the seam instead of retaining a competing anchor selection')
+        direction = seam.reverse
+        workspace.handle_event(bpy.context, event('B', point))
+        check(seam.reverse != direction, 'B reverses the selected seam badge even while the Select tool is active')
+        workspace.handle_event(bpy.context, event('DEL', point))
+        check(not workspace.session.document.seams and len(workspace.session.document.patterns) == 2,
+              'Delete on a seam badge removes its seam rather than destroying the selected garment piece')
+        workspace.perform_action('UNDO')
+        check(len(workspace.session.document.seams) == 1 and len(workspace.session.document.patterns) == 2,
+              'seam badge keyboard removal is undoable independently of the pieces')
+        workspace.session = Session(Document.loads(before_numeric))
+        workspace.session.selected = workspace.session.document.patterns[0].id
+        edge = workspace.session.document.edges(workspace.session.selected)[0]
+        workspace.clear_interaction_references()
+        workspace.card_kind = None
+        workspace.persist()
+
+        original_settings = {key: getattr(workspace._scene, key) for key in
+                             ('dd_self_collision', 'dd_library_refit', 'dd_clearance', 'dd_spacing', 'dd_quality')}
+        try:
+            workspace._scene.dd_self_collision = False
+            workspace._scene.dd_library_refit = False
+            workspace._scene.dd_quality = 15
+            before_load = {key: getattr(workspace._scene, key) for key in original_settings}
+            workspace.library_items = [Path('regression.garment.json')]
+            with patch.object(library, 'load') as load:
+                workspace.minimal_action('LOAD_0')
+                check(workspace.confirm_action == 'LIBRARY_LOAD' and not load.called and
+                      all(getattr(workspace._scene, key) == value for key, value in before_load.items()),
+                      'requesting a library load never changes settings before confirmation')
+                workspace.perform_action('CANCEL_ACTION')
+                check(not load.called and all(getattr(workspace._scene, key) == value for key, value in before_load.items()),
+                      'Go back from a library replacement truly leaves the current garment settings unchanged')
+        finally:
+            for key, value in original_settings.items():
+                setattr(workspace._scene, key, value)
 
         for kind, deletion, tool in (('PIN', 'X', 'PIN'), ('TACK', 'DEL', 'TACK'),
                                      ('PIN', 'DELETE', 'SEW')):
@@ -232,6 +358,102 @@ def check_interaction_regressions(workspace, event, point, check):
         workspace.handle_event(bpy.context, event('LEFTMOUSE', reopen_point, 'RELEASE'))
         check(not workspace.context_card_hidden,
               'the next canvas click restores automatic contextual card reachability')
+
+        workspace.clear_interaction_references()
+        workspace.choose_tool('SELECT')
+        workspace.workspace_panel_open = False
+        workspace.session = Session(Document())
+        workspace.session.add([(0, 0), (.3, 0), (.3, .4), (0, .4)])
+        first_piece = workspace.session.selected
+        workspace.session.add([(.5, 0), (.8, 0), (.8, .4), (.5, .4)])
+        second_piece = workspace.session.selected
+        workspace.persist()
+        workspace.fit()
+        workspace.session.selected = first_piece
+        workspace.session.path = 'OUTER'
+        workspace.session.point_selection = [0, 1]
+        workspace.card_kind = None
+        target = workspace.view.screen((.8, .4), workspace.canvas_layout.canvas)
+        workspace.handle_event(bpy.context, event('RIGHTMOUSE', target))
+        check(workspace.session.selected == second_piece and workspace.session.point_selection == [2],
+              'right clicking a different piece never transfers another piece point-selection indices')
+        before_merge = workspace.session.document.dumps()
+        before_history = list(workspace.session.undo_stack)
+        check(workspace.perform_action('MERGE') is False and workspace.session.document.dumps() == before_merge and
+              workspace.session.undo_stack == before_history,
+              'a cross-piece right click cannot accidentally merge stale selected corners')
+        workspace.card_kind = None
+        workspace.session.point_selection = [0, 1]
+        target = workspace.view.screen((.8, 0), workspace.canvas_layout.canvas)
+        workspace.handle_event(bpy.context, event('RIGHTMOUSE', target))
+        check(workspace.session.point_selection == [0, 1],
+              'right clicking within the same selected point group preserves an intentional merge selection')
+        workspace.session.sew(workspace.session.document.edges(first_piece)[0],
+                              workspace.session.document.edges(second_piece)[2])
+        selected_seam = workspace.session.document.seams[0]
+        workspace.seam_selected = selected_seam.id
+        workspace.card_kind = None
+        workspace.handle_event(bpy.context, event('RIGHTMOUSE', target))
+        check(workspace.seam_selected is None and workspace.session.corner == 1,
+              'right clicking a point clears the old seam target before keyboard deletion or reversal')
+        before_reverse = workspace.session.document.dumps()
+        workspace.handle_event(bpy.context, event('B', point))
+        check(workspace.session.document.dumps() == before_reverse,
+              'B on a newly selected point cannot reverse an old hidden seam')
+        workspace.session.point_selection = []
+        workspace.perform_action('DELETE')
+        check(len(workspace.session.document.seams) == 1 and
+              len(workspace.session.document.find(second_piece).vertices) == 3,
+              'Delete on the new point removes that corner rather than an unrelated hidden seam')
+        workspace.perform_action('UNDO')
+        workspace.session.selected = second_piece
+        internal = workspace.session.add_path([(.55, .1), (.7, .1), (.7, .2)], True)
+        workspace.session.path = 'OUTER'
+        workspace.session.point_selection = [0, 1]
+        workspace.persist()
+        workspace.card_kind = None
+        target = workspace.view.screen((.55, .1), workspace.canvas_layout.canvas)
+        workspace.handle_event(bpy.context, event('RIGHTMOUSE', target))
+        check(workspace.session.path == internal.id and workspace.session.point_selection == [0],
+              'right clicking an internal path scopes its point selection separately from the outer boundary')
+        for path, corner in (('OUTER', 1), (internal.id, None)):
+            workspace.session.selected = second_piece
+            workspace.session.path = path
+            workspace.session.corner = corner
+            workspace.session.point_selection = [0, 1]
+            workspace.show_card('EDIT', point)
+            check(any(row[0] == 'DELETE_PIECE' and row[1] == 'Delete piece' for rect, row in workspace.minimal_card()[2]),
+                  'the piece card exposes an explicit whole-piece deletion action')
+            before_delete = workspace.session.document.dumps()
+            workspace.minimal_action('DELETE_PIECE')
+            check(workspace.session.document.find(second_piece) is None and len(workspace.session.document.patterns) == 1,
+                  'Delete piece removes the whole piece even with a corner or internal path selected')
+            workspace.perform_action('UNDO')
+            check(workspace.session.document.dumps() == before_delete,
+                  'one Undo restores the entire deleted piece and its internal paths')
+        for mode in ('MOVE', 'HANDLE'):
+            workspace.session.selected = first_piece
+            workspace.session.path = 'OUTER'
+            workspace.session.corner = 0 if mode == 'HANDLE' else None
+            pattern = workspace.session.document.find(first_piece)
+            workspace.gesture = dict(mode=mode, start=(0, 0), points=pattern.points, anchor=(0, 0))
+            workspace.preview = [(x + .03, y) for x, y in pattern.points] if mode == 'MOVE' else None
+            workspace.handle_preview = (0, 'outgoing', (.03, .01)) if mode == 'HANDLE' else None
+            before_drag = workspace.session.document.dumps()
+            history_size = len(workspace.session.undo_stack)
+            duplicate_event = event('D', point)
+            duplicate_event.shift = True
+            workspace.handle_event(bpy.context, duplicate_event)
+            check(workspace.session.document.dumps() == before_drag and workspace.session.selected == first_piece and
+                  workspace.gesture['mode'] == mode,
+                  'Shift D during ' + mode + ' cannot redirect the pending drag onto a duplicate')
+            workspace.handle_event(bpy.context, event('LEFTMOUSE', point, 'RELEASE'))
+            check(workspace.gesture is None and workspace.session.document.dumps() != before_drag and
+                  len(workspace.session.undo_stack) == history_size + 1,
+                  mode + ' still completes as one undoable edit after a blocked shortcut')
+            workspace.perform_action('UNDO')
+            check(workspace.session.document.dumps() == before_drag,
+                  'one Undo restores the original source after the completed ' + mode)
 
         fit_session = Session(Document())
         fit_session.add([(-1.5, 0), (1.5, 0), (1.5, .4), (-1.5, .4)])

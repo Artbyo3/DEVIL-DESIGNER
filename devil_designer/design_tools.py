@@ -61,6 +61,7 @@ class DesignTools:
             except ValueError:self.session.segment=None
 
     def select_anchor(self, anchor):
+        self.seam_selected = None
         self.selected_anchor = anchor.id
         self.session.selected = anchor.pattern
         self.session.corner = None
@@ -94,7 +95,10 @@ class DesignTools:
     def design_action(self,action):
         scene=self._scene;doc=self.session.document;p=doc.find(self.session.selected)
         def operation():
-            if action in {'NUM_RECT','NUM_ELLIPSE'}:
+            if action == 'START_PANEL':
+                self.session.add([(-.2,0),(.2,0),(.2,.45),(-.2,.45)])
+                self.session.document.find(self.session.selected).name = 'Front panel'
+            elif action in {'NUM_RECT','NUM_ELLIPSE'}:
                 a=(scene.dd_point_x,scene.dd_point_y);b=(a[0]+scene.dd_width,a[1]+scene.dd_height)
                 if action=='NUM_ELLIPSE':self.session.add_ellipse(a,b,scene.dd_internal_mode)
                 elif scene.dd_internal_mode:self.session.add_path([a,(b[0],a[1]),b,(a[0],b[1])],True)
@@ -176,8 +180,12 @@ class DesignTools:
             self.persist();self.sync_selection();self.refresh_controls()
             self.message=self.sewing_message(self.session.document.seams[-1]) if action=='CHAIN_SEW' else 'Done: '+action.replace('_',' ').lower()+'.'
             if self.session.last_repairs:self.message+=f' {self.session.last_repairs} affected sewing pair(s) removed; re-pair edited edges.'
-        try:operation()
-        except (ValueError,RuntimeError,OSError) as exc:self.message=str(exc).replace('Error: ','').strip()
+        try:
+            operation()
+            return True
+        except (ValueError,RuntimeError,OSError) as exc:
+            self.message=str(exc).replace('Error: ','').strip()
+            return False
 
     def sewing_message(self,seam):
         a,b,difference,percent=self.session.document.seam_stats(seam)
@@ -240,7 +248,7 @@ class DesignTools:
                 return {'RUNNING_MODAL'}
         if not panel:return None
         if press and event.type=='ESC' and (self.chain_stage or self.free_clicks or self.dart_base):
-            self.chain_stage=None;self.free_clicks=[];self.dart_base=[];self.message='Tool selection cancelled.';return {'RUNNING_MODAL'}
+            self.perform_action('CANCEL_DRAFT');return {'RUNNING_MODAL'}
         if press and event.type in {'RET','NUMPAD_ENTER'} and self.chain_stage:
             if self.chain_stage=='A':self.chain_stage='B';self.message='Now pick chain B, then Enter to sew.'
             else:self.design_action('CHAIN_SEW')

@@ -161,6 +161,11 @@ class MinimalCards:
             if not any(seam.id == self.seam_selected for seam in self.session.document.seams):
                 return None
             rows = [('FLIP_SEAM', 'Reverse direction', ''), ('REMOVE_SEAM', 'Remove seam', '')]
+        elif kind == 'GARMENT' and not self.session.document.patterns:
+            title = 'Start garment'
+            rows = [('START_PANEL', 'Create panel', '40 x 45 cm'),
+                    ('RECTANGLE', 'Draw custom panel', 'Drag on canvas'),
+                    ('LIBRARY', 'Saved garments', 'Open library')]
         elif kind == 'GARMENT':
             title = 'Garment'
             rows = [('NAME', scene.dd_library_name, 'Rename'),
@@ -206,7 +211,7 @@ class MinimalCards:
         elif kind == 'EDIT':
             title = pattern.name if pattern else 'Draw'
             rows = ([('DUPLICATE', 'Duplicate', ''), ('MIRROR_SEW', 'Mirror and sew', ''),
-                     ('PLACEMENT', 'Placement', ''), ('INTERNAL_EDIT', 'Internal shapes', ''), ('DELETE', 'Delete piece', '')]
+                     ('PLACEMENT', 'Placement', ''), ('INTERNAL_EDIT', 'Internal shapes', ''), ('DELETE_PIECE', 'Delete piece', '')]
                     if pattern else [('RECTANGLE', 'Panel', ''), ('POLYGON', 'Polygon', ''), ('ELLIPSE', 'Ellipse', ''), ('INTERNAL', 'Internal path', ''), ('GARMENT', 'Garment', '')])
         elif kind == 'PLACEMENT':
             title = 'Placement'
@@ -323,7 +328,7 @@ class MinimalCards:
             self.weld_manual = True
         action = {'dd_point_x': 'POINT_APPLY', 'dd_point_y': 'POINT_APPLY', 'dd_segment_length': 'SET_LENGTH'}.get(key)
         if action:
-            self.perform_action(action)
+            return self.perform_action(action)
 
     def minimal_action(self, key):
         scene = self._scene
@@ -372,9 +377,13 @@ class MinimalCards:
             self.card_kind = None
         elif key.startswith('LOAD_'):
             scene.dd_library_selected = int(key[5:])
-            self.automatic_defaults()
             self.perform_action('LIBRARY_LOAD')
             self.card_kind = None
+        elif key == 'START_PANEL':
+            if self.perform_action(key):
+                self.choose_tool('SELECT')
+                self.fit()
+                self.card_kind = None
         elif key in {'FLIP_SEAM', 'REMOVE_SEAM'}:
             identity = self.seam_selected
             if key == 'FLIP_SEAM':
@@ -480,6 +489,7 @@ class MinimalCards:
             self.context_card_hidden = False
             for rect, identity, label in self.seam_badges():
                 if rect.contains(*point):
+                    self.selected_anchor = None
                     self.seam_selected = identity
                     self.show_card('SEAM', (rect.x + rect.w + 6, rect.y + rect.h))
                     return {'RUNNING_MODAL'}
@@ -500,7 +510,11 @@ class MinimalCards:
                 self.show_card('SEWING')
             else:
                 self.selected_anchor = None
+                self.seam_selected = None
                 pattern, corner = self.hit()
+                if (pattern is None or self.session.selected != pattern.id or self.session.path != self.hit_path
+                        or corner not in self.session.point_selection):
+                    self.session.point_selection = [corner] if corner is not None else []
                 self.session.selected = pattern.id if pattern else None
                 self.session.corner = corner
                 self.session.path = self.hit_path

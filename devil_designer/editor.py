@@ -328,6 +328,7 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         self.tool = name
         if sewing_mode_changed:
             self.selected_anchor = None
+            self.seam_selected = None
             self.chain_stage = None
             self.chain_a = []
             self.chain_b = []
@@ -510,7 +511,10 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         if self._scene.dd_document != self._stored:
             self.session = Session(Document.loads(self._scene.dd_document))
             self._stored = self._scene.dd_document
-            self.cancel_gesture()
+            self.clear_interaction_references()
+            self.card_kind = None
+            self.confirm_action = None
+            self.confirm_message = ''
         self.canvas_layout = self.make_layout()
         self.refresh_controls()
         self.pointer = (event.mouse_x - self._region.x, event.mouse_y - self._region.y)
@@ -566,7 +570,7 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         if self.gesture:
             mode = self.gesture['mode']
             if event.type in {'ESC', 'RIGHTMOUSE'} and press:
-                self.gesture, self.preview = None, None
+                self.cancel_gesture()
                 self.message = "Edit cancelled."
                 return {'RUNNING_MODAL'}
             if event.type == 'MOUSEMOVE':
@@ -718,7 +722,7 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                 self.message = "Draft cancelled."
             elif event.type == 'MOUSEMOVE':
                 self.preview = [self.world_pointer(event, self.draft[-1])]
-        if self.tool == 'SEW' and self.seam_selected and press and event.type == 'B':
+        if self.seam_selected and press and event.type == 'B':
             self.run_edit(lambda: self.session.reverse_seam(self.seam_selected), 'Seam direction reversed.')
             return {'RUNNING_MODAL'}
         if press and event.type in {'X', 'DEL'} and not self.draft:
