@@ -2,7 +2,6 @@ import bpy
 from bpy.app.handlers import persistent
 from .editor import DD_OT_pattern_editor, close_active
 from .operators import CLASSES
-from .core import Document
 from .garment import cancel_playback
 
 
@@ -10,63 +9,11 @@ def avatar_poll(self,obj):
     return obj.type=='MESH' and obj.get('dd_kind') not in {'panel','simulation','final'}
 
 
-class DD_PT_patterns(bpy.types.Panel):
-    bl_label = 'Devil Designer'
-    bl_idname = 'DD_PT_patterns'
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'UI'
-    bl_category = 'Devil Designer'
+def launch_menu(self,context):
+    self.layout.separator()
+    self.layout.operator(DD_OT_pattern_editor.bl_idname,text='Devil Designer',icon='MOD_CLOTH')
 
-    def draw(self,context):
-        layout,scene = self.layout,context.scene
-        layout.operator(DD_OT_pattern_editor.bl_idname,icon='WINDOW')
-        try:
-            doc = Document.loads(scene.dd_document)
-        except ValueError as exc:
-            layout.label(text=str(exc),icon='ERROR')
-            return
-        layout.label(text=f'{len(doc.patterns)} patterns / {len(doc.seams)} seams')
-        if not doc.patterns:
-            layout.operator('devil_designer.demo',icon='MOD_CLOTH')
-        box = layout.box()
-        box.label(text='1. Fabric panels')
-        box.prop(scene,'dd_spacing')
-        box.label(text=f'{scene.dd_spacing*100:g} cm between mesh samples')
-        box.operator('devil_designer.build_panels',icon='MESH_GRID')
-        box = layout.box()
-        box.label(text='2. Body and arrangement')
-        box.prop(scene,'dd_avatar')
-        box.prop(scene,'dd_clearance')
-        box.operator('devil_designer.arrange',icon='ORIENTATION_GLOBAL')
-        box.label(text='Adjust panels with G / R in 3D.')
-        if doc.seams:
-            box = layout.box()
-            box.label(text='Sewing pairs')
-            for index,seam in enumerate(doc.seams):
-                a,b = doc.find(seam.a.pattern),doc.find(seam.b.pattern)
-                row = box.row(align=True)
-                row.label(text=f'{index+1}: {a.name} / {b.name}')
-                op = row.operator('devil_designer.seam',text='',icon='ARROW_LEFTRIGHT')
-                op.seam_id = seam.id
-                op = row.operator('devil_designer.seam',text='',icon='X')
-                op.seam_id,op.remove = seam.id,True
-        else:
-            layout.label(text='Use Sew (J) in the 2D editor to pair edges.')
-        box = layout.box()
-        box.label(text='3. Drape')
-        box.prop(scene,'dd_quality')
-        box.prop(scene,'dd_frames')
-        box.prop(scene,'dd_self_collision')
-        box.prop(scene,'dd_pin_top')
-        row = box.row(align=True)
-        row.operator('devil_designer.simulate',icon='PLAY')
-        row.operator('devil_designer.stop',icon='PAUSE')
-        box.operator('devil_designer.reset',icon='LOOP_BACK')
-        box = layout.box()
-        box.label(text='4. Keep the shape')
-        box.prop(scene,'dd_weld_distance')
-        box.prop(scene,'dd_thickness')
-        box.operator('devil_designer.keep_drape',icon='CHECKMARK')
+KEYMAPS = []
 
 
 @persistent
@@ -75,13 +22,16 @@ def on_load(_):
     cancel_playback()
 
 
-classes = (DD_OT_pattern_editor,)+CLASSES+(DD_PT_patterns,)
+classes = (DD_OT_pattern_editor,)+CLASSES
 PROPERTIES = ('dd_document','dd_collection','dd_avatar','dd_spacing','dd_clearance',
-              'dd_quality','dd_frames','dd_self_collision','dd_pin_top','dd_weld_distance','dd_thickness')
+              'dd_quality','dd_frames','dd_self_collision','dd_pin_top','dd_weld_distance','dd_thickness',
+              'dd_ui_rect','dd_ui_settings')
 
 
 def register():
     Scene = bpy.types.Scene
+    Scene.dd_ui_rect = bpy.props.FloatVectorProperty(name='Editor window bounds',size=4,default=(-1,-1,0,0))
+    Scene.dd_ui_settings = bpy.props.BoolProperty(name='Editor settings visible',default=True)
     Scene.dd_document = bpy.props.StringProperty(name='Pattern document',default='')
     Scene.dd_collection = bpy.props.PointerProperty(type=bpy.types.Collection)
     Scene.dd_avatar = bpy.props.PointerProperty(type=bpy.types.Object,name='Avatar body',poll=avatar_poll)
@@ -96,6 +46,12 @@ def register():
     for cls in classes:
         bpy.utils.register_class(cls)
     bpy.app.handlers.load_pre.append(on_load)
+    bpy.types.VIEW3D_MT_view.append(launch_menu)
+    config=bpy.context.window_manager.keyconfigs.addon
+    if config:
+        keymap=config.keymaps.new(name='3D View',space_type='VIEW_3D')
+        item=keymap.keymap_items.new(DD_OT_pattern_editor.bl_idname,'D','PRESS',ctrl=True,alt=True)
+        KEYMAPS.append((keymap,item))
 
 
 def unregister():
@@ -103,6 +59,10 @@ def unregister():
     cancel_playback()
     if on_load in bpy.app.handlers.load_pre:
         bpy.app.handlers.load_pre.remove(on_load)
+    bpy.types.VIEW3D_MT_view.remove(launch_menu)
+    for keymap,item in KEYMAPS:
+        keymap.keymap_items.remove(item)
+    KEYMAPS.clear()
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)
     for name in PROPERTIES:

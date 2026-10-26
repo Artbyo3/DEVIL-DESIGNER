@@ -3,6 +3,7 @@ import math
 import bpy
 from .core import Document, Session, contains, validate_polygon
 from .canvas import Layout, View
+from .interaction import OverlayControls
 
 _active = None
 
@@ -12,9 +13,9 @@ def close_active():
         _active.cleanup()
 
 
-class DD_OT_pattern_editor(bpy.types.Operator):
+class DD_OT_pattern_editor(OverlayControls,bpy.types.Operator):
     bl_idname = "devil_designer.pattern_editor"
-    bl_label = "Open Pattern Editor"
+    bl_label = "Devil Designer"
     bl_description = "Open a dedicated 2D pattern canvas beside the 3D scene"
     # Documents use their own transaction history while this overlay has focus.
     _closed = True
@@ -38,6 +39,7 @@ class DD_OT_pattern_editor(bpy.types.Operator):
             self.report({'ERROR'}, str(exc))
             return {'CANCELLED'}
         self._stored = self._scene.dd_document
+        self.initialize_controls()
         self.view = View()
         self.tool, self.snap, self.full = 'POLYGON', True, False
         self.draft, self.preview = [], None
@@ -47,6 +49,7 @@ class DD_OT_pattern_editor(bpy.types.Operator):
         self.message = "Draw your first pattern. Click corners, then click the first corner to close."
         self._closed = False
         self.canvas_layout = self.make_layout()
+        self.refresh_controls()
         self.fit()
         from .draw import Renderer
         self.renderer = Renderer()
@@ -76,7 +79,9 @@ class DD_OT_pattern_editor(bpy.types.Operator):
                 if region.y <= r.y < region.y + region.height / 2:
                     bottom = max(bottom, r.y + r.height - region.y)
         scale = max(.5, bpy.context.preferences.system.ui_scale)
-        return Layout(region.width, region.height, scale, self.full, max(0, left), max(0, right), top, bottom)
+        position=tuple(v*scale for v in self.window_rect) if self.window_rect else None
+        return Layout(region.width, region.height, scale, self.full, max(0, left), max(0, right), top, bottom,
+                      position=position,settings=self.settings_open)
 
     def fit(self):
         self.view.fit([p for pat in self.session.document.patterns for p in pat.points], self.canvas_layout.canvas)
@@ -85,6 +90,7 @@ class DD_OT_pattern_editor(bpy.types.Operator):
         value = self.session.document.dumps()
         self._scene.dd_document = value
         self._stored = value
+        self.refresh_controls()
 
     def run_edit(self, action, message):
         try:
@@ -172,12 +178,17 @@ class DD_OT_pattern_editor(bpy.types.Operator):
             self.message = "Finish or cancel the current draft before building clothing."
             return
         names = {'BUILD':'build_panels','ARRANGE':'arrange','SIMULATE':'simulate',
-                 'STOP':'stop','RESET':'reset','KEEP':'keep_drape'}
+                 'STOP':'stop','RESET':'reset','KEEP':'keep_drape','DEMO':'demo'}
         try:
             op = getattr(bpy.ops.devil_designer,names[button])
             result = op('EXEC_DEFAULT')
             if 'FINISHED' in result:
-                self.message = {'BUILD':'Panels ready. Use G / R in the 3D scene to arrange them.',
+                if button=='DEMO':
+                    self.session=Session(Document.loads(self._scene.dd_document))
+                    self._stored=self._scene.dd_document
+                    self.fit()
+                self.message = {'DEMO':'Sewing demo ready. Simulate to drape the bodice around the torso.',
+                                'BUILD':'Panels ready. Use G / R in the 3D scene to arrange them.',
                                 'ARRANGE':'Panels arranged around the body. Adjust placement before simulation.',
                                 'SIMULATE':'Simulation running. Stop on the frame you want to keep.',
                                 'STOP':'Simulation paused. Keep mesh saves the current shape.',
@@ -199,6 +210,7 @@ class DD_OT_pattern_editor(bpy.types.Operator):
             return
         try:
             self.canvas_layout = self.make_layout()
+            self.refresh_controls()
             self.renderer.draw(self)
         except Exception as exc:
             # Never leave a repeatedly failing GPU callback installed.
@@ -229,14 +241,21 @@ class DD_OT_pattern_editor(bpy.types.Operator):
             self._stored = self._scene.dd_document
             self.cancel_gesture()
         self.canvas_layout = self.make_layout()
+        self.refresh_controls()
         self.pointer = (event.mouse_x - self._region.x, event.mouse_y - self._region.y)
         panel = self.canvas_layout.panel.contains(*self.pointer)
         canvas = self.canvas_layout.canvas.contains(*self.pointer)
         press = event.value == 'PRESS'
         if event.type == 'TIMER':
-            # Only used for lifecycle checks, no redraw loop.
             return {'PASS_THROUGH'}
         self._area.tag_redraw()
+        if press and event.ctrl and event.alt and event.type=='D':
+            self.cleanup()
+            return {'FINISHED'}
+        if not self.gesture:
+            result=self.controls_event(context,event)
+            if result is not None:
+                return result
         # File save and standard nonediting shortcuts still work while drawing.
         if event.ctrl and event.type == 'S':
             return {'PASS_THROUGH'}
@@ -297,10 +316,10 @@ class DD_OT_pattern_editor(bpy.types.Operator):
                 elif button == 'FIT':
                     self.fit()
                 elif button == 'FULL':
-                    self.full = not self.full
+                    self.toggle_full()
                 return {'RUNNING_MODAL'}
         if event.type == 'TAB' and press:
-            self.full = not self.full
+            self.toggle_full()
             return {'RUNNING_MODAL'}
         if press and event.ctrl and event.type in {'Z', 'Y'}:
             self.cancel_gesture()
@@ -372,6 +391,7 @@ class DD_OT_pattern_editor(bpy.types.Operator):
         global _active
         if self._closed:
             return
+        self.save_window()
         self._closed = True
         if self._handle is not None:
             bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')

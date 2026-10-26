@@ -5,6 +5,7 @@ import gpu
 from gpu_extras.batch import batch_for_shader
 from .canvas import Rect, grid_step
 from .core import area, triangulate
+from .controls import SETTINGS
 
 BG = (.065,.078,.10,1)
 CHROME = (.088,.103,.13,1)
@@ -162,15 +163,17 @@ class Renderer:
             self.rect(l.toolbar,CHROME)
             self.rect(l.workflow,CHROME)
             self.rect(l.footer,CHROME)
-            self.text(p.x+14*s,l.header.y+28*s,"DEVIL DESIGNER",13,TEXT,max_width=p.w-130*s)
-            self.text(p.x+14*s,l.header.y+11*s,"2D PATTERN WORKSPACE",9,MUTED,max_width=p.w-130*s)
+            self.text(p.x+14*s,l.header.y+28*s,"DEVIL DESIGNER",13,TEXT,max_width=p.w-205*s)
+            self.text(p.x+14*s,l.header.y+11*s,"DRAG HEADER TO MOVE",9,MUTED,max_width=p.w-205*s)
             for name,(r,label) in l.buttons.items():
-                active = name == ed.tool or name == 'SNAP' and ed.snap
+                active = name == ed.tool or name == 'SNAP' and ed.snap or name == 'SETTINGS' and ed.settings_open
                 hover = r.contains(*ed.pointer)
                 self.rect(r,(.17,.30,.31,1) if active else (.16,.19,.24,1) if hover else (.12,.14,.18,1))
                 if active:
                     self.rect(Rect(r.x,r.y,r.w,2*s),ACCENT)
                 self.text(r.x+r.w/2,r.y+9*s,label,10,ACCENT if active else TEXT,True,max_width=r.w-6*s)
+            self.settings(ed)
+            self.clip(p)
             self.lines([(p.x,l.footer.y+l.footer.h),(p.x+p.w,l.footer.y+l.footer.h)],(.19,.23,.28,1))
             self.text(p.x+12*s,p.y+29*s,ed.message,10,TEXT,max_width=p.w-24*s)
             world = view.world(ed.pointer,c)
@@ -179,7 +182,11 @@ class Renderer:
                       f"{count} piece{'s' if count!=1 else ''}   |   X {world[0]*100:.1f}  Y {world[1]*100:.1f} cm",9,MUTED,max_width=p.w*.60)
             nav = "MMB pan  /  Wheel zoom" if p.w>480*s else "F: fit"
             blf.size(0,9*s)
-            self.text(p.x+p.w-12*s-blf.dimensions(0,nav)[0],p.y+10*s,nav,9,MUTED)
+            self.text(p.x+p.w-28*s-blf.dimensions(0,nav)[0],p.y+10*s,nav,9,MUTED)
+            if not ed.full:
+                for inset in (4,8,12):
+                    self.lines([(p.x+p.w-inset*s,p.y+3*s),(p.x+p.w-3*s,p.y+inset*s)],MUTED)
+            self.body_picker(ed)
         finally:
             blf.disable(0,blf.CLIPPING)
             gpu.state.scissor_set(*scissor)
@@ -256,3 +263,85 @@ class Renderer:
                 self.lines(pts,(1,.82,.3,1),4)
             except ValueError:
                 pass
+
+    def settings(self,ed):
+        inspector=ed.inspector
+        if inspector is None:
+            return
+        s=self.s
+        r=inspector.rect
+        self.clip(r)
+        self.rect(r,(.078,.092,.12,1))
+        self.lines([(r.x,r.y),(r.x,r.y+r.h)],(.22,.27,.33,1))
+        for item in inspector.controls:
+            box=item.rect
+            if box.y>r.y+r.h or box.y+box.h<r.y:
+                continue
+            if item.kind in {'title','section'}:
+                self.text(box.x,box.y+9*s,item.label,11 if item.kind=='title' else 9,ACCENT if item.kind=='title' else MUTED)
+                if item.kind=='section':
+                    self.lines([(box.x,box.y+27*s),(box.x+box.w,box.y+27*s)],(.15,.19,.24,1))
+            elif item.kind=='number':
+                self.text(box.x,box.y+36*s,item.label,10,TEXT,max_width=box.w)
+                spec=SETTINGS[item.key]
+                field=item.value_rect
+                editing=ed.numeric and ed.numeric['key']==item.key
+                self.rect(field,(.16,.27,.29,1) if editing else (.115,.14,.18,1))
+                text=ed.numeric['text'] if editing else spec.format(getattr(ed._scene,item.key))
+                if editing and ed.numeric['selected']:
+                    self.rect(Rect(field.x+4*s,field.y+4*s,field.w-8*s,field.h-8*s),(.23,.39,.45,1))
+                self.text(field.x+7*s,field.y+8*s,text if editing else text+' '+spec.unit,11,TEXT,max_width=field.w-10*s)
+                if editing and not ed.numeric['selected']:
+                    blf.size(0,11*s)
+                    cursor_x=field.x+7*s+blf.dimensions(0,text[:ed.numeric['cursor']])[0]
+                    if cursor_x<field.x+field.w-3*s:
+                        self.lines([(cursor_x,field.y+5*s),(cursor_x,field.y+20*s)],ACCENT)
+                for button,label in ((item.minus,'-'),(item.plus,'+')):
+                    self.rect(button,(.14,.18,.23,1))
+                    self.text(button.x+button.w/2,button.y+8*s,label,12,TEXT,True)
+            elif item.kind=='body':
+                self.text(box.x,box.y+36*s,item.label,10,TEXT)
+                field=item.value_rect
+                self.rect(field,(.12,.15,.19,1))
+                obj=ed._scene.dd_avatar
+                self.text(field.x+7*s,field.y+9*s,obj.name if obj else 'Choose body mesh...',10,TEXT,max_width=field.w-25*s)
+                self.text(field.x+field.w-12*s,field.y+9*s,'v',10,MUTED,True)
+            elif item.kind=='button':
+                field=Rect(box.x,box.y+3*s,box.w,25*s)
+                disabled=item.key=='DEMO' and bool(ed.session.document.patterns)
+                self.rect(field,(.10,.12,.15,1) if disabled else (.13,.22,.25,1))
+                self.text(field.x+field.w/2,field.y+8*s,item.label,10,MUTED if disabled else TEXT,True,max_width=field.w-10*s)
+            elif item.kind=='toggle':
+                self.text(box.x,box.y+11*s,item.label,10,TEXT,max_width=box.w-44*s)
+                active=getattr(ed._scene,item.key)
+                chip=Rect(box.x+box.w-39*s,box.y+4*s,39*s,23*s)
+                self.rect(chip,(.16,.31,.31,1) if active else (.115,.14,.18,1))
+                self.text(chip.x+chip.w/2,chip.y+7*s,'On' if active else 'Off',10,ACCENT if active else MUTED,True)
+            elif item.kind=='seam':
+                seam=next((seam for seam in ed.session.document.seams if seam.id==item.key),None)
+                if seam is None:
+                    continue
+                a,b=ed.session.document.find(seam.a.pattern),ed.session.document.find(seam.b.pattern)
+                self.text(box.x,box.y+25*s,item.label+'. '+a.name,9,ACCENT if ed.seam_selected==item.key else TEXT,max_width=box.w-72*s)
+                self.text(box.x,box.y+10*s,b.name,9,MUTED,max_width=box.w-72*s)
+                for rect,label in [(Rect(box.x+box.w-66*s,box.y+5*s,40*s,28*s),'Flip'),
+                                   (Rect(box.x+box.w-23*s,box.y+5*s,23*s,28*s),'X')]:
+                    self.rect(rect,(.14,.17,.22,1))
+                    self.text(rect.x+rect.w/2,rect.y+9*s,label,9,TEXT,True)
+            elif item.kind=='hint':
+                self.text(box.x,box.y+10*s,item.label,9,MUTED,max_width=box.w)
+        if inspector.max_scroll:
+            self.rect(inspector.scrollbar,(.11,.14,.18,1))
+            self.rect(inspector.thumb,(.31,.40,.46,1))
+
+    def body_picker(self,ed):
+        menu=ed.body_menu
+        if menu is None:
+            return
+        self.clip(menu.rect)
+        self.rect(menu.rect,(.15,.19,.24,1))
+        for r,obj,label in menu.rows:
+            selected=obj==ed._scene.dd_avatar
+            if r.contains(*ed.pointer) or selected:
+                self.rect(r,(.21,.33,.36,1))
+            self.text(r.x+7*self.s,r.y+10*self.s,label,10,ACCENT if selected else TEXT,max_width=r.w-14*self.s)

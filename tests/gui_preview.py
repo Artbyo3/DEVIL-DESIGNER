@@ -38,6 +38,75 @@ def run():
                             ctrl=False,shift=False,alt=False)
                 values.update(kw)
                 return SimpleNamespace(**values)
+            check(not hasattr(bpy.types,'DD_PT_patterns'),'no N-panel registered')
+            from devil_designer import ui
+            check(bool(ui.KEYMAPS) and ui.KEYMAPS[0][1].ctrl and ui.KEYMAPS[0][1].alt,'Ctrl Alt D launcher registered')
+            def click_rect(rect):
+                point=(rect.x+rect.w/2,rect.y+rect.h/2)
+                op.handle_event(bpy.context,event('LEFTMOUSE',point=point))
+                op.handle_event(bpy.context,event('LEFTMOUSE','RELEASE',point=point))
+            original=op.canvas_layout.panel
+            header=(original.x+60,op.canvas_layout.header.y+25)
+            destination=(header[0]-120,header[1]-20)
+            op.handle_event(bpy.context,event('LEFTMOUSE',point=header))
+            op.handle_event(bpy.context,event('MOUSEMOVE',point=destination))
+            op.handle_event(bpy.context,event('LEFTMOUSE','RELEASE',point=destination))
+            moved=op.canvas_layout.panel
+            check(abs(moved.x-original.x+120)<.01 and abs(moved.y-original.y+20)<.01,'header drag repositions window')
+            check(not op.session.document.patterns,'moving window does not draw pattern points')
+            start=(moved.x+moved.w-5,moved.y+5)
+            target=(start[0]-60,start[1]+40)
+            op.handle_event(bpy.context,event('LEFTMOUSE',point=start))
+            op.handle_event(bpy.context,event('MOUSEMOVE',point=target))
+            op.handle_event(bpy.context,event('LEFTMOUSE','RELEASE',point=target))
+            resized=op.canvas_layout.panel
+            check(abs(resized.w-moved.w+60)<.01 and abs(resized.h-moved.h+40)<.01,'corner drag resizes window')
+            op.handle_event(bpy.context,event('TAB'))
+            check(op.full,'expand mode')
+            op.handle_event(bpy.context,event('TAB'))
+            check(not op.full and abs(op.canvas_layout.panel.x-resized.x)<.01,'restore preserves floating position')
+            def control(key):
+                op.refresh_controls()
+                for _ in range(100):
+                    item=next(c for c in op.inspector.controls if c.key==key)
+                    center=(item.rect.x+item.rect.w/2,item.rect.y+item.rect.h/2)
+                    r=op.inspector.rect
+                    if r.y+5<center[1]<r.y+r.h-5:
+                        return item
+                    kind='WHEELDOWNMOUSE' if center[1]<r.y+5 else 'WHEELUPMOUSE'
+                    op.handle_event(bpy.context,event(kind,point=(r.x+r.w/2,r.y+r.h/2)))
+                raise AssertionError('Control not reachable: '+key)
+            click_rect(control('dd_quality').value_rect)
+            op.handle_event(bpy.context,event('ONE',unicode='1'))
+            op.handle_event(bpy.context,event('FOUR',unicode='4'))
+            op.handle_event(bpy.context,event('RET'))
+            check(bpy.context.scene.dd_quality==14,'custom numeric field edits quality')
+            click_rect(control('dd_quality').value_rect)
+            for _ in range(3): op.handle_event(bpy.context,event('NINE',unicode='9'))
+            op.handle_event(bpy.context,event('RET'))
+            check(bpy.context.scene.dd_quality==14 and op.numeric is not None,'invalid numeric value does not change setting')
+            op.handle_event(bpy.context,event('ESC'))
+            check(op.numeric is None and not op._closed,'Escape cancels numeric edit without closing editor')
+            item=control('dd_self_collision')
+            previous=bpy.context.scene.dd_self_collision
+            click_rect(item.rect)
+            check(bpy.context.scene.dd_self_collision!=previous,'custom self-collision toggle')
+            click_rect(control('dd_self_collision').rect)
+            click_rect(control('BODY').value_rect)
+            check(op.body_menu is not None,'body picker opens inside floating editor')
+            body_row=next(r for r,obj,_ in op.body_menu.rows if obj and obj.name=='Cube')
+            click_rect(body_row)
+            check(bpy.context.scene.dd_avatar.name=='Cube','body selected through custom picker')
+            click_rect(control('BODY').value_rect)
+            clear=next(r for r,obj,_ in op.body_menu.rows if obj is None)
+            click_rect(clear)
+            check(bpy.context.scene.dd_avatar is None,'custom picker clears body selection')
+            for key in ('dd_spacing','dd_clearance','dd_quality','dd_frames','dd_weld_distance','dd_thickness'):
+                control(key)
+            check(True,'all garment numeric settings reachable inside editor')
+            op.inspector_scroll=0
+            op.refresh_controls()
+            # Drawing input uses the canvas area, independently of the inspector.
             c=op.canvas_layout.canvas
             a,b=(c.x+55,c.y+55),(c.x+155,c.y+205)
             op.handle_event(bpy.context,event('R'))
@@ -73,6 +142,12 @@ def run():
             bpy.ops.devil_designer.pattern_editor('INVOKE_DEFAULT')
             op=editor._active
             check(op is not None,'editor reopens')
+            check(abs(op.canvas_layout.panel.x-resized.x)<.01 and abs(op.canvas_layout.panel.w-resized.w)<.01,'floating geometry persists after reopen')
+            op.handle_event(bpy.context,event('D',ctrl=True,alt=True))
+            check(editor._active is None,'Ctrl Alt D closes the floating editor')
+            bpy.ops.devil_designer.pattern_editor('INVOKE_DEFAULT')
+            op=editor._active
+            check(op is not None,'launcher reopens after shortcut toggle')
             # Pair real edges through the overlay input path.
             s=Session()
             s.add([(-.45,-.2),(-.15,-.2),(-.15,.2),(-.45,.2)])
@@ -90,11 +165,22 @@ def run():
             check(not op.session.document.seams,'X removes selected seam')
             op.handle_event(bpy.context,event('Z',ctrl=True))
             check(len(op.session.document.seams)==1,'undo restores removed seam')
+            seam=op.session.document.seams[0]
+            previous=seam.reverse
+            row=control(seam.id).rect
+            from devil_designer.canvas import Rect
+            click_rect(Rect(row.x+row.w-65,row.y+5,38,28))
+            check(op.session.document.seams[0].reverse!=previous,'custom seam list reverses direction')
+            row=control(seam.id).rect
+            click_rect(Rect(row.x+row.w-23,row.y+5,23,28))
+            check(not op.session.document.seams,'custom seam list removes a pair')
             # Build the same practical sewing demo used by the simulation integration test.
             op.session=Session()
             op.persist()
             bpy.context.scene.dd_spacing=.025
-            bpy.ops.devil_designer.demo()
+            bpy.context.scene.dd_quality=10
+            click_rect(control('DEMO').rect)
+            check(len(op.session.document.patterns)==2,'sewing demo created from custom UI')
             op.session=Session(garment.document(bpy.context.scene))
             op._stored=bpy.context.scene.dd_document
             op.fit()
@@ -102,19 +188,27 @@ def run():
             for obj in bpy.context.scene.objects:
                 if obj.name in {'Cube','Camera','Light'}:
                     obj.hide_set(True)
-            obj=garment.compile_garment(bpy.context)
+            click_rect(op.canvas_layout.buttons['SIMULATE'][0])
+            check(bpy.context.screen.is_animation_playing,'custom Simulate starts playback')
+            click_rect(op.canvas_layout.buttons['STOP'][0])
+            check(not bpy.context.screen.is_animation_playing,'custom Stop pauses playback')
+            obj=garment.generated(bpy.context.scene,'simulation')[0]
             for frame in range(1,61):
                 bpy.context.scene.frame_set(frame)
                 obj.evaluated_get(bpy.context.evaluated_depsgraph_get()).data.vertices[0].co
-            result,unclosed=garment.keep_drape(bpy.context)
-            check(unclosed==0,'demo drapes with all sewing pairs weldable')
+            click_rect(op.canvas_layout.buttons['KEEP'][0])
+            result=garment.generated(bpy.context.scene,'final')[0]
+            check(result is not None,'custom Keep mesh retains draped garment')
             check(result.data.uv_layers.active is not None,'draped preview has UVs')
             from mathutils import Vector
             area.spaces.active.region_3d.view_rotation=Vector((.8,-4,1.4)).to_track_quat('Z','Y')
-            area.spaces.active.region_3d.view_location=Vector((.48,0,1.25))
+            area.spaces.active.region_3d.view_location=Vector((.85,0,1.25))
             area.spaces.active.region_3d.view_distance=2.1
             check(op.canvas_layout.panel.w<region.width,'side-by-side layout leaves scene visible')
-            bpy.ops.wm.save_as_mainfile(filepath=str(ROOT/'build'/'devil-designer-preview.blend'))
+            op.inspector_scroll=0
+            op.refresh_controls()
+            op.save_window()
+            bpy.ops.wm.save_as_mainfile(filepath=str(ROOT/'build'/'floating-editor-0.3-preview.blend'))
             # Exercise real GPU drawing in the next window redraw.
         (ROOT/'build'/'gui-report.json').write_text(json.dumps({'passed':report},indent=2))
         print('GUI CHECKS:',report)

@@ -3,7 +3,7 @@
 **2D pattern drafting, edge sewing, and cloth draping inside Blender.**
 
 By **Artbyo3**. Intended for creating clothing shapes for VRChat and other game
-characters. Version **0.2.0**, tested in **Blender 5.2.3 LTS**; requires Blender 5.2+.
+characters. Version **0.3.0**, tested in **Blender 5.2.3 LTS**; requires Blender 5.2+.
 
 This version connects the editable 2D patterns to real 3D fabric meshes. It includes
 an actual two-piece bodice sewing demo, body collisions, and a way to keep the
@@ -15,21 +15,36 @@ final topology cleanup and rigging are still separate Blender tasks.
 Download the ZIP from [Releases](https://github.com/Artbyo3/DEVIL-DESIGNER/releases).
 Disable an older Devil Designer installation before installing this version.
 In Blender, open **Edit > Preferences > Add-ons > menu > Install from Disk**,
-select `devil_designer-0.2.0.zip`, and enable the extension.
+select `devil_designer-0.3.0.zip`, and enable the extension.
 
-In a 3D Viewport, open **N > Devil Designer > Open Pattern Editor**. The drafting
-overlay sits beside the 3D scene. Native Blender controls remain available outside
-it. The sidebar contains the avatar selector and simulation settings.
+In a 3D Viewport, press **Ctrl+Alt+D**, use **F3 > Devil Designer**, or choose
+**View > Devil Designer**. There is no Devil Designer N-panel. Avatar selection,
+sewing controls, fabric settings, simulation, and output options all live inside
+the custom editor.
+
+Drag the header to move the window anywhere within the viewport. Drag its bottom
+right corner to resize it. **Expand / Restore** or **Tab** toggles the expanded
+layout; restoring preserves the floating position. Position, size, and settings
+visibility are saved per scene with the `.blend` file. Bounds are clamped when a
+file opens on a smaller viewport so the controls remain reachable.
+
+The header's **Settings** button shows or hides the in-window inspector. Scroll
+inside it to reach every option and the seam list; scroll over the pattern canvas
+to zoom. Click a numeric value to type it, then Enter to apply or Escape to cancel.
+The **- / +** buttons adjust values; Shift makes smaller decimal steps and Ctrl
+makes larger steps. Choose the avatar from the custom body list, or select its
+mesh in 3D and click **Use selected body**. Numeric fields use the displayed cm/mm
+units and validate values before applying them.
 
 ## Try the complete workflow
 
-Start with a new scene and an empty pattern document. In the Devil Designer
-sidebar, click **Create Two-Piece Sewing Demo**. This creates two bodice patterns,
+Start with a new scene and an empty pattern document. Open Devil Designer and
+click **Settings > Create sewing demo** (scroll to TRY IT if needed). This creates two bodice patterns,
 four sewing pairs, a procedural torso collider, and positioned 3D panels.
 
 1. Open the pattern editor to inspect the front and back pieces. **Sew / J** shows
    the numbered seam connections; large matching dots indicate paired endpoints.
-2. Press **Simulate** in the overlay or sidebar. Blender pulls the seams together
+2. Press **Simulate** in the editor. Blender pulls the seams together
    and drapes the fabric around the torso. Playback stops at the simulation limit.
 3. Press **Stop** when the shape looks right. **Keep mesh / Keep Draped Mesh**
    creates an editable garment with its UVs, removes loose sewing springs, and
@@ -48,10 +63,10 @@ wrong seam pairing. Kept garments are independent copies; reset never removes th
    the first corner or press Enter to close. Use **Rect / R** to drag rectangles.
 2. Choose **Sew / J** and click an edge on one piece, then its partner on another.
    Each edge can belong to one seam. Select a sewn edge and press **B** to reverse
-   its direction or **X** to remove the seam. The sidebar also has reverse/remove
+   its direction or **X** to remove the seam. The editor's Settings seam list also has Flip/remove
    buttons. Different-length sewn edges get matching sample counts; excessive
    length differences can stretch or gather the cloth.
-3. Choose your body mesh in the sidebar's **Avatar body** field. Click **Build 3D**
+3. Choose your body mesh in the custom editor's **Settings > Avatar body** field. Click **Build 3D**
    to generate the fabric meshes. **Arrange** supplies a front/back starting layout
    for exactly two pieces; it estimates torso height and assumes a Z-up avatar
    facing Blender's -Y direction. Adjust the pieces using Blender's **G / R** tools.
@@ -73,6 +88,9 @@ Move the pointer over the overlay to use its shortcuts.
 
 | Action | Control |
 | --- | --- |
+| Open / close editor | Ctrl+Alt+D |
+| Move / resize editor | Drag header / bottom right corner |
+| Show garment settings | Settings button in header |
 | Polygon / rectangle / select / sew | P / R / V / J |
 | Move a corner / whole pattern | Select, then drag a corner / piece interior |
 | Duplicate pattern | Shift+D |
@@ -116,7 +134,7 @@ performance differ from dedicated garment applications.
 ## Saving
 
 Save the `.blend` normally. Patterns, seam IDs/directions, avatar selection, settings,
-source panel transforms, and kept meshes are saved with it. Version 0.1 pattern
+source panel transforms, floating window placement, and kept meshes are saved with it. Version 0.1 pattern
 files are migrated when read. Unfinished 2D drafts and drag previews are not saved.
 Drafting undo history resets when the overlay is reopened. The simulation cache is
 not baked to disk by this tool; reset and simulate after reopening to regenerate it.
@@ -144,7 +162,7 @@ Build, check publication files, and validate the extension:
 
     python tools/build.py
     python tools/check_public.py
-    blender --background --factory-startup --command extension validate build/devil_designer-0.2.0.zip
+    blender --background --factory-startup --command extension validate build/devil_designer-0.3.0.zip
 
 Builds, temporary `.blend` files, test reports, caches, and machine-specific settings
 are excluded from source control. Only the extension ZIP is uploaded as a release
