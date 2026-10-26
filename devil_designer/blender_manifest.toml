@@ -1,0 +1,9 @@
+schema_version = "1.0.0"
+id = "devil_designer"
+version = "0.2.0"
+name = "Devil Designer"
+tagline = "Draft, sew, and drape clothing patterns inside Blender"
+maintainer = "Artbyo3"
+type = "add-on"
+license = ["SPDX:GPL-3.0-or-later"]
+blender_version_min = "5.2.0"
