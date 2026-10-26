@@ -48,22 +48,35 @@ class Layout:
 
         inspector_w = min(248 * s, p.w * 0.40) if settings else 0
         content_w = max(1.0, p.w - inspector_w)
-        self.header = Rect(p.x, p.y + p.h - 54 * s, p.w, 54 * s)
-        self.inspector = Rect(p.x + content_w, p.y + 48 * s, inspector_w, max(1.0, p.h - 102 * s)) if settings else None
+        rail_w = min(60 * s, max(30 * s, content_w * 0.15))
+        header_h = 50 * s
+        footer_h = 28 * s
+        viewbar_h = 42 * s
+        workflow_h = 32 * s
+
+        self.header = Rect(p.x, p.y + p.h - header_h, p.w, header_h)
+        self.footer = Rect(p.x, p.y, p.w, footer_h)
+
+        self.inspector = Rect(p.x + content_w, self.footer.y + self.footer.h,
+                              inspector_w, max(1.0, p.h - header_h - footer_h)) if settings else None
         if self.inspector:
-            self.inspector_head = Rect(self.inspector.x, self.inspector.y + self.inspector.h - 48 * s, self.inspector.w, 48 * s)
-            self.inspector_foot = Rect(self.inspector.x, self.inspector.y, self.inspector.w, 64 * s)
-            self.inspector_content = Rect(self.inspector.x, self.inspector.y + 64 * s,
-                                          self.inspector.w, max(1.0, self.inspector.h - 112 * s))
+            self.inspector_head = Rect(self.inspector.x, self.inspector.y + self.inspector.h - 44 * s, self.inspector.w, 44 * s)
+            self.inspector_foot = Rect(self.inspector.x, self.inspector.y, self.inspector.w, 58 * s)
+            self.inspector_content = Rect(self.inspector.x, self.inspector.y + 58 * s,
+                                          self.inspector.w, max(1.0, self.inspector.h - 102 * s))
         else:
             self.inspector_head = self.inspector_foot = self.inspector_content = None
 
-        self.toolbar = Rect(p.x, self.header.y - 68 * s, content_w, 68 * s)
-        self.workflow = Rect(p.x, self.toolbar.y - 36 * s, content_w, 36 * s)
-        self.utility = Rect(p.x, self.workflow.y - 30 * s, content_w, 30 * s)
-        self.viewbar = self.toolbar
-        self.footer = Rect(p.x, p.y, p.w, 48 * s)
-        self.rail = Rect(p.x, self.footer.y + self.footer.h, 25 * s, max(1.0, p.h - 261 * s))
+        self.rail = Rect(p.x, self.footer.y + self.footer.h, rail_w, max(1.0, p.h - header_h - footer_h))
+
+        work_x = p.x + rail_w
+        work_w = max(1.0, content_w - rail_w)
+
+        self.viewbar = Rect(work_x, self.header.y - viewbar_h, work_w, viewbar_h)
+        self.toolbar = self.viewbar
+        self.workflow = Rect(work_x, self.viewbar.y - workflow_h, work_w, workflow_h)
+        self.utility = self.viewbar
+
         self.canvas = Rect(p.x + 25 * s, self.footer.y + self.footer.h,
                            max(1.0, content_w - 25 * s), max(1.0, p.h - 261 * s))
         self.ruler_top = Rect(self.canvas.x, self.canvas.y + self.canvas.h, self.canvas.w, 25 * s)
@@ -80,46 +93,92 @@ class Layout:
             ("SETTINGS", "...", 32),
             ("LIBRARY", "Library", 62),
         ]
-        h_factor = min(1.0, max(0.35, (p.w * 0.45) / (sum(w + 4 for _, _, w in h_right_specs) * s)))
+        h_factor = min(1.0, max(0.15, (p.w * 0.40) / (sum(w + 4 for _, _, w in h_right_specs) * s)))
         hx = p.x + p.w - 6 * s
         for name, label, bw in h_right_specs:
             w_act = bw * s * h_factor
             hx -= (w_act + 4 * s)
-            self.buttons[name] = (Rect(hx, self.header.y + 14 * s, w_act, 28 * s), label)
+            bx = max(p.x, min(p.x + p.w - w_act, hx))
+            self.buttons[name] = (Rect(bx, self.header.y + 11 * s, w_act, 28 * s), label)
 
         # Stage pills in header
-        brand_w = min(120 * s, max(36 * s, p.w * 0.22))
-        pill_avail = max(40 * s, hx - (p.x + brand_w + 10 * s))
+        brand_w = min(120 * s, max(40 * s, p.w * 0.20))
+        pill_avail = max(20 * s, hx - (p.x + brand_w + 10 * s))
         pills = [
             ("STAGE_DRAFT", "01 Draft"),
             ("STAGE_SEW", "02 Sew"),
             ("STAGE_ARRANGE", "03 Arrange"),
             ("STAGE_SIMULATE", "04 Simulate"),
         ]
-        step_factor = min(1.0, pill_avail / (4 * 72 * s))
+        step_factor = min(1.0, max(0.1, pill_avail / (4 * 72 * s)))
         step_w = 70 * s * step_factor
-        step_start = p.x + brand_w + 8 * s + (pill_avail - 4 * (step_w + 2 * s)) / 2
+        step_start = p.x + brand_w + 8 * s + max(0.0, (pill_avail - 4 * (step_w + 2 * s)) / 2)
         for i, (name, label) in enumerate(pills):
             px = step_start + i * (step_w + 2 * s)
-            self.buttons[name] = (Rect(px, self.header.y + 13 * s, step_w, 30 * s), label)
+            bx = max(p.x, min(p.x + p.w - step_w, px))
+            self.buttons[name] = (Rect(bx, self.header.y + 10 * s, step_w, 30 * s), label)
 
-        # 2. Toolbar & workflow buttons (preserving exact button_row structure from b3dd195)
-        self.button_row([('SELECT', 'Select V', 70), ('POLYGON', 'Polygon P', 75),
-                         ('RECTANGLE', 'Rect R', 62), ('ELLIPSE', 'Ellipse E', 72)], self.toolbar, 37, 26)
-        self.button_row([('INTERNAL', 'Internal I', 75), ('SEW', 'Sew J', 62),
-                         ('PIN', 'Pin K', 62), ('TACK', 'Tack T', 62), ('DART', 'Dart D', 62)], self.toolbar, 6, 26)
-        self.button_row([('BUILD', 'Build 3D', 70), ('ARRANGE', 'Arrange', 62), ('SIMULATE', 'Simulate', 65),
-                         ('STOP', 'Stop', 39), ('RESET', 'Reset', 44), ('KEEP', 'Keep mesh', 74)], self.workflow, 5, 26)
-        self.button_row([('SNAP', 'Snap S', 58), ('FIT', 'Fit F', 45), ('REFERENCE', 'Body H', 58),
-                         ('LENGTHS', 'Lengths L', 70), ('UNDO', '<', 24), ('REDO', '>', 24)], self.utility, 3, 24)
+        # 2. Tool Rail (Vertical column on the left)
+        tools = [
+            ('SELECT', 'Select', 'V'),
+            ('POLYGON', 'Polygon', 'P'),
+            ('RECTANGLE', 'Rect', 'R'),
+            ('ELLIPSE', 'Ellipse', 'E'),
+            ('INTERNAL', 'Internal', 'I'),
+            ('DART', 'Dart', 'D'),
+            ('SEW', 'Sew', 'J'),
+            ('PIN', 'Pin', 'K'),
+            ('TACK', 'Tack', 'T'),
+        ]
+        tool_bw = min(50 * s, rail_w - 6 * s)
+        tool_bh = 32 * s
+        tool_x = self.rail.x + (rail_w - tool_bw) / 2
+        tool_start_y = self.rail.y + self.rail.h - 22 * s - tool_bh
+        tool_gap = 3 * s
+        for i, (name, label, key) in enumerate(tools):
+            ty = tool_start_y - i * (tool_bh + tool_gap)
+            bx = max(p.x, min(p.x + p.w - tool_bw, tool_x))
+            self.buttons[name] = (Rect(bx, ty, tool_bw, tool_bh), f"{label} {key}")
+        help_w = min(26 * s, tool_bw)
+        self.buttons['HELP'] = (Rect(max(p.x, tool_x + (tool_bw - help_w) / 2), self.rail.y + 6 * s, help_w, 22 * s), "?")
+
+        # 3. Viewbar utilities (Right-aligned in viewbar)
+        u_specs = [
+            ('REDO', '>', 24),
+            ('UNDO', '<', 24),
+            ('LENGTHS', 'Lengths L', 70),
+            ('REFERENCE', 'Body H', 56),
+            ('SNAP', 'Snap S', 54),
+            ('FIT', 'Fit F', 44),
+        ]
+        u_factor = min(1.0, max(0.05, (work_w - 20 * s) / (sum(bw + 4 for _, _, bw in u_specs) * s)))
+        ux = self.viewbar.x + self.viewbar.w - 6 * s
+        for name, label, bw in u_specs:
+            w_act = bw * s * u_factor
+            ux -= (w_act + 4 * s)
+            bx = max(p.x, min(p.x + p.w - w_act, ux))
+            self.buttons[name] = (Rect(bx, self.viewbar.y + 8 * s, w_act, 26 * s), label)
+
+        # 4. Workflow action row
+        self.button_row([
+            ('BUILD', 'Build 3D', 70),
+            ('ARRANGE', 'Arrange', 62),
+            ('SIMULATE', 'Simulate', 65),
+            ('STOP', 'Stop', 42),
+            ('RESET', 'Reset', 44),
+            ('KEEP', 'Keep mesh', 74),
+        ], self.workflow, 3, 24)
 
     def button_row(self, specs, region, offset, height):
         s = self.scale
+        p = self.panel
         factor = min(1.0, max(0.05, (region.w - 24 * s) / (sum(item[2] + 5 for item in specs) * s)))
         x = region.x + 12 * s
         for name, label, units in specs:
-            self.buttons[name] = (Rect(x, region.y + offset * s, units * s * factor, height * s), label)
-            x += (units + 5) * s * factor
+            w = units * s * factor
+            bx = max(p.x, min(p.x + p.w - w, x))
+            self.buttons[name] = (Rect(bx, region.y + offset * s, w, height * s), label)
+            x += w + 5 * s
 
     def button(self, x, y):
         return next((name for name, (r, _) in self.buttons.items() if r.contains(x, y)), None)

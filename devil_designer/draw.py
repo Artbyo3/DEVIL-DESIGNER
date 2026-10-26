@@ -437,16 +437,15 @@ class Renderer:
             self.text(l.viewbar.x + 16 * s, l.viewbar.y + 24 * s, v_title, 13, TEXT, max_width=l.viewbar.w * 0.4)
             self.text(l.viewbar.x + 16 * s, l.viewbar.y + 9 * s, v_sub, 10, MUTED, max_width=l.viewbar.w * 0.4)
 
+            # 4b. Workflow action bar
+            self.rect(l.workflow, SHELL)
+            self.lines([(l.workflow.x, l.workflow.y), (l.workflow.x + l.workflow.w, l.workflow.y)], BORDER_SUBTLE)
+
             # 5. Header chrome
             self.rect(l.header, CHROME)
             self.lines([(p.x, l.header.y), (p.x + p.w, l.header.y)], BORDER)
-            # Brand DD logo mark
-            dd_box = Rect(p.x + 14 * s, l.header.y + 11 * s, 34 * s, 34 * s)
-            self.round_rect(dd_box, ELEVATED, radius=8)
-            self.round_rect_outline(dd_box, BORDER, radius=8, width=1)
-            self.text(dd_box.x + dd_box.w / 2, dd_box.y + 9 * s, "DD", 13, TEXT, True)
-            self.text(p.x + 56 * s, l.header.y + 27 * s, "Devil Designer", 12, TEXT)
-            self.text(p.x + 56 * s, l.header.y + 13 * s, "PATTERN STUDIO · 0.5", 9, MUTED)
+            # Plain brand title (clean, no box mark, no subtitle)
+            self.text(p.x + 18 * s, l.header.y + 19 * s, "Devil Designer", 14, TEXT)
 
             # 6. Tool Rail (Left vertical bar)
             self.rect(l.rail, RAIL_BG)
@@ -483,6 +482,21 @@ class Renderer:
                         self.text(r.x + 24 * s, r.y + 8 * s, "Restore" if ed.full else "Expand", 10, MUTED if not hover else TEXT)
                     elif name == 'SETTINGS':
                         self.draw_icon('MORE', r.x + r.w / 2, r.y + r.h / 2, 14, MUTED if not hover else TEXT)
+                elif name in {'BUILD', 'ARRANGE', 'SIMULATE', 'STOP', 'RESET', 'KEEP'}:
+                    if hover:
+                        self.round_rect(r, ELEVATED, radius=6)
+                    else:
+                        self.round_rect(r, CHROME, radius=6)
+                        self.round_rect_outline(r, BORDER_SUBTLE, radius=6, width=1)
+                    playing = False
+                    try:
+                        import bpy
+                        playing = bool(bpy.context.screen.is_animation_playing)
+                    except Exception:
+                        pass
+                    color = ACCENT if (name == 'SIMULATE' and playing) else (TEXT if hover else TEXT_SUB)
+                    display_lbl = 'Keep mesh' if name == 'KEEP' else label.split()[0]
+                    self.text(r.x + r.w / 2, r.y + 7 * s, display_lbl, 10, color, True)
                 elif name in {'REFERENCE', 'LENGTHS', 'SNAP', 'FIT', 'INSPECTOR', 'UNDO', 'REDO'}:
                     # Utility chips in viewbar
                     active = (name == 'SNAP' and ed.snap) or \
@@ -537,19 +551,11 @@ class Renderer:
             self.clip(p)
             self.rect(l.footer, CHROME)
             self.lines([(p.x, l.footer.y + l.footer.h), (p.x + p.w, l.footer.y + l.footer.h)], BORDER)
-            # Mint status dot
-            self.dot((p.x + 18 * s, l.footer.y + l.footer.h / 2), 3, ACCENT)
-            # Message and piece counts
+            # Message and piece counts (clean, plain, no dot, no 'Ready', no target note)
             world = view.world(ed.pointer, c)
             count = len(ed.session.document.patterns)
-            stat_msg = f"Ready  ·  {count} piece{'s' if count != 1 else ''}  ·  X {world[0] * 100:.1f}  Y {world[1] * 100:.1f} cm"
-            self.text(p.x + 30 * s, l.footer.y + 10 * s, stat_msg, 10, TEXT_SUB, max_width=p.w * 0.58)
-
-            # Target note
-            target_note = "Blender native overlay target"
-            blf.size(0, 9 * s)
-            tw = blf.dimensions(0, target_note)[0]
-            self.text(p.x + p.w - tw - 20 * s, l.footer.y + 10 * s, target_note, 9, MUTED)
+            stat_msg = f"{count} piece{'s' if count != 1 else ''}  ·  X {world[0] * 100:.1f}  Y {world[1] * 100:.1f} cm"
+            self.text(p.x + 18 * s, l.footer.y + (l.footer.h - 10 * s) / 2, stat_msg, 10, MUTED, max_width=p.w * 0.8)
 
             # Corner resize grip
             if not ed.full:
