@@ -183,6 +183,7 @@ class DesignTools:
                     scene.dd_library_selected=(scene.dd_library_selected+(1 if action=='LIBRARY_NEXT' else -1))%len(self.library_items)
                 elif action=='LIBRARY_LOAD':
                     before=scene.dd_document
+                    scene['dd_backup_document']=before
                     loaded=library.load(bpy.context,scene.dd_library_selected)
                     self.clear_interaction_references()
                     self.session.undo_stack.append(before);self.session.redo_stack.clear()

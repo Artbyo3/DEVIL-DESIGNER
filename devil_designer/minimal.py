@@ -22,21 +22,31 @@ def minimal_layout(layout, pending=False, confirmation=False, playing=False):
     layout.header = Rect(panel.x, panel.y + panel.h - 32 * scale, panel.w, 32 * scale)
     layout.footer = Rect(panel.x, panel.y, panel.w, 0)
     dock_height = min(594 * scale, panel.h - 112 * scale)
-    dock_width = (60 if dock_height >= 500 * scale else 44) * scale
+    dock_width = (60 if dock_height >= 500 * scale else 48) * scale
     layout.rail = Rect(panel.x + 14 * scale, panel.y + (panel.h - dock_height) / 2, dock_width, dock_height)
     layout.buttons = {}
     tools = [('SELECT', 'Select'), ('POLYGON', 'Polygon'), ('RECTANGLE', 'Panel'),
              ('ELLIPSE', 'Ellipse'), ('INTERNAL', 'Internal'), ('SEW', 'Sew'),
              ('PIN', 'Pin'), ('DART', 'Dart'), ('UNDO', 'Undo'), ('REDO', 'Redo'), ('LIBRARY', 'Library')]
-    row_height = dock_height / len(tools)
+    indicator_h = 22 * scale
+    tools_h = dock_height - indicator_h - 10 * scale
+    row_height = tools_h / len(tools)
     for index, (key, label) in enumerate(tools):
         layout.buttons[key] = (Rect(layout.rail.x + 4 * scale,
             layout.rail.y + dock_height - (index + 1) * row_height + 2 * scale,
             dock_width - 8 * scale, row_height - 4 * scale), label)
+    chip_w = (dock_width - 12 * scale) / 3
+    chip_y = layout.rail.y + 4 * scale
+    layout.buttons['TOGGLE_SNAP'] = (Rect(layout.rail.x + 4 * scale, chip_y, chip_w, indicator_h), 'Snap')
+    layout.buttons['TOGGLE_GUIDE'] = (Rect(layout.rail.x + 4 * scale + chip_w + 2 * scale, chip_y, chip_w, indicator_h), 'Guide')
+    layout.buttons['TOGGLE_LENGTHS'] = (Rect(layout.rail.x + 4 * scale + (chip_w + 2 * scale) * 2, chip_y, chip_w, indicator_h), 'Lengths')
     right = panel.x + panel.w - 14 * scale
     layout.buttons['CLOSE'] = (Rect(right - 24 * scale, panel.y + panel.h - 30 * scale, 24 * scale, 24 * scale), 'Close')
     right -= 28 * scale
     layout.buttons['WORKSPACE_PANEL'] = (Rect(right - 88 * scale, panel.y + panel.h - 30 * scale, 82 * scale, 24 * scale), 'Workspace')
+    if not layout.full:
+        right -= 88 * scale
+        layout.buttons['RESTORE_CANVAS'] = (Rect(right - 88 * scale, panel.y + panel.h - 30 * scale, 82 * scale, 24 * scale), 'Full canvas')
     layout.buttons['GARMENT'] = (Rect(panel.x + 14 * scale, panel.y + panel.h - 36 * scale, min(220 * scale, panel.w * .40), 30 * scale), 'Garment')
     bottom = panel.y + 14 * scale
     right = panel.x + panel.w - 14 * scale
@@ -210,16 +220,18 @@ class MinimalCards:
         elif kind == 'BODY':
             title = 'Choose body'
             self.card_models = sorted((obj for obj in scene.objects if obj.type == 'MESH' and not obj.get('dd_kind')), key=lambda obj: obj.name.casefold())
-            rows = [('BODY_' + str(index), obj.name, '') for index, obj in enumerate(self.card_models) if self.card_page * 4 <= index < (self.card_page + 1) * 4]
-            if len(self.card_models) > 4:
-                rows.append(('PAGE_BODY', 'More bodies', 'Next'))
+            rows = [('BODY_' + str(index), obj.name, '') for index, obj in enumerate(self.card_models) if self.card_page * 8 <= index < (self.card_page + 1) * 8]
+            if len(self.card_models) > 8:
+                pages = math.ceil(len(self.card_models) / 8)
+                rows.append(('PAGE_BODY', f'More bodies ({self.card_page + 1}/{pages})', 'Next'))
             if not rows:
                 rows = [('INFO', 'No body in scene', 'Add in Blender')]
         elif kind == 'LIBRARY':
             title = 'Garment library'
-            rows = [('LOAD_' + str(index), item.stem.replace('.garment', ''), 'Load') for index, item in enumerate(self.library_items) if self.card_page * 3 <= index < (self.card_page + 1) * 3]
-            if len(self.library_items) > 3:
-                rows.append(('PAGE_LIBRARY', 'More garments', 'Next'))
+            rows = [('LOAD_' + str(index), item.stem.replace('.garment', ''), 'Load') for index, item in enumerate(self.library_items) if self.card_page * 8 <= index < (self.card_page + 1) * 8]
+            if len(self.library_items) > 8:
+                pages = math.ceil(len(self.library_items) / 8)
+                rows.append(('PAGE_LIBRARY', f'More garments ({self.card_page + 1}/{pages})', 'Next'))
             rows.append(('LIBRARY_SAVE', 'Save current garment', ''))
         elif kind == 'EDGE':
             title = 'Edge'
@@ -447,9 +459,24 @@ class MinimalCards:
         elif key == 'WELD_AUTO':
             self.weld_manual = False
             scene.dd_weld_distance = .01
+        elif key == 'TOGGLE_SNAP':
+            self.snap = not self.snap
+            self.message = f"Snap {'enabled' if self.snap else 'disabled'} [S]."
+        elif key == 'TOGGLE_GUIDE':
+            scene.dd_reference_visible = not scene.dd_reference_visible
+            if scene.dd_reference_visible and scene.dd_avatar is None:
+                self.message = 'Choose a body from the garment card to show its guide.'
+            else:
+                self.message = f"Body guide {'shown' if scene.dd_reference_visible else 'hidden'} [H]."
+            self.update_reference(bpy.context, force=True)
+        elif key == 'TOGGLE_LENGTHS':
+            scene.dd_lengths_visible = not scene.dd_lengths_visible
+            self.message = f"Edge lengths {'shown' if scene.dd_lengths_visible else 'hidden'} [L]."
+        elif key == 'RESTORE_CANVAS':
+            self.restore_canvas()
         elif key.startswith('PAGE_'):
-            count, size = (len(self.card_models), 4) if key == 'PAGE_BODY' else (len(self.library_items), 3)
-            self.card_page = (self.card_page + 1) % max(1, math.ceil(count / size))
+            count = len(self.card_models) if key == 'PAGE_BODY' else len(self.library_items)
+            self.card_page = (self.card_page + 1) % max(1, math.ceil(count / 8))
         elif key.startswith('BODY_'):
             self.choose_body(self.card_models[int(key[5:])], bpy.context)
             self.card_kind = None
@@ -505,6 +532,12 @@ class MinimalCards:
         if not pointer_event:
             return None
         card = next((card for card in reversed(self.visible_cards()) if card[0].contains(*point)), None)
+        if card and self.card_kind in {'BODY', 'LIBRARY'} and event.type in {'WHEELUPMOUSE', 'WHEELDOWNMOUSE'}:
+            count = len(self.card_models) if self.card_kind == 'BODY' else len(self.library_items)
+            pages = max(1, math.ceil(count / 8))
+            delta = -1 if event.type == 'WHEELUPMOUSE' else 1
+            self.card_page = (self.card_page + delta) % pages
+            return {'RUNNING_MODAL'}
         if self.card_kind and press and event.type == 'RIGHTMOUSE':
             self.card_kind = None
             self.pending_simulation = False
@@ -584,16 +617,24 @@ class MinimalCards:
                 self.selected_anchor = None
                 self.seam_selected = None
                 pattern, corner = self.hit()
-                if (pattern is None or self.session.selected != pattern.id or self.session.path != self.hit_path
+                if pattern is None:
+                    self.session.selected = None
+                    self.session.corner = None
+                    self.session.segment = None
+                    self.session.point_selection = []
+                    self.card_kind = None
+                    self.sync_selection()
+                    return {'RUNNING_MODAL'}
+                if (self.session.selected != pattern.id or self.session.path != self.hit_path
                         or corner not in self.session.point_selection):
                     self.session.point_selection = [corner] if corner is not None else []
-                self.session.selected = pattern.id if pattern else None
+                self.session.selected = pattern.id
                 self.session.corner = corner
                 self.session.path = self.hit_path
-                self.session.segment = self.hit_edge() if pattern and corner is None else None
+                self.session.segment = self.hit_edge() if corner is None else None
                 self.sync_selection()
                 self.show_card('POINT' if corner is not None else
                                'INTERNAL_EDGE' if self.session.segment and self.session.path != 'OUTER' else
-                               'EDGE' if self.session.segment else 'EDIT' if pattern else 'GARMENT')
+                               'EDGE' if self.session.segment else 'EDIT')
             return {'RUNNING_MODAL'}
         return None
