@@ -13,6 +13,14 @@
 
 ---
 
+## ARTIST-FACING ANSWERS AND FEATURE REVIEWS
+- Lead with the recommendation and the artist benefit, not implementation details. Use plain, concise language by default.
+- For feature reviews, use "Add [feature] because [practical artist benefit]", "Do not add [feature] because [reason]", or "Prototype [feature] first because [uncertainty]". Explain whether the feature removes a real obstacle when making fitted VRChat clothing in Blender.
+- Include technical details only when they are necessary to understand the recommendation, a meaningful limitation, or a decision the artist needs to make. Do not default to source paths, function names, plumbing, or implementation walkthroughs.
+- Keep build priorities distinct from deferred conveniences and rejected features. Do not turn a review request into authorization to implement features.
+- Still verify claims against the source and report uncertainty honestly; concise answers must not hide important risks or imply an untested feature works.
+- Keep shipping reports brief while retaining the required verification, package, merge, and cleanup facts. Documentation-only changes do not require an artificial artist test.
+
 ## ARCHITECTURE & IMPLEMENTATION PRINCIPLES
 1. **Garment & Simulation Math Integrity**:
    - Zero modifications to garment algorithms, physics equations, or simulation math in `core.py`, `garment.py`, `meshing.py`, `placement.py`.
