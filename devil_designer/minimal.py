@@ -34,9 +34,8 @@ def minimal_layout(layout, pending=False, confirmation=False, playing=False):
             layout.rail.y + dock_height - (index + 1) * row_height + 2 * scale,
             dock_width - 8 * scale, row_height - 4 * scale), label)
     right = panel.x + panel.w - 14 * scale
-    for key, label in [('CLOSE', 'Close'), ('FULL', 'Restore' if layout.full else 'Expand')]:
-        right -= 28 * scale
-        layout.buttons[key] = (Rect(right, panel.y + panel.h - 30 * scale, 24 * scale, 24 * scale), label)
+    layout.buttons['CLOSE'] = (Rect(right - 24 * scale, panel.y + panel.h - 30 * scale, 24 * scale, 24 * scale), 'Close')
+    right -= 28 * scale
     layout.buttons['WORKSPACE_PANEL'] = (Rect(right - 88 * scale, panel.y + panel.h - 30 * scale, 82 * scale, 24 * scale), 'Workspace')
     layout.buttons['GARMENT'] = (Rect(panel.x + 14 * scale, panel.y + panel.h - 36 * scale, min(220 * scale, panel.w * .40), 30 * scale), 'Garment')
     bottom = panel.y + 14 * scale
@@ -273,6 +272,15 @@ class MinimalCards:
         elif kind == 'RESULT':
             title = 'Drape'
             rows = [('RESET', 'Reset drape', ''), ('VIEW_3D', 'Show 3D', '')]
+        elif kind == 'HELP':
+            title = 'Shortcuts'
+            rows = [('INFO', 'V / P / R / E', 'Select / Poly / Rect / Ellipse'),
+                    ('INFO', 'I / D', 'Internal path / Dart'),
+                    ('INFO', 'J / K / T', 'Sew / Pin / Tack'),
+                    ('INFO', 'S / H / L', 'Snap / Body guide / Lengths'),
+                    ('INFO', 'Ctrl+Z / Ctrl+Shift+Z', 'Undo / Redo'),
+                    ('INFO', 'F / Home', 'Fit to design'),
+                    ('INFO', 'Esc', 'Step back / Cancel / Exit')]
         scale = self.canvas_layout.scale
         compact = self.canvas_layout.panel.w < 760 * scale
         if compact and kind == 'PIECE':
@@ -282,43 +290,30 @@ class MinimalCards:
         height = (42 + sum(row_heights)) * scale
         bounds = self.canvas_layout.panel
         anchor = self.card_anchor
-        if kind == 'PIECE' and pattern:
-            points = [self.view.screen(point, self.canvas_layout.canvas) for point in pattern.points]
-            anchor = (max(point[0] for point in points) + 18 * scale, sum(point[1] for point in points) / len(points))
         if anchor is None:
             anchor = (bounds.x + 76 * scale, bounds.y + 220 * scale)
-        if kind == 'FABRIC':
-            piece_card = self.minimal_card('PIECE')
-            if piece_card:
-                piece_rect = piece_card[0]
-                anchor = (piece_rect.x, piece_rect.y - 8 * scale)
-                if anchor[1] - height < bounds.y + 58 * scale:
-                    anchor = (piece_rect.x, piece_rect.y + piece_rect.h + height + 8 * scale)
         card_x = max(bounds.x + 8 * scale, min(anchor[0], bounds.x + bounds.w - width - 8 * scale))
         card_y = max(bounds.y + 58 * scale, min(anchor[1] - height, bounds.y + bounds.h - height - 34 * scale))
         if kind == 'WORKSPACE':
             card_x = bounds.x + bounds.w - width - 14 * scale
             card_y = bounds.y + (bounds.h - height) / 2
-        if kind == 'PIECE' and pattern:
-            outlines = [[self.view.screen(point, self.canvas_layout.canvas) for point in piece.points]
-                        for piece in self.session.document.patterns]
-            boxes = [Rect(min(point[0] for point in outline), min(point[1] for point in outline),
-                          max(point[0] for point in outline) - min(point[0] for point in outline),
-                          max(point[1] for point in outline) - min(point[1] for point in outline)) for outline in outlines]
-            selected_box = boxes[self.session.document.patterns.index(pattern)]
-            workspace_card = self.workspace_card()
-            if workspace_card:
-                boxes.append(workspace_card[0])
-            candidates = [(card_x, card_y), (selected_box.x, selected_box.y - height - 12 * scale),
-                          (selected_box.x - width - 12 * scale, card_y),
-                          (selected_box.x, selected_box.y + selected_box.h + 12 * scale)]
-            candidates = [(max(bounds.x + 64 * scale, min(cx, bounds.x + bounds.w - width - 8 * scale)),
-                           max(bounds.y + 58 * scale, min(cy, bounds.y + bounds.h - height - 34 * scale))) for cx, cy in candidates]
-            def overlap(candidate):
-                cx, cy = candidate
-                return sum(max(0, min(cx + width, box.x + box.w) - max(cx, box.x)) *
-                           max(0, min(cy + height, box.y + box.h) - max(cy, box.y)) for box in boxes)
-            card_x, card_y = min(candidates, key=overlap)
+        elif kind in {'PIECE', 'EDIT'} and pattern:
+            points = [self.view.screen(point, self.canvas_layout.canvas) for point in pattern.points]
+            anchor = (max(point[0] for point in points) + 18 * scale, sum(point[1] for point in points) / len(points))
+            card_x = max(bounds.x + 8 * scale, min(anchor[0], bounds.x + bounds.w - width - (230 if self.workspace_panel_open else 14) * scale))
+            card_y = max(bounds.y + 58 * scale, min(anchor[1] - height / 2, bounds.y + bounds.h - height - 34 * scale))
+        elif kind in {'PIECE', 'EDIT'}:
+            card_x = bounds.x + bounds.w - width - (230 if self.workspace_panel_open else 14) * scale
+            card_y = bounds.y + bounds.h - height - 44 * scale
+        elif kind in {'SIMULATE', 'KEEP', 'RESULT'}:
+            card_x = bounds.x + bounds.w - width - 14 * scale
+            card_y = bounds.y + 58 * scale
+        elif kind in {'GARMENT', 'HELP', 'LIBRARY', 'BODY', 'REFERENCE_IMAGE', 'TRACE_CALIBRATION', 'TRACE_POSITION'}:
+            card_x = bounds.x + 80 * scale
+            card_y = bounds.y + bounds.h - height - 44 * scale
+        elif kind == 'FABRIC':
+            card_x = bounds.x + bounds.w - width - (230 if self.workspace_panel_open else 14) * scale
+            card_y = max(bounds.y + 58 * scale, bounds.y + bounds.h - height - 220 * scale)
         rect = Rect(card_x, card_y, width, height)
         controls = []
         top = card_y + height - 40 * scale
@@ -382,7 +377,8 @@ class MinimalCards:
                  'TRACE_POSITION': 'TRACE_POSITION',
                  'EDIT_CARD': 'EDIT',
                  'PLACEMENT': 'PLACEMENT', 'INTERNAL_EDIT': 'INTERNAL_EDIT', 'OFFSET_CARD': 'OFFSET',
-                 'SIMULATE_OPTIONS': 'SIMULATE', 'KEEP_OPTIONS': 'KEEP'}
+                 'SIMULATE_OPTIONS': 'SIMULATE', 'KEEP_OPTIONS': 'KEEP',
+                 'HELP': 'HELP'}
         if key.startswith('WORKSPACE_'):
             if key == 'WORKSPACE_PANEL':
                 self.workspace_panel_open = not self.workspace_panel_open
@@ -475,12 +471,10 @@ class MinimalCards:
                 self.seam_selected = None
                 self.card_kind = None
         elif key in {'FULL', 'CLOSE'}:
-            if key == 'FULL':
-                self.toggle_full()
-            elif not self.draft and not self.gesture:
+            if key == 'CLOSE':
+                if self.draft or self.gesture:
+                    self.cancel_gesture()
                 self.cleanup()
-            else:
-                self.message = 'Finish or cancel the current drawing before closing.'
         else:
             if key in {'SIMULATE', 'KEEP', 'KEEP_RETRY'}:
                 self.automatic_defaults(finalize=key != 'SIMULATE')
@@ -489,13 +483,9 @@ class MinimalCards:
                 self.card_kind = None
             if key.startswith('SET_PRESET_'):
                 self.card_kind = None
-        if self.confirm_action:
-            self.card_kind = None
 
     def minimal_event(self, context, event):
         press = event.value == 'PRESS'
-        if press and event.ctrl and event.type == 'F':
-            return {'RUNNING_MODAL'} if self.canvas_layout.panel.contains(*self.pointer) else None
         if self.numeric:
             result = self.numeric_event(event)
             if result is not None:

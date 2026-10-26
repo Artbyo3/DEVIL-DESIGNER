@@ -97,7 +97,7 @@ separate Blender Curve objects.
 | Show live segment lengths | Lengths L / L |
 | Move a whole pattern | Select and drag inside its fabric area |
 | Duplicate / delete selected point, path or piece | Shift+D / X or Delete |
-| Undo / redo | < / >, Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y |
+| Undo / redo | Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y |
 | Grid snapping / temporary inversion | S / hold Ctrl |
 | Constrain next polygon edge to an axis | Hold Shift |
 | Pan / zoom / fit | Middle mouse / wheel / F or Home |
@@ -105,11 +105,9 @@ separate Blender Curve objects.
 | Cancel current gesture/draft/placement | Escape |
 
 Select a point or segment to edit it. Live lengths use numerical Bezier arc-length
-integration and update as handles move. **Design > Point X/Y > Apply / add point**
-sets a selected point or adds a numeric point to the active polygon/internal draft.
-**Width/Height > Create rectangle/ellipse** creates precisely sized shapes at X/Y.
-**Segment length > Apply exact length** fixes the start and adjusts the end/handles
-of that segment; neighbouring geometry may change accordingly.
+integration and update as handles move. Contextual cards expose exact coordinates
+(**Point X/Y**), dimensions, and segment lengths (**Exact length**) to precisely
+adjust points, outlines, or handles.
 
 **Offset outline copy** keeps the original piece and creates an editable outline
 at the entered distance. Curved offsets use a sampled approximation and can have
@@ -120,8 +118,8 @@ a separate reflected piece and a sewing pair; self-sewing darts are copied as we
 ## Internal shapes, cuts, trace, and darts
 
 Select the target piece before using I, or click inside it to select an owner.
-Enable **Design > Draw internal shapes** to make polygon/rectangle/ellipse tools
-create internal shapes in the selected pattern.
+Use **Internal** (shortcut **I**) or the **Internal shapes** card to draw internal
+paths, constraints, darts, and cut lines inside the selected pattern.
 
 - Closed internal shapes can be traced into independent editable patterns.
 - **Cut selected internal path** converts a closed shape into a hole.
@@ -144,9 +142,9 @@ separate pieces when both independently selectable cut sides are needed.
 
 ## Sewing
 
-In Sew/J, click an edge and its partner for segment sewing. Select a sewn edge to
-inspect it; B reverses direction and X removes the pair. The Sewing section's pair list
-also has Flip/remove controls and lengths for both sides.
+In Sew/J, click an edge and its partner for segment sewing. Select a seam badge or
+sewn edge to inspect it; B reverses direction, Delete removes the seam, or use the
+**Selected seam** card to reverse or remove it.
 
 **Free sewing** uses four clicks: start A, end A, start B, end B. Each side can span
 several segments of one connected path. The clicked positions become partial
@@ -177,16 +175,15 @@ existing patterns. One length cannot correct perspective or lens distortion; use
 a flat, undistorted reference when fit matters. Image settings persist in the blend
 file; the external image must remain available at its saved path.
 
-Choose the body in **Avatar > Avatar body**, or select its mesh in 3D and click
+Choose the body in **Garment > Body**, or select its mesh in 3D and click
 **Use selected body**. The actual evaluated mesh appears behind the pattern grid
 at physical scale. It includes armature/shape-key deformation and object/scene
-scale; limb gaps are preserved. Reference view, opacity, position, alignment,
-framing, and refresh are all in Body & placement, under More controls or search.
-It cannot be selected as a pattern.
+scale; limb gaps are preserved. Toggle guide visibility with **H** or the **Workspace**
+card, which also controls opacity. It cannot be selected as a pattern.
 
-Build 3D panels, then either move them with Blender G/R, use **Placement > Arrange
-pieces** for named Bodice, Sleeves, or Skirt starting layouts, or choose
-**Click-place selected piece** and click the
+Build 3D panels, then either move them with Blender G/R, use the **Arrange
+pieces** card for named Bodice, Sleeves, or Skirt starting layouts, or choose
+**Place on body** from the **Placement** card and click the
 body in the uncovered 3D viewport. Ray picking targets the chosen body only.
 
 Set **Wrap radius** and click **Wrap / unwrap selected piece** to bend a piece
@@ -223,8 +220,8 @@ reopening the editor. Save the blend file to retain them across Blender restarts
 Replacing the design invalidates history from a different document rather than
 applying unrelated edits.
 
-Choose a selected piece's preset in **Cloth > Selected fabric**: Silk, Knit, Cotton,
-Linen, or Denim. Native structural, shear, and bending groups provide per-piece
+Choose a selected piece's preset in the **Fabric** card: Silk, Knit, Cotton,
+Linen, Leather, or Denim. Native structural, shear, and bending groups provide per-piece
 stiffness. **Mass density is a shared, area-weighted native cloth value**; these
 presets are practical starting values, not measured textile calibration.
 
@@ -235,7 +232,7 @@ Body clearance, quality, self collision, frame limit, and optional top-point pin
 are in Cloth. The chosen body gets Collision if needed; an existing collision
 modifier is left unchanged.
 
-Use **Simulate > Pause**, then Tools > Keep mesh when needed. Keep mesh copies the evaluated drape, removes
+Use the bottom bar **Pause**, then click **Keep mesh** when needed. Keep mesh copies the evaluated drape, removes
 loose sewing springs, welds only paired vertices within tolerance, and retains UVs,
 piece face identifiers, and group memberships. Optional thickness is an editable
 Solidify modifier. If pairs remain open, the result reports them; simulate longer
