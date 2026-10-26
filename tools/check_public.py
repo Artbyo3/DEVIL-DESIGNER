@@ -1,4 +1,5 @@
 from pathlib import Path
+import hashlib
 import re
 import subprocess
 import sys
@@ -12,6 +13,29 @@ ALIAS = 'Artbyo3'
 EMAIL = '170281415+'+ALIAS+'@users.noreply.github.com'
 FORBIDDEN_SUFFIXES = {'.blend','.blend1','.zip','.pyc','.pyo','.pem','.key'}
 PUBLIC_IDENTITIES = {(ALIAS, EMAIL), ('T3 Code', 't3code@users.noreply.github.com')}
+PUBLIC_COMMITTERS = PUBLIC_IDENTITIES | {('GitHub', 'noreply' + '@github.com')}
+APPROVED_AUTHOR_FINGERPRINTS = {'b18b665c5f6c803b9215ddde43d51f1d8c60927f051acaf08c2989da82883697'}
+
+
+def inspect_commit_metadata(records, errors):
+    acknowledged_authors = 0
+    for record in records.splitlines():
+        fields = record.split('\0')
+        if len(fields) != 5 or not re.fullmatch(r'[0-9a-f]{40,64}', fields[0]):
+            errors.append('commit metadata: malformed identity record')
+            continue
+        commit_id = fields[0][:12]
+        author = tuple(fields[1:3])
+        committer = tuple(fields[3:5])
+        if author not in PUBLIC_IDENTITIES:
+            fingerprint = hashlib.sha256('\0'.join(author).encode('utf-8')).hexdigest()
+            if fingerprint in APPROVED_AUTHOR_FINGERPRINTS:
+                acknowledged_authors += 1
+            else:
+                errors.append(f'commit {commit_id}: unapproved author identity')
+        if committer not in PUBLIC_COMMITTERS:
+            errors.append(f'commit {commit_id}: unapproved committer identity')
+    return acknowledged_authors
 
 
 def inspect_payload(name, payload, errors):
@@ -87,12 +111,8 @@ def main():
                 before = len(errors)
                 inspect_payload('devil_designer/'+member, z.read(member), errors)
                 errors[before:] = ['extension archive/'+error for error in errors[before:]]
-    commits=subprocess.run(['git','log','--all','--format=%an%x00%ae%x00%cn%x00%ce'],cwd=ROOT,capture_output=True,text=True)
-    if commits.returncode==0:
-        for line in commits.stdout.splitlines():
-            fields=line.split('\0')
-            if len(fields) != 4 or tuple(fields[:2]) not in PUBLIC_IDENTITIES or tuple(fields[2:]) not in PUBLIC_IDENTITIES:
-                errors.append('commit metadata: identity differs from approved public alias')
+    commits=subprocess.run(['git','log','--all','--format=%H%x00%an%x00%ae%x00%cn%x00%ce'],cwd=ROOT,capture_output=True,text=True,check=True)
+    acknowledged_authors = inspect_commit_metadata(commits.stdout, errors)
     messages=subprocess.run(['git','log','--all','--format=%B'],cwd=ROOT,capture_output=True,text=True)
     if messages.returncode==0:
         inspect_text('commit messages',messages.stdout,errors)
@@ -108,6 +128,8 @@ def main():
         payload = subprocess.run(['git', 'cat-file', 'blob', object_id], cwd=ROOT, capture_output=True, check=True).stdout
         inspect_payload(name, payload, errors)
         history_count += 1
+    if acknowledged_authors:
+        print(f'Privacy notice: {acknowledged_authors} commit(s) retain an explicitly accepted published author identity; original metadata remains in Git history.')
     if errors:
         print('Publication check failed:')
         print('\n'.join(sorted(set(errors))))

@@ -275,6 +275,13 @@ the actual modal editor and leave isolated factory previews.
     python tools/check_public.py
     blender --background --factory-startup --command extension validate dist/devil_designer-0.5.0.zip
 
+The publication audit checks source, archives, and reachable Git history. GitHub's
+public noreply identity is permitted as a merge committer only. The already-published
+author identity accepted for PR #1 is recognized by an exact SHA-256 fingerprint
+in commit metadata only, without copying its email into source. The audit reports
+each affected commit; this does not redact or remove its original history metadata.
+Other unapproved identities and private emails in source or archives still fail.
+
 [The product specification](SPEC.md) records the intended scope and implementation
 coverage. Temporary scenes, test libraries/reports, Python caches, machine settings,
 and installable ZIPs are excluded from Git. No upload occurs unless explicitly requested.

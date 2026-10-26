@@ -1,8 +1,10 @@
+import hashlib
 import struct
 import unittest
 import zlib
+from unittest.mock import patch
 
-from tools.check_public import inspect_payload, inspect_text
+from tools.check_public import ALIAS, EMAIL, inspect_commit_metadata, inspect_payload, inspect_text
 
 
 def png_chunk(chunk_type, data):
@@ -16,6 +18,51 @@ def icon_png(metadata=b''):
 
 
 class PublicationTests(unittest.TestCase):
+    def test_public_author_and_github_merge_committer_are_permitted(self):
+        errors = []
+        record = '\0'.join(['a' * 40, ALIAS, EMAIL, 'GitHub', 'noreply' + '@' + 'github.com'])
+        self.assertEqual(inspect_commit_metadata(record, errors), 0)
+        self.assertEqual(errors, [])
+
+    def test_accepted_author_is_metadata_only(self):
+        author = ('Accepted author', 'accepted' + '@' + 'example.org')
+        fingerprint = hashlib.sha256('\0'.join(author).encode('utf-8')).hexdigest()
+        record = '\0'.join(['a' * 40, *author, ALIAS, EMAIL])
+        errors = []
+        with patch('tools.check_public.APPROVED_AUTHOR_FINGERPRINTS', {fingerprint}):
+            self.assertEqual(inspect_commit_metadata(record, errors), 1)
+            self.assertEqual(errors, [])
+            inspect_text('fixture', author[1], errors)
+        self.assertTrue(errors)
+
+    def test_unknown_author_is_rejected_without_exposing_identity(self):
+        errors = []
+        record = '\0'.join(['b' * 40, 'Other author', 'other' + '@' + 'example.org', 'GitHub', 'noreply' + '@' + 'github.com'])
+        inspect_commit_metadata(record, errors)
+        self.assertEqual(errors, ['commit bbbbbbbbbbbb: unapproved author identity'])
+
+    def test_github_identity_is_not_allowed_as_an_author(self):
+        errors = []
+        record = '\0'.join(['a' * 40, 'GitHub', 'noreply' + '@' + 'github.com', ALIAS, EMAIL])
+        inspect_commit_metadata(record, errors)
+        self.assertEqual(errors, ['commit aaaaaaaaaaaa: unapproved author identity'])
+
+    def test_author_approval_does_not_allow_unknown_committer(self):
+        author = ('Accepted author', 'accepted' + '@' + 'example.org')
+        fingerprint = hashlib.sha256('\0'.join(author).encode('utf-8')).hexdigest()
+        errors = []
+        record = '\0'.join(['a' * 40, *author, *author])
+        with patch('tools.check_public.APPROVED_AUTHOR_FINGERPRINTS', {fingerprint}):
+            inspect_commit_metadata(record, errors)
+        self.assertEqual(errors, ['commit aaaaaaaaaaaa: unapproved committer identity'])
+
+    def test_malformed_metadata_is_rejected(self):
+        for record in ('invalid', '\0'.join(['invalid', ALIAS, EMAIL, ALIAS, EMAIL])):
+            with self.subTest(record=record):
+                errors = []
+                inspect_commit_metadata(record, errors)
+                self.assertEqual(errors, ['commit metadata: malformed identity record'])
+
     def test_sourced_icons_are_permitted(self):
         errors = []
         inspect_payload('devil_designer/assets/icons/SELECT.png', icon_png(), errors)
