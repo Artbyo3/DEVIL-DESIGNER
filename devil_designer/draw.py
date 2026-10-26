@@ -451,15 +451,28 @@ class Renderer:
             self.rect(l.workflow, SHELL)
             self.lines([(l.workflow.x, l.workflow.y), (l.workflow.x + l.workflow.w, l.workflow.y)], BORDER_SUBTLE)
 
-            # 5. Header chrome
+            # 5. Header chrome (48 px Top Bar)
             self.rect(l.header, CHROME)
             self.lines([(p.x, l.header.y), (p.x + p.w, l.header.y)], BORDER)
-            # Section 3A: DEVIL DESIGNER identity (48 px Top Bar)
+            # Clean plain typographic brand identity
             self.text(p.x + 16 * s, l.header.y + (l.header.h - 11 * s) / 2, "DEVIL DESIGNER", 11, TEXT)
 
-            # 6. Left Tool Rail — 52 px (Section 3B)
+            # Render stage segmented container pill behind header stages
+            draft_btn = l.buttons.get('STAGE_DRAFT')
+            sim_btn = l.buttons.get('STAGE_SIMULATE')
+            if draft_btn and sim_btn:
+                d_r, _ = draft_btn
+                s_r, _ = sim_btn
+                seg_w = (s_r.x + s_r.w) - d_r.x
+                container = Rect(d_r.x - 3 * s, d_r.y - 2 * s, seg_w + 6 * s, d_r.h + 4 * s)
+                self.round_rect(container, (0.07, 0.09, 0.12, 0.95), radius=8)
+                self.round_rect_outline(container, BORDER_SUBTLE, radius=8, width=0.8)
+
+            # 6. Left Tool Rail \u2014 52 px (Section 3B)
             self.rect(l.rail, RAIL_BG)
             self.lines([(l.rail.x + l.rail.w, l.rail.y), (l.rail.x + l.rail.w, l.rail.y + l.rail.h)], BORDER)
+            self.text(l.rail.x + l.rail.w / 2, l.rail.y + l.rail.h - 16 * s, "TOOLS", 8, MUTED, center=True)
+            self.lines([(l.rail.x + 8 * s, l.rail.y + 34 * s), (l.rail.x + l.rail.w - 8 * s, l.rail.y + 34 * s)], BORDER_SUBTLE)
 
             # 7. Render all layout buttons (Rail tools, Header stage pills, Utilities)
             cur_stage = getattr(ed, 'stage', 'DRAFT')
@@ -529,7 +542,7 @@ class Renderer:
                         self.text(r.x + r.w / 2, r.y + 8 * s, label.split()[0], 10, color, True)
                 elif name in {'SELECT', 'POLYGON', 'RECTANGLE', 'ELLIPSE', 'INTERNAL', 'DART',
                               'SEW', 'PIN', 'TACK', 'PLACE', 'FREE_SEW', 'HELP'}:
-                    # Section 3B: Tool rail buttons — Icons only, stage-contextual, hover tooltip
+                    # Section 3B: Tool rail buttons \u2014 Icons only, stage-contextual, hover tooltip
                     if name != 'HELP' and name not in stage_active_tools:
                         continue
                     active = (name == ed.tool)
@@ -555,7 +568,7 @@ class Renderer:
             # 8. Inspector panel rendering
             self.settings(ed)
 
-            # 9. Bottom Status Bar — 28 px (Section 3E)
+            # 9. Bottom Status Bar \u2014 28 px (Section 3E)
             self.clip(p)
             self.rect(l.footer, BG_PANEL)
             self.lines([(p.x, l.footer.y + l.footer.h), (p.x + p.w, l.footer.y + l.footer.h)], BORDER)
@@ -671,21 +684,29 @@ class Renderer:
         self.rect(r, INSPECTOR)
         self.lines([(r.x, r.y), (r.x, r.y + r.h)], BORDER)
 
-        # Header of inspector
-        head_title = {
-            'DESIGN': 'INSPECTOR',
-            'AVATAR': 'ARRANGEMENT',
-            'SEW': 'SEWING',
-            'CLOTH': 'SIMULATION',
-            'LIBRARY': 'GARMENT LIBRARY',
-        }.get(ed.inspector_tab, 'INSPECTOR')
-        self.text(r.x + 18 * s, r.y + r.h - 32 * s, head_title, 11, TEXT_SUB)
-        self.lines([(r.x, r.y + r.h - 44 * s), (r.x + r.w, r.y + r.h - 44 * s)], BORDER_SUBTLE)
+        # Inspector Tabs - Modern Apple Segmented Control Pill Bar
+        tab_items = list(inspector.tabs.items())
+        if tab_items:
+            first_tab = tab_items[0][1]
+            last_tab = tab_items[-1][1]
+            seg_w = (last_tab.x + last_tab.w) - first_tab.x
+            seg_box = Rect(first_tab.x - 2 * s, first_tab.y + 3 * s, seg_w + 4 * s, first_tab.h - 6 * s)
+            self.round_rect(seg_box, (0.08, 0.10, 0.13, 0.95), radius=7)
+            self.round_rect_outline(seg_box, BORDER_SUBTLE, radius=7, width=0.8)
 
-        # Tabs for test mode / fallback
-        for name, tab in inspector.tabs.items():
-            self.rect(tab, (0.16, 0.28, 0.29, 1.0) if name == ed.inspector_tab else CHROME)
-            self.text(tab.x + tab.w / 2, tab.y + 11 * s, name.title(), 9, ACCENT if name == ed.inspector_tab else MUTED, True, max_width=tab.w - 4 * s)
+            for name, tab in tab_items:
+                active = name == ed.inspector_tab
+                hover = tab.contains(*ed.pointer)
+                pill = Rect(tab.x, tab.y + 4 * s, tab.w, tab.h - 8 * s)
+                if active:
+                    self.round_rect(pill, ELEVATED, radius=5)
+                    self.round_rect_outline(pill, ACCENT_BORDER, radius=5, width=0.8)
+                elif hover:
+                    self.round_rect(pill, (0.16, 0.20, 0.24, 0.7), radius=5)
+                color = ACCENT if active else (TEXT if hover else TEXT_SECONDARY)
+                self.text(pill.x + pill.w / 2, pill.y + 6 * s, name.title(), 9, color, True, max_width=pill.w - 4 * s)
+
+            self.lines([(r.x, first_tab.y - 2 * s), (r.x + r.w, first_tab.y - 2 * s)], BORDER_SUBTLE)
 
         # Scrollable inspector content
         self.clip(inspector.content)
@@ -808,39 +829,6 @@ class Renderer:
             self.round_rect(inspector.scrollbar, (0.11, 0.14, 0.18, 1.0), radius=2)
             self.round_rect(inspector.thumb, (0.35, 0.44, 0.50, 1.0), radius=2)
 
-        # Fixed bottom footer of Inspector (Primary Next-Task Action)
-        self.clip(r)
-        if ed.canvas_layout.inspector_foot:
-            foot_r = ed.canvas_layout.inspector_foot
-            self.rect(foot_r, INSPECTOR)
-            self.lines([(foot_r.x, foot_r.y + foot_r.h), (foot_r.x + foot_r.w, foot_r.y + foot_r.h)], BORDER)
-
-            # Contextual hint text
-            stage_hints = {
-                'DRAFT': f"{len(ed.session.document.patterns)} pattern pieces ready for sewing",
-                'SEW': "Edge length mismatch is a warning, not a block",
-                'ARRANGE': "Adjust panel placement in the 3D viewport",
-                'SIMULATE': "Simulate, inspect the drape, then keep the result",
-                'LIBRARY': "Editable source, sewing, UVs and poses",
-            }
-            hint_msg = stage_hints.get(ed.stage, "Next action")
-            self.text(foot_r.x + 14 * s, foot_r.y + 50 * s, hint_msg, 9, MUTED, max_width=foot_r.w - 28 * s)
-
-            # Prominent mint primary button
-            cta_btn = Rect(foot_r.x + 12 * s, foot_r.y + 10 * s, foot_r.w - 24 * s, 36 * s)
-            cta_labels = {
-                'DRAFT': "Continue to sewing  ->",
-                'SEW': "Continue to arranging  ->",
-                'ARRANGE': "Continue to simulation  ->",
-                'SIMULATE': "Stop simulation" if getattr(ed._scene, 'is_animation_playing', False) else "Start simulation  ->",
-                'LIBRARY': "Save editable garment",
-            }
-            cta_text = cta_labels.get(ed.stage, "Continue  ->")
-            b_hover = cta_btn.contains(*ed.pointer)
-            self.round_rect(cta_btn, (0.54, 0.90, 0.82, 1.0) if b_hover else ACCENT, radius=8)
-            self.round_rect_outline(cta_btn, (0.60, 0.95, 0.88, 1.0), radius=8, width=1.2)
-            self.text(cta_btn.x + cta_btn.w / 2, cta_btn.y + 11 * s, cta_text, 11, ACCENT_TEXT, True)
-
     def body_picker(self, ed):
         menu = ed.body_menu
         if menu is None:
@@ -864,6 +852,7 @@ class Renderer:
             self.reference_revision = reference.revision
         alpha = scene.dd_reference_opacity
         tint = (0.48, 0.56, 0.64)
+        # Flat, premixed colour projection
         color = tuple(BG[i] * (1 - alpha) + tint[i] * alpha for i in range(3)) + (1,)
         origin = ed.view.screen((scene.dd_reference_x, scene.dd_reference_y), ed.canvas_layout.canvas)
         zoom = ed.view.zoom
@@ -875,5 +864,5 @@ class Renderer:
             self.reference_batch.draw(self.shader)
         c = ed.canvas_layout.canvas
         height = reference.bounds[1][1] - reference.bounds[0][1]
-        self.text(c.x + 10 * self.s, c.y + c.h - 32 * self.s,
+        self.text(c.x + 10 * self.s, c.y + c.h - 18 * self.s,
                   f"{scene.dd_reference_view.title()} body reference / {height * 100:.1f} cm", 9, MUTED, max_width=c.w - 20 * self.s)
