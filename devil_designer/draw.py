@@ -7,7 +7,7 @@ from mathutils import Matrix
 from .canvas import Rect, grid_step
 from .core import area, triangulate, contains
 from . import curves
-from .controls import SETTINGS
+from .controls import CONTROL_SETTINGS as SETTINGS
 from .icons import icon_spans
 
 from .ui_system import (
@@ -333,6 +333,8 @@ class Renderer:
 
             self.rect(c, BG)
             self.clip(c)
+            from . import tracing
+            tracing.draw_reference(ed, self)
             self.body_reference(ed)
             self.grid(view, c)
 

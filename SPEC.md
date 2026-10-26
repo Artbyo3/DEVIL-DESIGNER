@@ -131,12 +131,21 @@ The README documents the UI and practical limits.
 | Per-pattern presets | Native stiffness groups; mass density remains an explicit shared weighted value |
 | Simulation/finalize | Native cloth, reset, evaluated output, matched seam welds, UV/group retention |
 | Garment library/refits | Portable editable designs, body-relative placement, optional height-based refit |
+| Per-piece mesh density | Named overrides, independent interiors, seam-compatible component boundaries |
+| Reference-image tracing | Persistent image placement/opacity and two-point measured scale calibration |
+| Multi-piece arrangement | Named Bodice, Sleeves, and Skirt bounds-based starting layouts |
+| Persistent undo | Validated document-matched undo/redo stacks saved with the blend file |
+| Pose-stable tacks | Triangle weights and native evaluated-vertex parenting, with topology checks |
+| Crossing-cut recovery | Transactional preview, split-and-retry, and actionable unsupported-case refusal |
 
-Offsets approximate Bezier offsets with sampled paths. Complex cuts that cross
-other internal shapes require those shapes to be split first. Slits expose their
+Offsets approximate Bezier offsets with sampled paths. Straight open crossing
+lines support split-and-retry; complex curves and closed crossing shapes still
+require manual repair. Slits expose their
 path mapping; use a cut into separate pieces for independently selectable lips.
-Tacks follow the body object and nearest deformed surface, rather than binding to
-an immutable skin triangle. Cross-avatar loading provides an editable starting fit,
+Tacks follow their bound skin triangle through deformation; topology changes
+require reattachment. Measured image scale cannot correct distorted photographs.
+Named layouts are non-anatomical placements, not automatic fitting. Cross-avatar
+loading provides an editable starting fit,
 not automatic tailoring to all body proportions. These limits are visible in the
 usage documentation and do not imply Marvelous Designer feature/performance parity.
 

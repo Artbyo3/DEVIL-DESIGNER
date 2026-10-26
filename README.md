@@ -135,7 +135,10 @@ create internal shapes in the selected pattern.
   seam. The common apex does not produce a zero-length sewing spring.
 
 Holes must remain strictly inside the outline and cannot overlap. A cut crossing
-another internal shape currently asks you to split that shape first. Slit sewing
+straight open internal lines offers **Split and retry**. This stages the split and
+cut as one undoable edit, preserving supported sewing and anchors. Curved or closed
+crossing shapes, overlaps, and anchors on the cut still need manual repair; the
+recovery card explains the refusal without changing the design. Slit sewing
 uses the path's generated boundary mapping; choose a boundary-to-boundary cut into
 separate pieces when both independently selectable cut sides are needed.
 
@@ -166,6 +169,14 @@ geometry, missing references, or zero-length ranges still require correction.
 
 ## Avatar reference, placement, wrap, pins, and tacks
 
+For photo tracing, open **Garment > Reference image > Load image**, including on an
+empty canvas. Adjust image placement and opacity in its contextual cards. Enter a
+known physical length under **Set measured scale**, choose **Pick length endpoints**,
+then click both ends on the image. Calibration changes only the image scale, never
+existing patterns. One length cannot correct perspective or lens distortion; use
+a flat, undistorted reference when fit matters. Image settings persist in the blend
+file; the external image must remain available at its saved path.
+
 Choose the body in **Avatar > Avatar body**, or select its mesh in 3D and click
 **Use selected body**. The actual evaluated mesh appears behind the pattern grid
 at physical scale. It includes armature/shape-key deformation and object/scene
@@ -173,8 +184,9 @@ scale; limb gaps are preserved. Reference view, opacity, position, alignment,
 framing, and refresh are all in Body & placement, under More controls or search.
 It cannot be selected as a pattern.
 
-Build 3D panels, then either move them with Blender G/R, use the two-piece
-front/back Arrange helper, or choose **Click-place selected piece** and click the
+Build 3D panels, then either move them with Blender G/R, use **Placement > Arrange
+pieces** for named Bodice, Sleeves, or Skirt starting layouts, or choose
+**Click-place selected piece** and click the
 body in the uncovered 3D viewport. Ray picking targets the chosen body only.
 
 Set **Wrap radius** and click **Wrap / unwrap selected piece** to bend a piece
@@ -186,8 +198,11 @@ K adds a static pin on fabric. T picks a fabric point, then a target on the avat
 in 3D. Tacks use native Hook/pin groups and avatar-parented surface-following targets.
 Select a pin/tack with K/T and use **Remove selected pin / tack** to remove it.
 Pins/tacks are source-space anchors and are remapped when the mesh is rebuilt.
-Tacks follow the body object and nearest deformed surface; they are not a rigid
-barycentric attachment to one exact skin triangle. Check them after major pose changes.
+Tacks bind to a skin triangle and follow its vertex deformation through poses,
+shape keys, and object transforms. A topology mismatch asks for reattachment instead
+of drifting to a nearby surface. Disable topology-changing modifiers before binding.
+Older tacks bind once at their current resolved position; reattach an already
+misplaced legacy tack. A replacement avatar uses the retained portable target.
 
 ## Generate, simulate, and finalize
 
@@ -197,13 +212,25 @@ included. Start around 2-3 cm and increase density only when needed. Each source
 piece and compiled garment has piece face identifiers, sculpt face sets, and
 per-piece vertex groups.
 
+Select a piece and open **Mesh density** to choose **Garment default**, **Coarse**,
+**Standard**, or **Fine**. Fine halves the default spacing; Coarse doubles it.
+Interiors remain per piece, so a fine strap need not refine a large panel interior.
+Sewn components share conservative boundary sampling to keep paired seams compatible;
+unrelated pieces keep their own boundary density. Density changes are undoable.
+
+Drafting undo and redo retain up to 100 document edits per stack after closing and
+reopening the editor. Save the blend file to retain them across Blender restarts.
+Replacing the design invalidates history from a different document rather than
+applying unrelated edits.
+
 Choose a selected piece's preset in **Cloth > Selected fabric**: Silk, Knit, Cotton,
 Linen, or Denim. Native structural, shear, and bending groups provide per-piece
 stiffness. **Mass density is a shared, area-weighted native cloth value**; these
 presets are practical starting values, not measured textile calibration.
 
-**Build 3D** preserves existing panel transforms. **Arrange** places exactly two
-pieces around a Z-up, -Y-facing body; adjust this starting layout before simulation.
+**Build 3D** preserves existing panel transforms. Named arrangement layouts position
+multiple pieces around a Z-up, -Y-facing body; they are starting placements, not
+anatomical fitting or collision prevention. Adjust them before simulation.
 Body clearance, quality, self collision, frame limit, and optional top-point pinning
 are in Cloth. The chosen body gets Collision if needed; an existing collision
 modifier is left unchanged.

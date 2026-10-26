@@ -6,6 +6,7 @@ from .interaction import OverlayControls
 from .minimal import MinimalCards, minimal_layout
 from .design_tools import DesignTools
 from .silhouette import BodyReference, torso_alignment, VIEWS
+from . import history
 
 _active = None
 
@@ -41,6 +42,7 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
             return {'CANCELLED'}\
 
         self._stored = self._scene.dd_document
+        history.restore(self.session, self._scene.dd_history)
         self.stage = 'DRAFT'
         self.initialize_controls()
         self.initialize_minimal()
@@ -228,6 +230,9 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
     def fit(self):
         points = [p for pat in self.session.document.patterns for p in pat.points]
         points += self.reference_corners()
+        from . import tracing
+        if self._scene.dd_trace_visible:
+            points += list(tracing.reference_corners(self._scene))
         layout = self.canvas_layout
         canvas = layout.canvas
         fit_rect = canvas
@@ -278,8 +283,14 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
     def persist(self):
         value = self.session.document.dumps()
         self._scene.dd_document = value
+        self._scene.dd_history = history.store(self.session)
         self._stored = value
         self.refresh_controls()
+
+    def reconcile_generated_document(self):
+        if self._scene.dd_document != self._stored:
+            self.session.document = Document.loads(self._scene.dd_document)
+            self.persist()
 
     def run_edit(self, action, message):
         try:
@@ -393,8 +404,6 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
             return 'Create a pattern before building or simulating clothing.'
         if button == 'ARRANGE' and self._scene.dd_avatar is None:
             return 'Choose an avatar in Body & placement first, or search for Avatar body.'
-        if button == 'ARRANGE' and len(self.session.document.patterns) != 2:
-            return 'Auto arrange needs exactly two pieces. Position other garments in the 3D viewport.'
         if button in {'KEEP', 'RESET'} and not any(
                 obj.get('dd_owner') == 'Artbyo3/DEVIL-DESIGNER' and obj.get('dd_kind') == 'simulation'
                 for obj in self._scene.objects):
@@ -426,7 +435,9 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                 return False
             self.choose_body(body, context)
         if len(self.session.document.patterns) == 2 and not garment.generated(self._scene, 'panel'):
-            return self.workflow_action('ARRANGE')
+            result = bpy.ops.devil_designer.arrange('EXEC_DEFAULT')
+            self.reconcile_generated_document()
+            return 'FINISHED' in result
         return True
 
     def workflow_action(self, button):
@@ -441,12 +452,19 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         names = {'BUILD': 'build_panels', 'ARRANGE': 'arrange', 'SIMULATE': 'simulate',
                  'STOP': 'stop', 'RESET': 'reset', 'KEEP': 'keep_drape', 'DEMO': 'demo'}
         try:
+            if button == 'SIMULATE':
+                from . import tack_binding
+                self.session.commit(lambda: tack_binding.migrate_anchors(bpy.context, self.session.document))
+                self.persist()
+            if button == 'ARRANGE':
+                self.show_card('ARRANGEMENT')
+                self.message = 'Choose a named starting layout; adjust placements before simulation.'
+                return True
             op = getattr(bpy.ops.devil_designer, names[button])
             result = op('EXEC_DEFAULT')
             if 'FINISHED' in result:
                 if self._scene.dd_document != self._stored:
-                    self.session.document = Document.loads(self._scene.dd_document)
-                    self._stored = self._scene.dd_document
+                    self.reconcile_generated_document()
                 if button == 'DEMO':
                     self.update_reference(bpy.context, align=True)
                     self.fit()
@@ -463,7 +481,7 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                                 'KEEP': 'Draped mesh kept. Check the Blender report for any open seam pairs.'}[button]
                 return True
             self.message = 'Action could not finish. Check the Blender report and try again.'
-        except RuntimeError as exc:
+        except (RuntimeError, ValueError) as exc:
             self.message = str(exc).replace('Error: ', '').strip()
         return False
 
@@ -510,6 +528,7 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
             return {'FINISHED'}
         if self._scene.dd_document != self._stored:
             self.session = Session(Document.loads(self._scene.dd_document))
+            history.restore(self.session, self._scene.dd_history)
             self._stored = self._scene.dd_document
             self.clear_interaction_references()
             self.card_kind = None
@@ -526,6 +545,32 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                 self._area.tag_redraw()
             return {'PASS_THROUGH'}
         self._area.tag_redraw()
+        if self.trace_points is not None:
+            if press and event.type in {'ESC', 'RIGHTMOUSE'}:
+                self.trace_points = None
+                self.message = 'Image calibration cancelled.'
+                return {'RUNNING_MODAL'}
+            if press and event.type == 'LEFTMOUSE' and canvas:
+                from . import tracing
+                point = self.view.world(self.pointer, self.canvas_layout.canvas)
+                corners = tracing.reference_corners(self._scene)
+                if not corners or not (corners[0][0] <= point[0] <= corners[2][0] and corners[0][1] <= point[1] <= corners[2][1]):
+                    self.message = 'Pick a point inside the reference image.'
+                    return {'RUNNING_MODAL'}
+                self.trace_points.append(point)
+                if len(self.trace_points) == 2:
+                    try:
+                        tracing.calibrate(self._scene, *self.trace_points)
+                        self.message = 'Image scale set. A measurement cannot correct photo distortion.'
+                        self.trace_points = None
+                        self.fit()
+                    except ValueError as exc:
+                        self.trace_points = []
+                        self.message = str(exc)
+                else:
+                    self.message = 'Now click the other end of the measured length.'
+                return {'RUNNING_MODAL'}
+            return {'PASS_THROUGH'} if not panel else {'RUNNING_MODAL'}
         if self.minimal_ui and press and event.type in {'ESC', 'RIGHTMOUSE'} and (self.pending_place or self.pending_tack):
             return self.design_pending_event(context, event, panel)
         if self.confirm_action:

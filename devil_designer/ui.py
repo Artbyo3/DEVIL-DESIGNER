@@ -23,7 +23,7 @@ def on_load(_):
 
 
 classes = (DD_OT_pattern_editor,)+CLASSES
-PROPERTIES = ('dd_document','dd_collection','dd_avatar','dd_spacing','dd_clearance',
+PROPERTIES = ('dd_document','dd_history','dd_collection','dd_avatar','dd_spacing','dd_clearance',
               'dd_quality','dd_frames','dd_self_collision','dd_pin_top','dd_weld_distance','dd_thickness',
               'dd_ui_rect','dd_ui_settings','dd_reference_visible','dd_reference_view',
               'dd_reference_opacity','dd_reference_x','dd_reference_y','dd_reference_placed',
@@ -33,7 +33,10 @@ PROPERTIES = ('dd_document','dd_collection','dd_avatar','dd_spacing','dd_clearan
 
 
 def register():
+    from . import tracing
+    tracing.register()
     Scene = bpy.types.Scene
+    Scene.dd_history = bpy.props.StringProperty(default='', options={'HIDDEN'})
     Scene.dd_ui_rect = bpy.props.FloatVectorProperty(name='Editor window bounds',size=4,default=(-1,-1,0,0))
     Scene.dd_ui_settings = bpy.props.BoolProperty(name='Editor settings visible',default=True)
     Scene.dd_reference_visible = bpy.props.BoolProperty(name='Body silhouette',default=True)
@@ -80,6 +83,8 @@ def register():
 
 def unregister():
     close_active()
+    from . import tracing
+    tracing.unregister()
     cancel_playback()
     if on_load in bpy.app.handlers.load_pre:
         bpy.app.handlers.load_pre.remove(on_load)

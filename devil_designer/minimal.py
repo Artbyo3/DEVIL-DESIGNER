@@ -1,7 +1,7 @@
 import math
 import bpy
 from .canvas import Rect
-from .controls import SETTINGS
+from .controls import CONTROL_SETTINGS as SETTINGS
 
 
 DENSITY = {'Coarse': .04, 'Standard': .02, 'Fine': .01}
@@ -9,6 +9,7 @@ QUALITY = {'Draft': 6, 'Standard': 12, 'High': 24}
 THICKNESS = {'None': 0, 'Thin': .0005, 'Standard': .001}
 FABRICS = ('COTTON', 'LINEN', 'DENIM', 'SILK', 'LEATHER', 'KNIT')
 GUIDE_OPACITY = {'Light': .15, 'Medium': .30, 'Strong': .50}
+IMAGE_OPACITY = {'Light': .2, 'Medium': .35, 'Strong': .6}
 
 
 def minimal_layout(layout, pending=False, confirmation=False, playing=False):
@@ -130,6 +131,7 @@ class MinimalCards:
                 return None
             title = pattern.name
             rows = [('FABRIC', 'Fabric', pattern.preset.title()),
+                    ('PIECE_DENSITY', 'Mesh density', pattern.mesh_density.title()),
                     ('INFO', f'{len(pattern.points)} edges', f'{sum(edge.pattern == pattern.id for seam in self.session.document.seams for side in (0, 1) for edge in seam.side(side))} sewn'),
                     ('EDIT_CARD', 'Edit piece', 'Right-click')]
         elif kind == 'WORKSPACE':
@@ -141,6 +143,36 @@ class MinimalCards:
                 rows.append(('CHOICES', 'Guide opacity', ('WORKSPACE_OPACITY', GUIDE_OPACITY,
                             self.named_choice(scene.dd_reference_opacity, GUIDE_OPACITY))))
             rows.append(('WORKSPACE_FIT', 'Fit design', ''))
+        elif kind == 'PIECE_DENSITY':
+            if pattern is None:
+                return None
+            title = 'Piece mesh density'
+            rows = [('SET_DENSITY_' + name, label, 'Selected' if pattern.mesh_density == name else '')
+                    for name, label in [('AUTO', 'Garment default'), ('COARSE', 'Coarse'), ('STANDARD', 'Standard'), ('FINE', 'Fine')]]
+        elif kind == 'ARRANGEMENT':
+            title = 'Arrange pieces'
+            rows = [('ARRANGE_BODICE', 'Bodice panels', 'Front / back'),
+                    ('ARRANGE_SLEEVES', 'Sleeves', 'Left / right'),
+                    ('ARRANGE_SKIRT', 'Skirt panels', 'Around hips')]
+        elif kind == 'REFERENCE_IMAGE':
+            title = 'Reference image'
+            rows = [('TRACE_LOAD', 'Load image', 'Choose file')]
+            if scene.dd_trace_path:
+                rows += [('TRACE_CALIBRATION', 'Set measured scale', ''),
+                         ('TRACE_POSITION', 'Image placement', ''),
+                         ('TRACE_VISIBLE', 'Visibility', 'Shown' if scene.dd_trace_visible else 'Hidden'),
+                         ('CHOICES', 'Image opacity', ('TRACE_OPACITY', IMAGE_OPACITY, self.named_choice(scene.dd_trace_opacity, IMAGE_OPACITY)))]
+            if scene.dd_trace_error:
+                rows.append(('INFO', 'Image unavailable', scene.dd_trace_error))
+        elif kind == 'TRACE_CALIBRATION':
+            title = 'Measured scale'
+            rows = [('SLIDER', 'dd_trace_length', 'Known length'),
+                    ('TRACE_PICK', 'Pick length endpoints', 'Two clicks on image'),
+                    ('INFO', 'Scale only', 'Cannot correct photo distortion')]
+        elif kind == 'TRACE_POSITION':
+            title = 'Image placement'
+            rows = [('SLIDER', 'dd_trace_width', 'Width'), ('SLIDER', 'dd_trace_x', 'X position'),
+                    ('SLIDER', 'dd_trace_y', 'Y position'), ('TRACE_FIT', 'Fit image and pieces', '')]
         elif kind == 'FABRIC':
             if pattern is None:
                 return None
@@ -165,13 +197,15 @@ class MinimalCards:
             title = 'Start garment'
             rows = [('START_PANEL', 'Create panel', '40 x 45 cm'),
                     ('RECTANGLE', 'Draw custom panel', 'Drag on canvas'),
-                    ('LIBRARY', 'Saved garments', 'Open library')]
+                    ('LIBRARY', 'Saved garments', 'Open library'),
+                    ('REFERENCE_IMAGE', 'Reference image', 'Trace a photo')]
         elif kind == 'GARMENT':
             title = 'Garment'
             rows = [('NAME', scene.dd_library_name, 'Rename'),
                     ('BODY_CARD', 'Body: ' + scene.dd_avatar.name if scene.dd_avatar else 'Body', 'Change' if scene.dd_avatar else 'Choose'),
                     ('INFO', 'Pieces', str(len(self.session.document.patterns))),
                     ('LIBRARY_SAVE', 'Save garment', '')]
+            rows.append(('REFERENCE_IMAGE', 'Reference image', 'Trace a photo'))
             if any(obj.get('dd_kind') == 'simulation' for obj in scene.objects):
                 rows.append(('RESET', 'Reset drape', ''))
         elif kind == 'BODY':
@@ -198,6 +232,15 @@ class MinimalCards:
                     ('CUT', 'Cut along path', '')]
             if pattern and pattern.path(self.session.path).closed:
                 rows.append(('TRACE', 'Trace as piece', ''))
+        elif kind == 'CUT_RECOVERY':
+            title = 'Crossing cut'
+            preview = self.cut_preview
+            if not preview:
+                return None
+            rows = [('INFO', 'Cut needs attention', preview['reason'])]
+            if preview['can_retry']:
+                rows.append(('CUT_RETRY', 'Split and retry', f"{preview['split_count']} splits"))
+            rows.append(('CANCEL_CUT', 'Back to editing', ''))
         elif kind == 'ANCHOR':
             if anchor is None:
                 return None
@@ -215,7 +258,7 @@ class MinimalCards:
                     if pattern else [('RECTANGLE', 'Panel', ''), ('POLYGON', 'Polygon', ''), ('ELLIPSE', 'Ellipse', ''), ('INTERNAL', 'Internal path', ''), ('GARMENT', 'Garment', '')])
         elif kind == 'PLACEMENT':
             title = 'Placement'
-            rows = [('PLACE', 'Place on body', ''), ('TACK', 'Tack to body', ''), ('PIN', 'Pin', ''), ('REMOVE_ANCHOR', 'Remove selected anchor', ''), ('ARRANGE', 'Arrange front / back', '')]
+            rows = [('PLACE', 'Place on body', ''), ('TACK', 'Tack to body', ''), ('PIN', 'Pin', ''), ('REMOVE_ANCHOR', 'Remove selected anchor', ''), ('ARRANGE', 'Arrange pieces', '')]
         elif kind == 'INTERNAL_EDIT':
             title = 'Internal shapes'
             rows = [('INTERNAL', 'Draw internal path', ''), ('DART', 'Dart', ''), ('CUT', 'Cut path', ''), ('TRACE', 'Trace as piece', ''), ('OFFSET_CARD', 'Offset outline', '')]
@@ -333,6 +376,10 @@ class MinimalCards:
     def minimal_action(self, key):
         scene = self._scene
         cards = {'FABRIC': 'FABRIC', 'GARMENT': 'GARMENT', 'BODY_CARD': 'BODY', 'LIBRARY': 'LIBRARY',
+                 'PIECE_DENSITY': 'PIECE_DENSITY',
+                 'ARRANGE': 'ARRANGEMENT',
+                 'REFERENCE_IMAGE': 'REFERENCE_IMAGE', 'TRACE_CALIBRATION': 'TRACE_CALIBRATION',
+                 'TRACE_POSITION': 'TRACE_POSITION',
                  'EDIT_CARD': 'EDIT',
                  'PLACEMENT': 'PLACEMENT', 'INTERNAL_EDIT': 'INTERNAL_EDIT', 'OFFSET_CARD': 'OFFSET',
                  'SIMULATE_OPTIONS': 'SIMULATE', 'KEEP_OPTIONS': 'KEEP'}
@@ -358,6 +405,41 @@ class MinimalCards:
                 scene.dd_reference_opacity = GUIDE_OPACITY[key.removeprefix('WORKSPACE_OPACITY_')]
         elif key in cards:
             self.show_card(cards[key])
+        elif key == 'TRACE_LOAD':
+            bpy.ops.devil.load_trace_image('INVOKE_DEFAULT')
+        elif key == 'TRACE_VISIBLE':
+            scene.dd_trace_visible = not scene.dd_trace_visible
+        elif key.startswith('TRACE_OPACITY_'):
+            scene.dd_trace_opacity = IMAGE_OPACITY[key.removeprefix('TRACE_OPACITY_')]
+        elif key == 'TRACE_FIT':
+            self.fit()
+        elif key == 'TRACE_PICK':
+            if self.draft or self.gesture:
+                self.message = 'Finish or cancel drafting before calibrating the image.'
+            else:
+                scene.dd_trace_visible = True
+                self.trace_points = []
+                self.card_kind = None
+                self.context_card_hidden = True
+                self.message = 'Click the first end of the measured length on the image. Escape cancels.'
+        elif key in {'CUT', 'CUT_RETRY'}:
+            self.perform_action(key)
+        elif key == 'CANCEL_CUT':
+            self.cut_preview = None
+            self.card_kind = None
+        elif key.startswith('SET_DENSITY_'):
+            self.run_edit(lambda: self.session.set_mesh_density(key.removeprefix('SET_DENSITY_')), 'Piece mesh density updated.')
+        elif key.startswith('ARRANGE_'):
+            from . import arrangement
+            try:
+                self.persist()
+                count = arrangement.arrange(bpy.context, key.removeprefix('ARRANGE_'))
+                self.card_kind = None
+                self.message = f'{count} pieces arranged. Adjust in 3D before simulation.'
+            except (ValueError, RuntimeError) as exc:
+                self.message = str(exc)
+            finally:
+                self.reconcile_generated_document()
         elif key.startswith(('DENSITY_', 'QUALITY_', 'THICKNESS_')):
             prefix, choice = key.split('_', 1)
             property_name, choices = {'DENSITY': ('dd_spacing', DENSITY), 'QUALITY': ('dd_quality', QUALITY),

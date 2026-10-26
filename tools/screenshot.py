@@ -20,7 +20,7 @@ if not os.path.exists(BLENDER_PATH):
             break
 
 def capture(stage="DRAFT", output_name="screenshot_app.png", full_mode=False,
-            empty=False, panel_size=None, demo=False, tool=None, section=None, query='', reveal_3d=False, cursor_controls=False, card_kind=None):
+            empty=False, panel_size=None, demo=False, tool=None, section=None, query='', reveal_3d=False, cursor_controls=False, card_kind=None, trace_image=False):
     if Path(output_name).name != output_name or Path(output_name).suffix.lower() != ".png":
         raise ValueError("Screenshot output must be a PNG filename inside scratch.")
     scratch_dir = prepare_scratch()
@@ -70,6 +70,18 @@ with bpy.context.temp_override(area=area, region=region):
     bpy.ops.devil_designer.pattern_editor('INVOKE_DEFAULT')
     op = editor._active
     op.set_stage('{stage}')
+    if {trace_image}:
+        image = bpy.data.images.new('Tracing verification', width=64, height=64)
+        image.pixels = [value for row in range(64) for column in range(64)
+                        for value in ((.2, .55, .8, 1) if 12 < column < 52 and 8 < row < 56 else (.85, .8, .7, 1))]
+        image.filepath_raw = str(ROOT / 'scratch' / 'tracing-verification.png')
+        image.file_format = 'PNG'
+        image.save()
+        bpy.context.scene.dd_trace_path = image.filepath_raw
+        bpy.context.scene.dd_trace_width = 1.2
+        bpy.context.scene.dd_trace_x = 0
+        bpy.context.scene.dd_trace_y = -.2
+        bpy.context.scene.dd_trace_opacity = .6
     
     if {full_mode} and not op.full:
         op.toggle_full()

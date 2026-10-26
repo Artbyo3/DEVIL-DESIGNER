@@ -2,9 +2,10 @@ import json
 import math
 import bpy
 import bmesh
-from mathutils import Vector,Matrix
+from mathutils import Matrix
 from .meshing import distance_to_segment
 from .presets import PRESETS
+from . import tack_binding
 
 
 def decorate_mesh(mesh,piece,coords,metadata):
@@ -64,23 +65,16 @@ def add_anchors(context,obj,cloth,doc,anchor_indices):
     from . import garment
     scene=context.scene
     if not doc.anchors:return
+    bindings={anchor.id:tack_binding.resolve_binding(context,scene.dd_avatar,anchor)
+              for anchor in doc.anchors if anchor.kind=='TACK' and anchor.id in anchor_indices}
     group=obj.vertex_groups.get('DD Pins') or obj.vertex_groups.new(name='DD Pins')
     for anchor in doc.anchors:
         if anchor.id not in anchor_indices:continue
         index=anchor_indices[anchor.id];group.add([index],1,'REPLACE')
         if anchor.kind!='TACK':continue
         avatar=scene.dd_avatar
-        if avatar is None or anchor.target is None:raise ValueError('Choose an avatar and reattach the tack.')
-        low,high=garment.bounds(avatar)
-        target=Vector(tuple(low[i]+(high[i]-low[i])*anchor.target[i] for i in range(3)))
-        empty=bpy.data.objects.new('DD Tack',None)
-        garment.collection(scene).objects.link(empty);garment.tag(empty,'anchor')
-        empty.empty_display_type='SPHERE';empty.empty_display_size=.008/garment.metres_per_unit(scene)
-        empty.parent=avatar
-        empty.matrix_parent_inverse=avatar.matrix_world.inverted()
-        empty.location=target
-        constraint=empty.constraints.new('SHRINKWRAP');constraint.target=avatar
-        constraint.distance=.003/garment.metres_per_unit(scene)
+        empty=tack_binding.create_target(context,avatar,bindings[anchor.id],garment.collection(scene),garment.tag)
+        empty.empty_display_size=.008/garment.metres_per_unit(scene)
         hook=obj.modifiers.new('DD Tack','HOOK');hook.object=empty
         hook.vertex_indices_set([index]);hook.falloff_type='NONE'
         hook.matrix_inverse=Matrix.Translation(-obj.data.vertices[index].co)
