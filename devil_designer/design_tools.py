@@ -1,4 +1,3 @@
-"""Complete pattern construction and sewing tools for the custom editor."""
 import copy
 import math
 import bpy

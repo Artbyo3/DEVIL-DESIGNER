@@ -1,8 +1,8 @@
-"""Check real evaluated meshes, physical units, deformation, and reference persistence."""
 from pathlib import Path
 import sys
 import bpy
 ROOT=Path(__file__).resolve().parents[1]
+sys.dont_write_bytecode = True
 sys.path.insert(0,str(ROOT))
 import devil_designer
 from devil_designer.silhouette import BodyReference
@@ -82,7 +82,7 @@ scene.dd_reference_x=.12
 scene.dd_reference_y=-.35
 scene.dd_reference_opacity=.3
 scene.dd_reference_placed=True
-path=ROOT/'build'/'silhouette-test.blend'
+path=ROOT/'scratch'/'silhouette-test.blend'
 path.parent.mkdir(exist_ok=True)
 bpy.ops.wm.save_as_mainfile(filepath=str(path))
 bpy.ops.wm.open_mainfile(filepath=str(path))

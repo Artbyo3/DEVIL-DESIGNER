@@ -2,6 +2,7 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 build/
+scratch/
 *.blend
 *.blend[0-9]*
 *.zip

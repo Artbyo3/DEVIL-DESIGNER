@@ -9,7 +9,8 @@ from PIL import Image, ImageOps
 
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'build' / 'icon_vendor'))
+sys.dont_write_bytecode = True
+sys.path.insert(0, str(ROOT / 'scratch' / 'icon_vendor'))
 import resvg_py
 
 
@@ -18,8 +19,8 @@ def prepare():
     destination.mkdir(parents=True, exist_ok=True)
     sources = {}
     images = {}
-    archive = zipfile.ZipFile(ROOT / 'build' / 'kenney_game-icons.zip')
-    expansion = zipfile.ZipFile(ROOT / 'build' / 'kenney_game-icons-expansion.zip')
+    archive = zipfile.ZipFile(ROOT / 'scratch' / 'kenney_game-icons.zip')
+    expansion = zipfile.ZipFile(ROOT / 'scratch' / 'kenney_game-icons-expansion.zip')
     kenney = {'GRID': 'menuGrid', 'CLOSE': 'cross', 'PLAY': 'forward', 'PAUSE': 'pause',
               'FIT': 'zoomDefault', 'MORE': 'barsHorizontal', 'SAVE': 'save',
               'UNDO': 'return', 'CHEVRON': 'up', 'DISCLOSURE': 'arrowRight', 'EXPAND': 'larger',

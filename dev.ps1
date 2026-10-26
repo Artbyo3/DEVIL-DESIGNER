@@ -2,4 +2,4 @@ param(
     [Parameter(ValueFromRemainingArguments=$true)]
     [string[]]$Arguments
 )
-python tools/dev.py @Arguments
+python -B tools/dev.py @Arguments

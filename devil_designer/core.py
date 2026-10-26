@@ -1,8 +1,3 @@
-"""Pattern geometry, storage, and history. Coordinates are always metres.
-
-Drafts and drag previews only enter the document after a valid completed edit.
-This module has no Blender dependency.
-"""
 from dataclasses import dataclass, field
 import json
 import math
@@ -62,7 +57,6 @@ def contains(point, points):
     return inside
 
 def triangulate(points):
-    """Ear clipping handles concave patterns, collinear corners, either winding."""
     validate_polygon(points)
     indices = list(range(len(points)))
     if area(points) < 0:

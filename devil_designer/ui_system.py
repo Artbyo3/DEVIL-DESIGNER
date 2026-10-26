@@ -1,9 +1,3 @@
-"""Reusable  UI system for Devil Designer overlay in Blender.
-
-Implements centralized design tokens, reusable components (Button, IconButton,
-Toggle, Dropdown, NumericInput, Slider, Tab, Tooltip, ScrollablePanel, ContextMenu),
-and unified layout & hit detection.
-"""
 from dataclasses import dataclass, field
 from typing import List, Tuple, Dict, Any, Optional, Callable
 import math
@@ -201,7 +195,6 @@ class ContextMenu:
 
 
 class ComponentRenderer:
-    """Renders UI components using exact component bounds."""
 
     @staticmethod
     def draw_button(draw_ctx, btn: Button, scale: float):

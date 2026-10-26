@@ -5,6 +5,7 @@ import bpy
 from mathutils import Vector
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.dont_write_bytecode = True
 sys.path.insert(0, str(ROOT))
 bpy.context.preferences.view.show_splash = False
 

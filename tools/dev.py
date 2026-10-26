@@ -1,14 +1,3 @@
-"""Unified fast development tool for Devil Designer.
-
-Usage:
-  python tools/dev.py --test            # Run all unit, background, and GUI tests (~22s)
-  python tools/dev.py --quick           # Run fast headless unit tests only (~0.1s)
-  python tools/dev.py --build           # Build zip, validate with Blender, sync to user extensions (~0.7s)
-  python tools/dev.py --shots           # Capture clean screenshots of all 4 stages + full mode (~12s)
-  python tools/dev.py --stage STAGE     # Capture clean screenshot for a single stage (e.g. DRAFT, SEW)
-  python tools/dev.py --inspect         # Crop and validate UI regions (contrast, margins, buttons)
-  python tools/dev.py --all             # Test, build, sync, screenshot, and inspect in one command!
-"""
 import os
 import sys
 import time
@@ -17,7 +6,9 @@ import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.dont_write_bytecode = True
 sys.path.insert(0, str(ROOT))
+from tools.workspace import SCRATCH, clean_scratch, extension_archive, prepare_scratch
 BLENDER_PATH = r"C:\Program Files (x86)\Steam\steamapps\common\Blender\blender.exe"
 if not os.path.exists(BLENDER_PATH):
     for p in [r"C:\Program Files\Blender Foundation\Blender 5.2\blender.exe",
@@ -30,7 +21,8 @@ def run_cmd(cmd, cwd=str(ROOT), desc=""):
     if desc:
         print(f"--> {desc}...")
     t0 = time.time()
-    res = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
+    environment = dict(os.environ, PYTHONDONTWRITEBYTECODE='1')
+    res = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, env=environment)
     dt = time.time() - t0
     gui_test = any(Path(argument).name == 'run_blender_gui.py' for argument in cmd)
     if res.returncode != 0 or (gui_test and ('GUI TEST FAILED:' in res.stdout or 'GUI TEST TIMED OUT' in res.stdout)):
@@ -53,7 +45,7 @@ def do_tests():
         return False
 
     for t in ["blender_smoke.py", "blender_garment.py", "blender_advanced.py", "blender_silhouette.py"]:
-        if not run_cmd([BLENDER_PATH, "--background", "--factory-startup", "--python", f"tests/{t}"],
+        if not run_cmd([BLENDER_PATH, "--background", "--factory-startup", "--python-exit-code", "1", "--python", f"tests/{t}"],
                        desc=f"Blender Background: {t}"):
             return False
 
@@ -71,7 +63,7 @@ def do_build():
     if not run_cmd([sys.executable, "tools/build.py"], desc="Package extension zip"):
         return False
         
-    zip_path = ROOT / "build" / "devil_designer-0.5.0.zip"
+    zip_path = extension_archive()
     
     if not run_cmd([BLENDER_PATH, "--background", "--factory-startup", "--command", "extension", "validate", str(zip_path)],
                    desc="Validate extension package"):
@@ -80,7 +72,7 @@ def do_build():
     import shutil
     user_ext = Path(os.path.expandvars(r"%APPDATA%\Blender Foundation\Blender\5.2\extensions\user_default\devil_designer"))
     if user_ext.exists():
-        shutil.copytree(ROOT / "devil_designer", user_ext, dirs_exist_ok=True)
+        shutil.copytree(ROOT / "devil_designer", user_ext, dirs_exist_ok=True, ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
         print(f"    Synced to {user_ext}")
     else:
         print(f"    (User extensions folder not found, skipping sync)")
@@ -127,9 +119,9 @@ def do_inspect():
     from PIL import Image
     import numpy as np
 
-    shot_path = ROOT / "build" / "screenshot_draft_clean.png"
+    shot_path = SCRATCH / "screenshot_draft_clean.png"
     if not shot_path.exists():
-        shot_path = ROOT / "build" / "screenshot_app.png"
+        shot_path = SCRATCH / "screenshot_app.png"
     if not shot_path.exists():
         print("No screenshot found. Run --shots first.")
         return False
@@ -138,7 +130,7 @@ def do_inspect():
     w, h = img.size
     print(f"Analyzing {shot_path.name} ({w}x{h})...")
 
-    out_dir = ROOT / "build" / "ui_inspect"
+    out_dir = SCRATCH / "ui_inspect"
     out_dir.mkdir(exist_ok=True)
 
     regions = [
@@ -160,7 +152,7 @@ def do_inspect():
     print(f"Inspection crops saved to: {out_dir}\n")
     return True
 
-if __name__ == "__main__":
+def main(argv=None):
     parser = argparse.ArgumentParser(description="Devil Designer Dev Tool")
     parser.add_argument("--quick", action="store_true", help="Run fast headless unit tests only (~0.1s)")
     parser.add_argument("--test", action="store_true", help="Run all unit, background, and GUI tests")
@@ -169,29 +161,41 @@ if __name__ == "__main__":
     parser.add_argument("--stage", type=str, help="Capture screenshot for a single stage (e.g. DRAFT, SEW, ARRANGE, SIMULATE)")
     parser.add_argument("--inspect", action="store_true", help="Slice and inspect UI regions")
     parser.add_argument("--all", action="store_true", help="Test, build, sync, screenshot, and inspect")
+    parser.add_argument("--clean", action="store_true", help="Delete disposable scratch artifacts without touching dist or source")
+    parser.add_argument("--keep-scratch", action="store_true", help="Keep artifacts after success for manual inspection")
     
-    args = parser.parse_args()
-    if not any([args.quick, args.test, args.build, args.shots, args.stage, args.inspect, args.all]):
+    args = parser.parse_args(argv)
+    if args.clean and args.keep_scratch:
+        parser.error('--clean and --keep-scratch cannot be combined')
+    if not any([args.quick, args.test, args.build, args.shots, args.stage, args.inspect, args.all, args.clean]):
         parser.print_help()
-        sys.exit(0)
+        return 0
         
-    if args.quick:
-        if not do_quick_tests():
-            sys.exit(1)
-    if args.test or args.all:
-        if not do_tests():
-            sys.exit(1)
-    if args.build or args.all:
-        if not do_build():
-            sys.exit(1)
-    if args.stage:
-        if not do_stage_screenshot(args.stage):
-            sys.exit(1)
-    if args.shots or args.all:
-        if not do_screenshots():
-            sys.exit(1)
-    if args.inspect or args.all:
-        if not do_inspect():
-            sys.exit(1)
+    operations = [
+        (args.quick, do_quick_tests),
+        (args.test or args.all, do_tests),
+        (args.build or args.all, do_build),
+        (args.stage, lambda: do_stage_screenshot(args.stage)),
+        (args.shots or args.all, do_screenshots),
+        (args.inspect or args.all, do_inspect),
+    ]
+    if any(enabled for enabled, operation in operations):
+        prepare_scratch()
+    for enabled, operation in operations:
+        if enabled and not operation():
+            print('Task failed. Diagnostic artifacts remain in scratch; use --clean when finished.')
+            return 1
+    if not args.keep_scratch:
+        try:
+            removed = clean_scratch()
+        except (OSError, ValueError) as error:
+            print(f'Scratch cleanup failed: {error}')
+            return 1
+        print(f'Scratch removed ({removed} temporary files). Installable archives remain in dist.')
             
     print("Dev tasks completed successfully!")
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

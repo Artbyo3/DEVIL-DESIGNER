@@ -1,4 +1,3 @@
-"""Transactional pattern construction on editable paths."""
 import copy
 import math
 from . import curves

@@ -1,4 +1,3 @@
-"""Cubic Bezier evaluation, arc-length sampling, and planar operations in metres."""
 import math
 from functools import lru_cache
 import bisect

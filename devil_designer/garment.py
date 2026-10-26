@@ -1,4 +1,3 @@
-"""Generate panels, assemble sewing springs, and keep evaluated draped meshes."""
 import hashlib
 import json
 import math

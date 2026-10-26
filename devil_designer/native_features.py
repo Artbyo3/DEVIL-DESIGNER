@@ -1,4 +1,3 @@
-"""Native mesh metadata, slit topology, per-piece cloth groups, and anchors."""
 import json
 import math
 import bpy

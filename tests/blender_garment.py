@@ -1,4 +1,3 @@
-"""Integration and actual draping test. Run with --background --factory-startup."""
 import json
 import math
 from pathlib import Path
@@ -6,6 +5,7 @@ import sys
 import bpy
 from mathutils import Vector
 ROOT = Path(__file__).resolve().parents[1]
+sys.dont_write_bytecode = True
 sys.path.insert(0,str(ROOT))
 import devil_designer
 from devil_designer import garment
@@ -90,7 +90,7 @@ check(result.name in scene.objects,'reset preserves finished garments')
 check(all(not p.hide_get() for p in garment.generated(scene,'panel')),'reset restores arranged panels')
 check(not garment.generated(scene,'simulation'),'reset discards old cloth cache object')
 expected = scene.dd_document
-output = ROOT/'build'/'garment-test.blend'
+output = ROOT/'scratch'/'garment-test.blend'
 output.parent.mkdir(exist_ok=True)
 bpy.ops.wm.save_as_mainfile(filepath=str(output))
 bpy.ops.wm.open_mainfile(filepath=str(output))
@@ -99,6 +99,6 @@ check(len(Document.loads(expected).seams)==4,'seams survive save/reopen')
 check(len(garment.generated(bpy.context.scene,'final'))==1,'finished garment survives save/reopen')
 report = dict(blender=bpy.app.version_string,checks=checks,initial_seam_gap=initial,
               final_seam_gap=final,unclosed_pairs=unclosed,vertices=len(coords))
-(ROOT/'build'/'garment-report.json').write_text(json.dumps(report,indent=2))
+(ROOT/'scratch'/'garment-report.json').write_text(json.dumps(report,indent=2))
 devil_designer.unregister()
 print('ALL GARMENT CHECKS PASSED',flush=True)

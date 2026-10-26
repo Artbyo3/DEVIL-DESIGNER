@@ -1,8 +1,3 @@
-"""Launch with blender --factory-startup --python tests/gui_preview.py.
-
-Uses a separate factory scene; no user file or preferences are changed.
-A timer defers invocation until Blender has a real window event loop.
-"""
 from pathlib import Path
 from types import SimpleNamespace
 import json
@@ -10,6 +5,7 @@ import sys
 import traceback
 import bpy
 ROOT = Path(__file__).resolve().parents[1]
+sys.dont_write_bytecode = True
 sys.path.insert(0,str(ROOT))
 bpy.context.preferences.view.show_splash = False
 import devil_designer
@@ -299,13 +295,13 @@ def run():
             op.inspector_tab='AVATAR'
             op.refresh_controls()
             op.save_window()
-            bpy.ops.wm.save_as_mainfile(filepath=str(ROOT/'build'/'floating-editor-preview.blend'))
-        (ROOT/'build'/'gui-report.json').write_text(json.dumps({'passed':report},indent=2))
+            bpy.ops.wm.save_as_mainfile(filepath=str(ROOT/'scratch'/'floating-editor-preview.blend'))
+        (ROOT/'scratch'/'gui-report.json').write_text(json.dumps({'passed':report},indent=2))
         print('GUI CHECKS:',report)
     except Exception:
-        (ROOT/'build'/'gui-report.json').write_text(json.dumps({'passed':report,'error':traceback.format_exc()},indent=2))
+        (ROOT/'scratch'/'gui-report.json').write_text(json.dumps({'passed':report,'error':traceback.format_exc()},indent=2))
         traceback.print_exc()
     return None
 
-(ROOT/'build').mkdir(exist_ok=True)
+(ROOT/'scratch').mkdir(exist_ok=True)
 bpy.app.timers.register(run,first_interval=2.0)
