@@ -9,25 +9,35 @@ from .core import area, triangulate, contains
 from . import curves
 from .controls import SETTINGS
 
-# Refined Apple-inspired design tokens
-BG = (0.071, 0.090, 0.110, 1.0)          # #12171C Canvas drafting background
-SHELL = (0.078, 0.098, 0.118, 1.0)       # #14191E Base window shell
-CHROME = (0.102, 0.125, 0.149, 1.0)      # #1A2026 Header / footer chrome
-RAIL_BG = (0.090, 0.114, 0.137, 1.0)     # #171D23 Tool rail background
-VIEWBAR = (0.086, 0.110, 0.133, 1.0)     # #161C22 Canvas utility strip
-INSPECTOR = (0.110, 0.137, 0.165, 1.0)   # #1C232A Inspector background
-FIELD_BG = (0.078, 0.106, 0.129, 1.0)    # #141B21 Field background
-ELEVATED = (0.145, 0.188, 0.224, 1.0)    # #253039 Elevated control
-BORDER = (0.204, 0.251, 0.290, 1.0)      # #34404A Structural border
-BORDER_SUBTLE = (0.165, 0.208, 0.243, 1.0) # #2A353E Quiet border
-TEXT = (0.929, 0.941, 0.949, 1.0)        # #EDF0F2 Primary text
-TEXT_SUB = (0.643, 0.686, 0.725, 1.0)    # #A4AFB9 Secondary text
-MUTED = (0.467, 0.522, 0.573, 1.0)       # #778592 Muted text
-ACCENT = (0.475, 0.855, 0.780, 1.0)      # #79DAC7 Primary Mint Accent
-ACCENT_BG = (0.133, 0.243, 0.235, 1.0)   # #223E3C Soft accent background
-ACCENT_BORDER = (0.227, 0.396, 0.373, 1.0)# #3A655F Accent border
-ACCENT_TEXT = (0.063, 0.169, 0.165, 1.0) # #102B2A Dark contrast text on accent
-STEP_ACTIVE_BG = (0.188, 0.231, 0.267, 1.0)# #303B44 Active step pill
+from .ui_system import (
+    BG_BASE, BG_PANEL, BG_ELEVATED, BG_WELL,
+    TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED,
+    ACCENT, ACCENT_BG, ACCENT_BORDER, ACCENT_HOVER,
+    BORDER, BORDER_SUBTLE,
+    RADIUS_DEFAULT, RADIUS_SMALL, RADIUS_LARGE,
+    Tooltip, ComponentRenderer
+)
+from .canvas import STAGE_TOOLS
+
+# Section 5 Design System Tokens
+BG = BG_BASE
+SHELL = BG_BASE
+CHROME = BG_PANEL
+RAIL_BG = BG_PANEL
+VIEWBAR = (0.120, 0.141, 0.165, 1.0)
+INSPECTOR = BG_PANEL
+FIELD_BG = BG_WELL
+ELEVATED = BG_ELEVATED
+BORDER = BORDER
+BORDER_SUBTLE = BORDER_SUBTLE
+TEXT = TEXT_PRIMARY
+TEXT_SUB = TEXT_SECONDARY
+MUTED = TEXT_MUTED
+ACCENT = ACCENT
+ACCENT_BG = ACCENT_BG
+ACCENT_BORDER = ACCENT_BORDER
+ACCENT_TEXT = (0.063, 0.169, 0.165, 1.0)
+STEP_ACTIVE_BG = BG_ELEVATED
 
 # Pattern identity line colors
 PALETTE = [
@@ -444,31 +454,29 @@ class Renderer:
             # 5. Header chrome
             self.rect(l.header, CHROME)
             self.lines([(p.x, l.header.y), (p.x + p.w, l.header.y)], BORDER)
-            # Plain brand title (clean, no box mark, no subtitle)
-            self.text(p.x + 18 * s, l.header.y + 19 * s, "Devil Designer", 14, TEXT)
+            # Section 3A: DEVIL DESIGNER identity (48 px Top Bar)
+            self.text(p.x + 16 * s, l.header.y + (l.header.h - 11 * s) / 2, "DEVIL DESIGNER", 11, TEXT)
 
-            # 6. Tool Rail (Left vertical bar)
+            # 6. Left Tool Rail — 52 px (Section 3B)
             self.rect(l.rail, RAIL_BG)
             self.lines([(l.rail.x + l.rail.w, l.rail.y), (l.rail.x + l.rail.w, l.rail.y + l.rail.h)], BORDER)
-            self.text(l.rail.x + l.rail.w / 2, l.rail.y + l.rail.h - 16 * s, "TOOLS", 9, MUTED, True)
 
             # 7. Render all layout buttons (Rail tools, Header stage pills, Utilities)
             cur_stage = getattr(ed, 'stage', 'DRAFT')
             stage_map = {'STAGE_DRAFT': 'DRAFT', 'STAGE_SEW': 'SEW', 'STAGE_ARRANGE': 'ARRANGE', 'STAGE_SIMULATE': 'SIMULATE'}
+            stage_active_tools = {t[0] for t in STAGE_TOOLS.get(cur_stage, STAGE_TOOLS['DRAFT'])}
+            active_tooltip = None
 
             for name, (r, label) in l.buttons.items():
                 hover = r.contains(*ed.pointer)
                 if name.startswith('STAGE_'):
                     active = stage_map.get(name) == cur_stage
                     if active:
-                        self.round_rect(r, STEP_ACTIVE_BG, radius=7)
-                        self.round_rect_outline(r, (0.24, 0.30, 0.36, 1.0), radius=7, width=1)
+                        self.round_rect(r, STEP_ACTIVE_BG, radius=RADIUS_DEFAULT)
+                        self.round_rect_outline(r, ACCENT_BORDER, radius=RADIUS_DEFAULT, width=1.0)
                     elif hover:
-                        self.round_rect(r, ELEVATED, radius=7)
-                    num_prefix = label[:2]
-                    stage_title = label[3:]
-                    self.text(r.x + 12 * s, r.y + 9 * s, num_prefix, 9, ACCENT if active else MUTED)
-                    self.text(r.x + 30 * s, r.y + 9 * s, stage_title, 11, TEXT if active else TEXT_SUB)
+                        self.round_rect(r, (0.16, 0.19, 0.22, 1.0), radius=RADIUS_DEFAULT)
+                    self.text(r.x + r.w / 2, r.y + (r.h - 11 * s) / 2, label, 11, ACCENT if active else (TEXT if hover else TEXT_SUB), center=True)
                 elif name in {'LIBRARY', 'CLOSE', 'FULL', 'SETTINGS'}:
                     if hover:
                         self.round_rect(r, ELEVATED, radius=7)
@@ -521,41 +529,46 @@ class Renderer:
                         self.text(r.x + r.w / 2, r.y + 8 * s, label.split()[0], 10, color, True)
                 elif name in {'SELECT', 'POLYGON', 'RECTANGLE', 'ELLIPSE', 'INTERNAL', 'DART',
                               'SEW', 'PIN', 'TACK', 'PLACE', 'FREE_SEW', 'HELP'}:
-                    # Tool rail buttons
+                    # Section 3B: Tool rail buttons — Icons only, stage-contextual, hover tooltip
+                    if name != 'HELP' and name not in stage_active_tools:
+                        continue
                     active = (name == ed.tool)
                     if active:
-                        self.round_rect(r, ACCENT_BG, radius=8)
-                        self.round_rect_outline(r, ACCENT_BORDER, radius=8, width=1.2)
+                        self.round_rect(r, ACCENT_BG, radius=RADIUS_DEFAULT)
+                        self.round_rect_outline(r, ACCENT_BORDER, radius=RADIUS_DEFAULT, width=1.2)
                     elif hover:
-                        self.round_rect(r, ELEVATED, radius=8)
+                        self.round_rect(r, ELEVATED, radius=RADIUS_DEFAULT)
 
                     color = ACCENT if active else (TEXT if hover else TEXT_SUB)
                     if name != 'HELP':
-                        # Centered icon
-                        self.draw_icon(name, r.x + r.w / 2, r.y + r.h * 0.60, 16, color)
-                        # Short label
-                        short_lbl = label.split()[0]
-                        self.text(r.x + r.w / 2, r.y + 4 * s, short_lbl, 8, color, True, max_width=r.w - 4 * s)
-                        # Shortcut in top-right
-                        shortcut = {'SELECT': 'V', 'POLYGON': 'P', 'RECTANGLE': 'R', 'ELLIPSE': 'E',
-                                    'INTERNAL': 'I', 'DART': 'D', 'SEW': 'J', 'PIN': 'K', 'TACK': 'T'}.get(name, '')
-                        if shortcut:
-                            self.text(r.x + r.w - 5 * s, r.y + r.h - 9 * s, shortcut, 7, (*ACCENT[:3], 0.8) if active else MUTED, True)
+                        self.draw_icon(name, r.x + r.w / 2, r.y + r.h / 2, 17, color)
+                        if hover:
+                            tool_lbl = label.split()[0]
+                            sc = {'SELECT': 'V', 'POLYGON': 'P', 'RECTANGLE': 'R', 'ELLIPSE': 'E',
+                                  'INTERNAL': 'I', 'DART': 'D', 'SEW': 'J', 'PIN': 'K', 'TACK': 'T', 'PLACE': 'G', 'FREE_SEW': 'F'}.get(name, '')
+                            active_tooltip = (tool_lbl, sc, (r.x + r.w + 6 * s, r.y + r.h / 2))
                     else:
                         self.text(r.x + r.w / 2, r.y + 6 * s, "?", 12, color, True)
+                        if hover:
+                            active_tooltip = ("Shortcuts", "?", (r.x + r.w + 6 * s, r.y + r.h / 2))
 
             # 8. Inspector panel rendering
             self.settings(ed)
 
-            # 9. Status footer
+            # 9. Bottom Status Bar — 28 px (Section 3E)
             self.clip(p)
-            self.rect(l.footer, CHROME)
+            self.rect(l.footer, BG_PANEL)
             self.lines([(p.x, l.footer.y + l.footer.h), (p.x + p.w, l.footer.y + l.footer.h)], BORDER)
-            # Message and piece counts (clean, plain, no dot, no 'Ready', no target note)
+            # Current operation / tool hint on left
+            op_msg = ed.message if ed.message else "Ready"
+            self.text(p.x + 14 * s, l.footer.y + (l.footer.h - 10 * s) / 2, op_msg, 10, TEXT_SECONDARY, max_width=p.w * 0.55)
+            # Selection info & coordinates on right
             world = view.world(ed.pointer, c)
             count = len(ed.session.document.patterns)
-            stat_msg = f"{count} piece{'s' if count != 1 else ''}  ·  X {world[0] * 100:.1f}  Y {world[1] * 100:.1f} cm"
-            self.text(p.x + 18 * s, l.footer.y + (l.footer.h - 10 * s) / 2, stat_msg, 10, MUTED, max_width=p.w * 0.8)
+            sel_msg = f"{count} piece{'s' if count != 1 else ''}  ·  X {world[0] * 100:.1f}  Y {world[1] * 100:.1f} cm"
+            blf.size(0, 10 * s)
+            mw = blf.dimensions(0, sel_msg)[0]
+            self.text(p.x + p.w - mw - 14 * s, l.footer.y + (l.footer.h - 10 * s) / 2, sel_msg, 10, TEXT_MUTED)
 
             # Corner resize grip
             if not ed.full:
@@ -563,6 +576,11 @@ class Renderer:
                     self.lines([(p.x + p.w - inset * s, p.y + 3 * s), (p.x + p.w - 3 * s, p.y + inset * s)], MUTED)
 
             self.body_picker(ed)
+
+            # Render active tooltip
+            if active_tooltip:
+                txt, sc, pos = active_tooltip
+                ComponentRenderer.draw_tooltip(self, Tooltip(text=txt, shortcut=sc, pos=pos, visible=True), s)
         finally:
             blf.disable(0, blf.CLIPPING)
             gpu.state.scissor_set(*scissor)
