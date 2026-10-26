@@ -67,8 +67,8 @@ class Control:
     meta: str = ''
     sub: str = ''
     swatch: tuple = None
-    btn_a: tuple = None  # (Rect, key, label)
-    btn_b: tuple = None  # (Rect, key, label)
+    btn_a: tuple = None
+    btn_b: tuple = None
 
 TABS = ('DESIGN', 'AVATAR', 'SEW', 'CLOTH', 'LIBRARY')
 

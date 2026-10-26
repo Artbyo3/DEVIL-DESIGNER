@@ -17,7 +17,6 @@ except ImportError:
     batch_for_shader = None
     blf = None
 
-# We can import Rect from .canvas or define a standalone Rect if needed
 try:
     from .canvas import Rect
 except ImportError:
@@ -30,27 +29,23 @@ except ImportError:
         def contains(self, x, y):
             return self.x <= x <= self.x + self.w and self.y <= y <= self.y + self.h
 
-# ============================================================================
-# DESIGN SYSTEM TOKENS (Section 5)
-# ============================================================================
-BG_BASE = (0.098, 0.114, 0.133, 1.0)       # #191D22 (Window & base background)
-BG_PANEL = (0.137, 0.161, 0.188, 1.0)      # #232930 (Panel background / tool rail / header)
-BG_ELEVATED = (0.188, 0.220, 0.251, 1.0)   # #303840 (Elevated cards / active buttons)
-BG_WELL = (0.078, 0.094, 0.110, 1.0)       # #14181C (Recessed numeric inputs & fields)
+BG_BASE = (0.098, 0.114, 0.133, 1.0)
+BG_PANEL = (0.137, 0.161, 0.188, 1.0)
+BG_ELEVATED = (0.188, 0.220, 0.251, 1.0)
+BG_WELL = (0.078, 0.094, 0.110, 1.0)
 
-TEXT_PRIMARY = (0.949, 0.957, 0.965, 1.0) # #F2F4F6 (High contrast primary text)
-TEXT_SECONDARY = (0.612, 0.651, 0.690, 1.0)# #9CA6B0 (Secondary labels & metadata)
-TEXT_MUTED = (0.450, 0.490, 0.530, 1.0)   # #737D87 (Shortcuts & subtle notes)
+TEXT_PRIMARY = (0.949, 0.957, 0.965, 1.0)
+TEXT_SECONDARY = (0.612, 0.651, 0.690, 1.0)
+TEXT_MUTED = (0.450, 0.490, 0.530, 1.0)
 
-ACCENT = (0.439, 0.835, 0.773, 1.0)       # #70D5C5 (Apple mint accent)
-ACCENT_BG = (0.118, 0.212, 0.200, 1.0)    # #1E3633 (Active tool indicator surface)
-ACCENT_BORDER = (0.227, 0.420, 0.388, 1.0)# #3A6B63 (Active tool outline)
-ACCENT_HOVER = (0.520, 0.890, 0.830, 1.0) # Highlight hover
+ACCENT = (0.439, 0.835, 0.773, 1.0)
+ACCENT_BG = (0.118, 0.212, 0.200, 1.0)
+ACCENT_BORDER = (0.227, 0.420, 0.388, 1.0)
+ACCENT_HOVER = (0.520, 0.890, 0.830, 1.0)
 
-BORDER = (0.176, 0.208, 0.243, 1.0)       # #2D353E (Structural 1px dividers)
-BORDER_SUBTLE = (0.227, 0.267, 0.310, 1.0)# #3A444F (Card & control borders)
+BORDER = (0.176, 0.208, 0.243, 1.0)
+BORDER_SUBTLE = (0.227, 0.267, 0.310, 1.0)
 
-# Spacing scale
 SPACE_4 = 4.0
 SPACE_8 = 8.0
 SPACE_12 = 12.0
@@ -61,7 +56,6 @@ RADIUS_DEFAULT = 7.0
 RADIUS_SMALL = 5.0
 RADIUS_LARGE = 10.0
 
-# Logical Dimensions
 TOP_BAR_H = 48.0
 TOOL_RAIL_W = 52.0
 INSPECTOR_W = 280.0
@@ -69,9 +63,6 @@ STATUS_BAR_H = 28.0
 VIEWBAR_H = 38.0
 
 
-# ============================================================================
-# COMPONENT BASE CLASS & PRIMITIVES
-# ============================================================================
 @dataclass
 class UIComponent:
     id: str
@@ -93,7 +84,7 @@ class UIComponent:
 @dataclass
 class Button(UIComponent):
     label: str = ""
-    kind: str = "standard"  # "standard", "primary", "secondary", "ghost", "pill"
+    kind: str = "standard"
     icon: str = ""
     badge: str = ""
     active: bool = False
@@ -117,7 +108,7 @@ class Toggle(UIComponent):
 class Dropdown(UIComponent):
     label: str = ""
     value: str = ""
-    options: List[Tuple[str, str]] = field(default_factory=list)  # (key, display_label)
+    options: List[Tuple[str, str]] = field(default_factory=list)
     open: bool = False
     menu_rect: Optional[Rect] = None
 
@@ -199,15 +190,12 @@ class ScrollablePanel:
 @dataclass
 class ContextMenu:
     rect: Rect
-    items: List[Tuple[str, str, Optional[str]]] = field(default_factory=list)  # (id, label, shortcut)
+    items: List[Tuple[str, str, Optional[str]]] = field(default_factory=list)
     open: bool = False
     anchor: Tuple[float, float] = (0.0, 0.0)
     item_rects: Dict[str, Rect] = field(default_factory=dict)
 
 
-# ============================================================================
-# COMPONENT RENDERING ROUTINES (Shared GPU batches)
-# ============================================================================
 class ComponentRenderer:
     """Renders UI components using exact component bounds."""
 
@@ -237,13 +225,12 @@ class ComponentRenderer:
             if btn.hover:
                 draw_ctx.round_rect(r, BG_ELEVATED, radius=RADIUS_DEFAULT)
             text_color = TEXT_PRIMARY if btn.hover else TEXT_SECONDARY
-        else:  # standard
+        else:
             bg = BG_ELEVATED if btn.hover else BG_PANEL
             draw_ctx.round_rect(r, bg, radius=RADIUS_DEFAULT)
             draw_ctx.round_rect_outline(r, BORDER_SUBTLE, radius=RADIUS_DEFAULT, width=1.0)
             text_color = TEXT_PRIMARY if btn.hover else TEXT_SECONDARY
 
-        # Center label & icon
         if btn.icon:
             draw_ctx.draw_icon(btn.icon, r.x + 14 * s, r.y + r.h / 2, 14, text_color)
             draw_ctx.text(r.x + 28 * s, r.y + (r.h - 10 * s) / 2, btn.label, 11, text_color)
@@ -270,7 +257,6 @@ class ComponentRenderer:
     def draw_toggle(draw_ctx, toggle: Toggle, scale: float):
         s = scale
         r = toggle.rect
-        # Pill toggle switch
         pill_w = 34 * s
         pill_h = 18 * s
         pill_x = r.x + r.w - pill_w - 4 * s
@@ -279,19 +265,16 @@ class ComponentRenderer:
 
         if toggle.value:
             draw_ctx.round_rect(pill_r, ACCENT, radius=pill_h / 2)
-            # Thumb right
             thumb_cx = pill_x + pill_w - pill_h / 2
             thumb_cy = pill_y + pill_h / 2
             draw_ctx.dot((thumb_cx, thumb_cy), pill_h / 2 - 2 * s, (0.06, 0.16, 0.15, 1.0))
         else:
             draw_ctx.round_rect(pill_r, BG_WELL, radius=pill_h / 2)
             draw_ctx.round_rect_outline(pill_r, BORDER_SUBTLE, radius=pill_h / 2, width=1.0)
-            # Thumb left
             thumb_cx = pill_x + pill_h / 2
             thumb_cy = pill_y + pill_h / 2
             draw_ctx.dot((thumb_cx, thumb_cy), pill_h / 2 - 2 * s, TEXT_MUTED)
 
-        # Label on left
         draw_ctx.text(r.x + 4 * s, r.y + (r.h - 10 * s) / 2, toggle.label, 11, TEXT_PRIMARY if toggle.hover else TEXT_SECONDARY)
 
     @staticmethod
@@ -302,16 +285,13 @@ class ComponentRenderer:
         minus_r = num.minus_rect
         plus_r = num.plus_rect
 
-        # Label above or beside
         draw_ctx.text(r.x, r.y + r.h - 13 * s, num.label, 10, TEXT_SECONDARY)
 
-        # Recessed value well
         well_bg = BG_ELEVATED if active_editing else BG_WELL
         draw_ctx.round_rect(vr, well_bg, radius=RADIUS_SMALL)
         outline_col = ACCENT if active_editing else (BORDER_SUBTLE if not num.hover else (0.35, 0.42, 0.48, 1.0))
         draw_ctx.round_rect_outline(vr, outline_col, radius=RADIUS_SMALL, width=1.2 if active_editing else 1.0)
 
-        # Value text + unit
         disp_text = active_text if active_editing else num.text_value
         draw_ctx.text(vr.x + 8 * s, vr.y + (vr.h - 11 * s) / 2, disp_text, 11, TEXT_PRIMARY if not active_editing else ACCENT)
         if num.unit and not active_editing and blf:
@@ -319,7 +299,6 @@ class ComponentRenderer:
             vw = blf.dimensions(0, disp_text)[0]
             draw_ctx.text(vr.x + 12 * s + vw, vr.y + (vr.h - 10 * s) / 2, num.unit, 10, TEXT_MUTED)
 
-        # Step buttons (+ / -)
         if minus_r and plus_r:
             for br, symbol in [(minus_r, "–"), (plus_r, "+")]:
                 draw_ctx.round_rect(br, BG_PANEL, radius=RADIUS_SMALL)
@@ -363,7 +342,6 @@ class ComponentRenderer:
         w = tw + sw + 18 * s
         h = 24 * s
 
-        # Keep on screen
         r = Rect(x + 10 * s, y - h / 2, w, h)
         draw_ctx.round_rect(r, (0.08, 0.10, 0.12, 0.95), radius=5.0)
         draw_ctx.round_rect_outline(r, BORDER_SUBTLE, radius=5.0, width=1.0)

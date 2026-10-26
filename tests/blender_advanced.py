@@ -70,7 +70,6 @@ for hook in [m for m in obj.modifiers if m.type=='HOOK']:
     check((actual-target).length<.002,'tack moves the pinned fabric vertex to the actual avatar target')
 check(bool(cloth.settings.vertex_group_structural_stiffness) and bool(cloth.settings.vertex_group_bending),'per-pattern presets use native stiffness groups')
 check(obj.data.attributes.get('dd_piece') is not None,'combined garment preserves piece face sets')
-# Keep a rest-frame result to check attributes and groups independently of draping this intentionally mismatched sample.
 scene.frame_set(scene.frame_start)
 obj.evaluated_get(bpy.context.evaluated_depsgraph_get()).data.vertices[0].co
 result,_=garment.keep_drape(bpy.context)

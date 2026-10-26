@@ -19,7 +19,6 @@ from .ui_system import (
 )
 from .canvas import STAGE_TOOLS
 
-# Section 5 Design System Tokens
 BG = BG_BASE
 SHELL = BG_BASE
 CHROME = BG_PANEL
@@ -39,12 +38,11 @@ ACCENT_BORDER = ACCENT_BORDER
 ACCENT_TEXT = (0.063, 0.169, 0.165, 1.0)
 STEP_ACTIVE_BG = BG_ELEVATED
 
-# Pattern identity line colors
 PALETTE = [
-    (0.741, 0.651, 0.914),  # #BDA6E9 Violet
-    (0.843, 0.694, 0.482),  # #D7B17B Sand / Gold
-    (0.475, 0.733, 0.816),  # #79BBD0 Cyan
-    (0.486, 0.804, 0.659),  # #7CCEA8 Emerald
+    (0.741, 0.651, 0.914),
+    (0.843, 0.694, 0.482),
+    (0.475, 0.733, 0.816),
+    (0.486, 0.804, 0.659),
 ]
 
 
@@ -301,18 +299,15 @@ class Renderer:
         gpu.state.scissor_test_set(True)
 
         try:
-            # 1. Base window shell & border
             self.clip(p)
             self.rect(p, SHELL)
             self.round_rect_outline(p, BORDER, radius=12, width=1.2)
 
-            # 2. Canvas surface
             self.rect(c, BG)
             self.clip(c)
             self.body_reference(ed)
             self.grid(view, c)
 
-            # Canvas empty guide & interactive quick-start cards
             if not ed.session.document.patterns and not ed.draft and not ed.gesture and not ed.reference_corners():
                 midx, midy = c.x + c.w / 2, c.y + c.h / 2
                 self.text(midx, midy + 54 * s, "Start Designing Garments", 15, TEXT, True, max_width=c.w - 32 * s)
@@ -321,14 +316,12 @@ class Renderer:
                 card1 = Rect(midx - 175 * s, midy - 25 * s, 170 * s, 44 * s)
                 card2 = Rect(midx + 5 * s, midy - 25 * s, 170 * s, 44 * s)
 
-                # Card 1: Load Bodice Demo
                 h1 = card1.contains(*ed.pointer)
                 self.round_rect(card1, ACCENT_BG if h1 else ELEVATED, radius=8)
                 self.round_rect_outline(card1, ACCENT_BORDER if h1 else BORDER_SUBTLE, radius=8, width=1.0)
                 self.text(card1.x + card1.w / 2, card1.y + 24 * s, "✨ Load Bodice Demo", 11, ACCENT if h1 else TEXT, True)
                 self.text(card1.x + card1.w / 2, card1.y + 10 * s, "Two-piece sewn top + avatar", 9, MUTED, True)
 
-                # Card 2: Quick Basic Panel
                 h2 = card2.contains(*ed.pointer)
                 self.round_rect(card2, ACCENT_BG if h2 else ELEVATED, radius=8)
                 self.round_rect_outline(card2, ACCENT_BORDER if h2 else BORDER_SUBTLE, radius=8, width=1.0)
@@ -337,7 +330,6 @@ class Renderer:
 
                 self.text(midx, midy - 52 * s, "Shortcuts:  P  Polygon   /   R  Rectangle   /   E  Ellipse   /   V  Select", 10, MUTED, True, max_width=c.w - 24 * s)
 
-            # Draw patterns
             for index, source in enumerate(ed.session.document.patterns):
                 pat = ed.preview_pattern(source)
                 selected = ed.session.selected == pat.id
@@ -346,10 +338,8 @@ class Renderer:
                 holes = [path.outline() for path in pat.paths if path.role == 'HOLE']
                 color = PALETTE[index % len(PALETTE)]
 
-                # Clean fill
                 self.fill_pattern(pat.id, world, outline, (*color, 0.22 if selected else 0.12), holes, view, c)
 
-                # Loops and outlines
                 for path, nodes, closed, role in pat.loops():
                     points = world if path == 'OUTER' else pat.path(path).outline()
                     screen = [view.screen(point, c) for point in points]
@@ -360,7 +350,6 @@ class Renderer:
                     for i, v in enumerate(nodes):
                         point = view.screen((v.x, v.y), c)
                         chosen = active and (ed.session.corner == i or i in ed.session.point_selection)
-                        # Selection handle: clean handle dot
                         self.dot(point, 5.5 if chosen else 3.8, ACCENT if chosen else (*color, 1))
                         if chosen:
                             for name in ('incoming', 'outgoing'):
@@ -386,7 +375,6 @@ class Renderer:
                             self.text(dim_r.x + 3 * s, dim_r.y + 2 * s, dim_str, 10, TEXT_SUB)
 
                 xs, ys = [pt[0] for pt in outline], [pt[1] for pt in outline]
-                # Pattern label with clean CAD pill badge
                 label_txt = pat.name + ' / ' + pat.preset.title()
                 blf.size(0, 11 * s)
                 lw, dh = blf.dimensions(0, label_txt)
@@ -400,7 +388,6 @@ class Renderer:
                     self.round_rect_outline(lbl_r, BORDER_SUBTLE, radius=4, width=0.8)
                 self.text(lx, ly + 2 * s, label_txt, 11, TEXT if selected else MUTED, True)
 
-            # Anchors (pins / tacks)
             for anchor in ed.session.document.anchors:
                 point = view.screen((anchor.x, anchor.y), c)
                 color = (1, 0.42, 0.3, 1) if anchor.kind == 'PIN' else (1, 0.78, 0.3, 1)
@@ -410,7 +397,6 @@ class Renderer:
 
             self.seams(ed)
 
-            # Live seam pairing assistant HUD
             if getattr(ed, 'stage', '') == 'SEW' and ed.pending_edge:
                 doc = ed.session.document
                 try:
@@ -439,7 +425,6 @@ class Renderer:
             if len(self.triangle_cache) > 250:
                 self.triangle_cache.clear()
 
-            # Active drafting
             if ed.draft:
                 pts = [view.screen(point, c) for point in ed.draft]
                 self.lines(pts, ACCENT, 2.2, True)
@@ -466,12 +451,10 @@ class Renderer:
                 self.text(pts[2][0] + 10 * s, pts[2][1] + 10 * s,
                           f"{abs(b[0] - a[0]) * 100:.1f} x {abs(b[1] - a[1]) * 100:.1f} cm", 11, ACCENT)
 
-            # Canvas floating HUD badges
             guide_txt = f"{ed.tool.title()}: {ed.message}" if ed.tool != 'SELECT' else "Drag a point to reshape · Shift to constrain"
             hud_r = Rect(c.x + 16 * s, c.y + 14 * s, min(360 * s, c.w - 32 * s), 28 * s)
             self.round_rect(hud_r, (0.098, 0.129, 0.153, 0.92), radius=6)
             self.round_rect_outline(hud_r, BORDER_SUBTLE, radius=6, width=1)
-            # Shortcut pill
             key_pill = Rect(hud_r.x + 5 * s, hud_r.y + 4 * s, 18 * s, 20 * s)
             self.round_rect(key_pill, (0.188, 0.231, 0.267, 1.0), radius=4)
             tool_key = {'SELECT': 'V', 'POLYGON': 'P', 'RECTANGLE': 'R', 'ELLIPSE': 'E',
@@ -479,23 +462,18 @@ class Renderer:
             self.text(key_pill.x + key_pill.w / 2, key_pill.y + 5 * s, tool_key, 9, TEXT, True)
             self.text(hud_r.x + 28 * s, hud_r.y + 7 * s, guide_txt, 10, TEXT_SUB, max_width=hud_r.w - 34 * s)
 
-            # Bottom-right zoom & grid HUD
             grid_txt = f"1 cm grid  ·  {int(view.zoom / 8)}%"
             blf.size(0, 10 * s)
             gw = blf.dimensions(0, grid_txt)[0]
             self.text(c.x + c.w - gw - 14 * s, c.y + 18 * s, grid_txt, 10, MUTED)
 
-            # Top-left view HUD
             self.text(c.x + 14 * s, c.y + c.h - 18 * s, "FRONT VIEW  ·  Centimetres", 9, MUTED)
 
-            # 3. Canvas Rulers
             self.clip(p)
             self.rulers(ed)
 
-            # 4. Viewbar (Canvas utility strip)
             self.rect(l.viewbar, VIEWBAR)
             self.lines([(l.viewbar.x, l.viewbar.y), (l.viewbar.x + l.viewbar.w, l.viewbar.y)], BORDER_SUBTLE)
-            # Left context title and subtitle
             stage_names = {
                 'DRAFT': ('Pattern canvas', f"{len(ed.session.document.patterns)} piece{'s' if len(ed.session.document.patterns) != 1 else ''} · Cotton"),
                 'SEW': ('Sewing workspace', f"{len(ed.session.document.seams)} seam pair{'s' if len(ed.session.document.seams) != 1 else ''} · {len(ed.session.document.patterns)} pieces"),
@@ -507,17 +485,13 @@ class Renderer:
             self.text(l.viewbar.x + 16 * s, l.viewbar.y + 24 * s, v_title, 13, TEXT, max_width=l.viewbar.w * 0.4)
             self.text(l.viewbar.x + 16 * s, l.viewbar.y + 9 * s, v_sub, 10, MUTED, max_width=l.viewbar.w * 0.4)
 
-            # 4b. Workflow action bar
             self.rect(l.workflow, SHELL)
             self.lines([(l.workflow.x, l.workflow.y), (l.workflow.x + l.workflow.w, l.workflow.y)], BORDER_SUBTLE)
 
-            # 5. Header chrome (48 px Top Bar)
             self.rect(l.header, CHROME)
             self.lines([(p.x, l.header.y), (p.x + p.w, l.header.y)], BORDER)
-            # Clean plain typographic brand identity
             self.text(p.x + 16 * s, l.header.y + (l.header.h - 11 * s) / 2, "DEVIL DESIGNER", 11, TEXT)
 
-            # Render stage segmented container pill behind header stages
             draft_btn = l.buttons.get('STAGE_DRAFT')
             sim_btn = l.buttons.get('STAGE_SIMULATE')
             if draft_btn and sim_btn:
@@ -528,13 +502,11 @@ class Renderer:
                 self.round_rect(container, (0.07, 0.09, 0.12, 0.95), radius=8)
                 self.round_rect_outline(container, BORDER_SUBTLE, radius=8, width=0.8)
 
-            # 6. Left Tool Rail \u2014 52 px (Section 3B)
             self.rect(l.rail, RAIL_BG)
             self.lines([(l.rail.x + l.rail.w, l.rail.y), (l.rail.x + l.rail.w, l.rail.y + l.rail.h)], BORDER)
             self.text(l.rail.x + l.rail.w / 2, l.rail.y + l.rail.h - 16 * s, "TOOLS", 8, MUTED, center=True)
             self.lines([(l.rail.x + 8 * s, l.rail.y + 34 * s), (l.rail.x + l.rail.w - 8 * s, l.rail.y + 34 * s)], BORDER_SUBTLE)
 
-            # 7. Render all layout buttons (Rail tools, Header stage pills, Utilities)
             cur_stage = getattr(ed, 'stage', 'DRAFT')
             stage_map = {'STAGE_DRAFT': 'DRAFT', 'STAGE_SEW': 'SEW', 'STAGE_ARRANGE': 'ARRANGE', 'STAGE_SIMULATE': 'SIMULATE'}
             stage_active_tools = {t[0] for t in STAGE_TOOLS.get(cur_stage, STAGE_TOOLS['DRAFT'])}
@@ -587,7 +559,6 @@ class Renderer:
                     display_lbl = 'Keep mesh' if name == 'KEEP' else label.split()[0]
                     self.text(r.x + r.w / 2, r.y + 7 * s, display_lbl, 10, color, True)
                 elif name in {'REFERENCE', 'LENGTHS', 'SNAP', 'FIT', 'INSPECTOR', 'UNDO', 'REDO'}:
-                    # Utility chips in viewbar
                     active = (name == 'SNAP' and ed.snap) or \
                              (name == 'REFERENCE' and ed._scene.dd_reference_visible) or \
                              (name == 'LENGTHS' and ed._scene.dd_lengths_visible) or \
@@ -610,7 +581,6 @@ class Renderer:
                         self.text(r.x + r.w / 2, r.y + 8 * s, label.split()[0], 10, color, True)
                 elif name in {'SELECT', 'POLYGON', 'RECTANGLE', 'ELLIPSE', 'INTERNAL', 'DART',
                               'SEW', 'PIN', 'TACK', 'PLACE', 'FREE_SEW', 'HELP'}:
-                    # Section 3B: Tool rail buttons \u2014 Icons only, stage-contextual, hover tooltip
                     if name != 'HELP' and name not in stage_active_tools:
                         continue
                     active = (name == ed.tool)
@@ -633,17 +603,13 @@ class Renderer:
                         if hover:
                             active_tooltip = ("Shortcuts", "?", (r.x + r.w + 6 * s, r.y + r.h / 2))
 
-            # 8. Inspector panel rendering
             self.settings(ed)
 
-            # 9. Bottom Status Bar \u2014 28 px (Section 3E)
             self.clip(p)
             self.rect(l.footer, BG_PANEL)
             self.lines([(p.x, l.footer.y + l.footer.h), (p.x + p.w, l.footer.y + l.footer.h)], BORDER)
-            # Current operation / tool hint on left
             op_msg = ed.message if ed.message else "Ready"
             self.text(p.x + 14 * s, l.footer.y + (l.footer.h - 10 * s) / 2, op_msg, 10, TEXT_SECONDARY, max_width=p.w * 0.55)
-            # Selection info & coordinates on right
             world = view.world(ed.pointer, c)
             count = len(ed.session.document.patterns)
             sel_msg = f"{count} piece{'s' if count != 1 else ''}  ·  X {world[0] * 100:.1f}  Y {world[1] * 100:.1f} cm"
@@ -651,14 +617,12 @@ class Renderer:
             mw = blf.dimensions(0, sel_msg)[0]
             self.text(p.x + p.w - mw - 14 * s, l.footer.y + (l.footer.h - 10 * s) / 2, sel_msg, 10, TEXT_MUTED)
 
-            # Corner resize grip
             if not ed.full:
                 for inset in (4, 8, 12):
                     self.lines([(p.x + p.w - inset * s, p.y + 3 * s), (p.x + p.w - 3 * s, p.y + inset * s)], MUTED)
 
             self.body_picker(ed)
 
-            # Render active tooltip
             if active_tooltip:
                 txt, sc, pos = active_tooltip
                 ComponentRenderer.draw_tooltip(self, Tooltip(text=txt, shortcut=sc, pos=pos, visible=True), s)
@@ -756,7 +720,6 @@ class Renderer:
         self.rect(r, INSPECTOR)
         self.lines([(r.x, r.y), (r.x, r.y + r.h)], BORDER)
 
-        # Inspector Tabs - Modern Apple Segmented Control Pill Bar
         tab_items = list(inspector.tabs.items())
         if tab_items:
             first_tab = tab_items[0][1]
@@ -780,7 +743,6 @@ class Renderer:
 
             self.lines([(r.x, first_tab.y - 2 * s), (r.x + r.w, first_tab.y - 2 * s)], BORDER_SUBTLE)
 
-        # Scrollable inspector content
         self.clip(inspector.content)
         cr = inspector.content
         for item in inspector.controls:
@@ -789,14 +751,12 @@ class Renderer:
                 continue
 
             if item.kind == 'obj_h':
-                # Swatch + Object Title + Meta
                 swatch_box = Rect(box.x, box.y + 18 * s, 14 * s, 14 * s)
                 self.round_rect(swatch_box, (*item.swatch, 0.4), radius=4)
                 self.round_rect_outline(swatch_box, (*item.swatch, 1.0), radius=4, width=1.4)
                 self.text(box.x + 22 * s, box.y + 18 * s, item.label, 15, TEXT)
                 self.text(box.x + 22 * s, box.y + 4 * s, item.meta, 10, MUTED)
             elif item.kind == 'field_pair':
-                # 2-column card for Width / Height or X / Y
                 hw = (box.w - 8 * s) / 2
                 for fx, lab, key in [(box.x, item.label, item.key), (box.x + hw + 8 * s, item.sub, item.meta)]:
                     card_r = Rect(fx, box.y + 4 * s, hw, 48 * s)
@@ -827,7 +787,6 @@ class Renderer:
                     color = ACCENT if is_active else (TEXT if hover else TEXT_SUB)
                     self.text(chip_r.x + chip_r.w / 2, chip_r.y + 6 * s, chip_lbl, 9, color, center=True)
             elif item.kind == 'pair_buttons':
-                # Two elevated buttons side by side
                 for btn_rect, btn_key, btn_lbl in (item.btn_a, item.btn_b):
                     hover = btn_rect.contains(*ed.pointer)
                     self.round_rect(btn_rect, (0.18, 0.23, 0.28, 1.0) if hover else ELEVATED, radius=7)
@@ -914,7 +873,6 @@ class Renderer:
             elif item.kind == 'hint':
                 self.text(box.x, box.y + 10 * s, item.label, 9, MUTED, max_width=box.w)
 
-        # Scrollbar
         if inspector.max_scroll:
             self.round_rect(inspector.scrollbar, (0.11, 0.14, 0.18, 1.0), radius=2)
             self.round_rect(inspector.thumb, (0.35, 0.44, 0.50, 1.0), radius=2)
@@ -942,7 +900,6 @@ class Renderer:
             self.reference_revision = reference.revision
         alpha = scene.dd_reference_opacity
         tint = (0.48, 0.56, 0.64)
-        # Flat, premixed colour projection
         color = tuple(BG[i] * (1 - alpha) + tint[i] * alpha for i in range(3)) + (1,)
         origin = ed.view.screen((scene.dd_reference_x, scene.dd_reference_y), ed.canvas_layout.canvas)
         zoom = ed.view.zoom

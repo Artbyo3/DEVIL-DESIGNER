@@ -31,12 +31,10 @@ def test_layout_resolution(w, h, scale=1.0):
     for stage in STAGES:
         layout = Layout(w, h, scale=scale, position=(20, 20, w - 40, h - 40), settings=True, stage=stage)
         
-        # 1. Check window boundaries
         p = layout.panel
         if p.w > w or p.h > h:
             issues.append(f"Panel bounds {p.w}x{p.h} exceed window {w}x{h}")
             
-        # 2. Check header, rail, inspector, footer geometry
         if layout.header.h < 40 * scale:
             issues.append(f"Header height {layout.header.h} below minimum at {w}x{h}")
         if layout.rail.w < 36 * scale:
@@ -44,30 +42,24 @@ def test_layout_resolution(w, h, scale=1.0):
         if layout.footer.h < 26 * scale:
             issues.append(f"Footer height {layout.footer.h} below minimum at {w}x{h}")
             
-        # 3. Check pairwise button collisions
         buttons = list(layout.buttons.items())
         for i in range(len(buttons)):
             n1, (r1, _) = buttons[i]
             for j in range(i + 1, len(buttons)):
                 n2, (r2, _) = buttons[j]
-                # Only check visible buttons in the same area
                 if (r1.y + r1.h > layout.rail.y and r2.y + r2.h > layout.rail.y):
-                    # Check if both are visible in rail
                     active_tools = [t[0] for t in STAGE_TOOLS.get(stage, [])]
                     if n1 in active_tools and n2 in active_tools:
                         if rect_intersects(r1, r2):
                             issues.append(f"Rail button overlap: {n1} vs {n2} at {w}x{h}")
-                # Check header pills
                 if n1.startswith("STAGE_") and n2.startswith("STAGE_"):
                     if rect_intersects(r1, r2):
                         issues.append(f"Header stage overlap: {n1} vs {n2} at {w}x{h}")
-                # Check viewbar buttons
                 view_btns = {"UNDO", "REDO", "LENGTHS", "REFERENCE", "SNAP", "FIT"}
                 if n1 in view_btns and n2 in view_btns:
                     if rect_intersects(r1, r2):
                         issues.append(f"Viewbar button overlap: {n1} vs {n2} at {w}x{h}")
                         
-        # 4. Check hit detection: button(x, y) resolves back to button name
         for name, (rect, _) in buttons:
             mid_x = rect.x + rect.w / 2
             mid_y = rect.y + rect.h / 2
@@ -88,11 +80,9 @@ def run_acceptance():
         "success": True
     }
     
-    # 1. Verify layout across required resolutions
     for w, h in RESOLUTIONS:
         print(f"Testing Layout at {w}x{h} (scale=1.0)...")
         issues = test_layout_resolution(w, h, scale=1.0)
-        # Also test with DPI scale 1.5
         issues_scaled = test_layout_resolution(w, h, scale=1.5)
         
         status = "PASSED" if not issues and not issues_scaled else "FAILED"
@@ -107,7 +97,6 @@ def run_acceptance():
         else:
             print(f"  PASSED at {w}x{h} (no overlapping controls, 100% valid hit detection)")
 
-    # 2. Interactive Blender tests and screenshots
     area = next(a for a in bpy.context.screen.areas if a.type == 'VIEW_3D')
     area.spaces.active.show_region_ui = False
     region = next(r for r in area.regions if r.type == 'WINDOW')
@@ -119,7 +108,6 @@ def run_acceptance():
         bpy.ops.devil_designer.pattern_editor('INVOKE_DEFAULT')
         op = editor._active
         
-        # Add sample garment geometry
         s = Session()
         s.add([(0, 0), (.35, 0), (.35, .45), (0, .45)])
         s.add([(.45, 0), (.80, 0), (.80, .45), (.45, .45)])
@@ -135,7 +123,6 @@ def run_acceptance():
                 stage = STAGES[step_idx % len(STAGES)]
                 op.set_stage(stage)
                 
-                # Position overlay window to match resolution test
                 op.canvas_layout = Layout(region.width, region.height, scale=1.0,
                                          position=(40, 40, min(w, region.width - 80), min(h, region.height - 80)),
                                          settings=True, stage=stage)
@@ -157,7 +144,6 @@ def run_acceptance():
                 step_idx += 1
                 return 0.8
             else:
-                # Finished all steps
                 (out_dir / "acceptance_report.json").write_text(json.dumps(report, indent=2))
                 print("=== ACCEPTANCE TESTS COMPLETE ===")
                 bpy.ops.wm.quit_blender()

@@ -301,7 +301,6 @@ class OverlayControls:
                         self.design_action(action)
                     self.refresh_controls()
                     return RUNNING
-                # Fallback to bottom CTA if inside inspector footer and not hitting an item
                 if self.canvas_layout.inspector_foot and self.canvas_layout.inspector_foot.contains(x, y):
                     cta = Rect(self.canvas_layout.inspector_foot.x + 12 * l.scale,
                                self.canvas_layout.inspector_foot.y + 10 * l.scale,

@@ -124,20 +124,16 @@ with bpy.context.temp_override(area=area, region=region):
         print(res.stderr)
         return None
         
-    # Crop to panel bounds
     try:
         rect = json.loads(rect_path.read_text(encoding="utf-8"))
         img = Image.open(full_path)
         win_w, win_h = img.size
-        # OpenGL coordinates: y=0 is bottom
         x = max(0, int(rect['panel_x']))
         w = min(win_w - x, int(rect['panel_w']))
         h = int(rect['panel_h'])
         y_bottom = int(rect['panel_y'])
-        # In PIL, y=0 is top
         y_top = max(0, win_h - (y_bottom + h))
         
-        # Add small 4px margin around panel for window border
         margin = 4
         crop_box = (
             max(0, x - margin),

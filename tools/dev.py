@@ -48,17 +48,14 @@ def do_quick_tests():
 def do_tests():
     print("\n=== RUNNING ALL TEST SUITES ===")
     
-    # 1. Headless unit tests
     if not do_quick_tests():
         return False
 
-    # 2. Background Blender tests
     for t in ["blender_smoke.py", "blender_garment.py", "blender_advanced.py", "blender_silhouette.py"]:
         if not run_cmd([BLENDER_PATH, "--background", "--factory-startup", "--python", f"tests/{t}"],
                        desc=f"Blender Background: {t}"):
             return False
 
-    # 3. In-engine GUI tests
     for t in ["gui_preview", "gui_silhouette", "gui_design"]:
         if not run_cmd([BLENDER_PATH, "--factory-startup", "--python", "tools/run_blender_gui.py", "--", t],
                        desc=f"In-Engine GUI: {t}"):
@@ -70,18 +67,15 @@ def do_tests():
 def do_build():
     print("\n=== BUILDING & VALIDATING EXTENSION ===")
     
-    # 1. Build zip
     if not run_cmd([sys.executable, "tools/build.py"], desc="Package extension zip"):
         return False
         
     zip_path = ROOT / "build" / "devil_designer-0.5.0.zip"
     
-    # 2. Validate extension
     if not run_cmd([BLENDER_PATH, "--background", "--factory-startup", "--command", "extension", "validate", str(zip_path)],
                    desc="Validate extension package"):
         return False
         
-    # 3. Sync to user extensions
     import shutil
     user_ext = Path(os.path.expandvars(r"%APPDATA%\Blender Foundation\Blender\5.2\extensions\user_default\devil_designer"))
     if user_ext.exists():

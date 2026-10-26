@@ -29,7 +29,6 @@ check(reference.refresh(bpy.context),'body selected and projected')
 check(not reference.error and bool(reference.triangles),'evaluated body has drawable reference geometry')
 check(abs(reference.bounds[1][1]-4.5)<1e-5,'body height preserves nonuniform object scale')
 check(abs(reference.bounds[1][0]-reference.bounds[0][0]-4)<1e-5,'body width preserves object scale')
-# Empty upper-right of the L must stay empty: a convex hull would fill it.
 empty=(1,3)
 check(not any(contains(empty,[reference.vertices[i] for i in tri]) for tri in reference.triangles),
       'projection keeps concave gaps empty')

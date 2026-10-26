@@ -38,7 +38,7 @@ class SeamTests(unittest.TestCase):
         self.assertEqual(self.s.document.dumps(),before)
         self.s.remove_seam(self.s.document.seams[0].id)
         self.s.sew(self.a,self.s.document.edge(self.a.pattern,0))
-        self.assertEqual(len(self.s.document.seams),1)  # Same-piece sewing is required for darts.
+        self.assertEqual(len(self.s.document.seams),1)
 
     def test_seams_survive_reshape_and_undo(self):
         self.s.sew(self.a,self.b)

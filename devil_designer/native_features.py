@@ -42,7 +42,6 @@ def decorate_mesh(mesh,piece,coords,metadata):
 
 
 def apply_presets(obj,cloth,pieces):
-    # Structural/shear/bend targets vary by piece via native cloth stiffness groups.
     for key,group_name,property_name,base_names in [
         ('structural','DD Structural','vertex_group_structural_stiffness',('tension','compression')),
         ('shear','DD Shear','vertex_group_shear_stiffness',('shear',)),
@@ -85,7 +84,6 @@ def add_anchors(context,obj,cloth,doc,anchor_indices):
         constraint.distance=.003/garment.metres_per_unit(scene)
         hook=obj.modifiers.new('DD Tack','HOOK');hook.object=empty
         hook.vertex_indices_set([index]);hook.falloff_type='NONE'
-        # Move the anchor to its target before the cloth pin group is evaluated.
         hook.matrix_inverse=Matrix.Translation(-obj.data.vertices[index].co)
         obj.modifiers.move(len(obj.modifiers)-1,0)
     cloth.settings.vertex_group_mass=group.name

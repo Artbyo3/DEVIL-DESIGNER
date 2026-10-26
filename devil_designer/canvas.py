@@ -96,7 +96,6 @@ class Layout:
             self.panel = clamp_window(position or default, available, s)
         p = self.panel
 
-        # Responsive inspector: 280 px standard, adapts below 1020 px to protect canvas space
         if settings:
             if p.w >= 1020 * s:
                 inspector_w = min(INSPECTOR_W * s, p.w * 0.35)
@@ -140,10 +139,8 @@ class Layout:
         self.ruler_left = Rect(p.x, self.canvas.y, 25 * s, self.canvas.h)
         self.resize = Rect(p.x + p.w - 18 * s, p.y, 18 * s, 18 * s)
 
-        # Register non-overlapping interactive buttons
         self.buttons = {}
 
-        # 1. Header controls: close, full, settings, library, and 4 workflow stage pills
         h_right_specs = [
             ("CLOSE", "X", 26),
             ("FULL", "Restore" if full else "Expand", 54),
@@ -158,7 +155,6 @@ class Layout:
             bx = max(p.x, min(p.x + p.w - w_act, hx))
             self.buttons[name] = (Rect(bx, self.header.y + 10 * s, w_act, 28 * s), label)
 
-        # Stage pills in header
         brand_w = min(130 * s, max(60 * s, p.w * 0.20))
         pill_avail = max(20 * s, hx - (p.x + brand_w + 10 * s))
         pills = [
@@ -175,7 +171,6 @@ class Layout:
             bx = max(p.x, min(p.x + p.w - step_w, px))
             self.buttons[name] = (Rect(bx, self.header.y + 9 * s, step_w, 30 * s), label)
 
-        # 2. Tool Rail (Vertical column on the left - contextual to stage)
         active_tools = STAGE_TOOLS.get(stage, STAGE_TOOLS['DRAFT'])
         tool_bw = min(38 * s, rail_w - 8 * s)
         tool_bh = 34 * s
@@ -183,13 +178,11 @@ class Layout:
         tool_start_y = self.rail.y + self.rail.h - 10 * s - tool_bh
         tool_gap = 4 * s
 
-        # Register visible active tools
         for i, (name, label, key) in enumerate(active_tools):
             ty = tool_start_y - i * (tool_bh + tool_gap)
             bx = max(p.x, min(p.x + p.w - tool_bw, tool_x))
             self.buttons[name] = (Rect(bx, ty, tool_bw, tool_bh), f"{label} {key}")
 
-        # Register remaining tools to ensure no KeyError in any test suite
         registered_keys = {name for name, _, _ in active_tools}
         hidden_idx = len(active_tools)
         for name, label, key in ALL_TOOLS:
@@ -202,7 +195,6 @@ class Layout:
         help_w = min(26 * s, tool_bw)
         self.buttons['HELP'] = (Rect(max(p.x, tool_x + (tool_bw - help_w) / 2), self.rail.y + 6 * s, help_w, 22 * s), "?")
 
-        # 3. Viewbar utilities (Right-aligned in viewbar)
         u_specs = [
             ('REDO', '>', 24),
             ('UNDO', '<', 24),
@@ -219,7 +211,6 @@ class Layout:
             bx = max(p.x, min(p.x + p.w - w_act, ux))
             self.buttons[name] = (Rect(bx, self.viewbar.y + 6 * s, w_act, 26 * s), label)
 
-        # 4. Workflow action row
         self.button_row([
             ('BUILD', 'Build', 42),
             ('ARRANGE', 'Arrange', 54),

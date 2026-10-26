@@ -111,7 +111,6 @@ def run():
             check(True,'all garment numeric settings reachable inside editor')
             op.inspector_scroll=0
             op.refresh_controls()
-            # Drawing input uses the canvas area, independently of the inspector.
             c=op.canvas_layout.canvas
             a,b=(c.x+55,c.y+55),(c.x+155,c.y+205)
             op.handle_event(bpy.context,event('R'))
@@ -129,7 +128,6 @@ def run():
             check(len(op.draft)==3,'polygon draft input')
             op.handle_event(bpy.context,event('ESC'))
             check(not op.draft and not op._closed,'Escape cancels draft without closing editor')
-            # Actual valid polygon creation via Enter.
             for pt in [a,(a[0]+90,a[1]),(a[0]+50,a[1]+90)]:
                 op.handle_event(bpy.context,event('LEFTMOUSE',point=pt))
             op.handle_event(bpy.context,event('RET'))
@@ -153,7 +151,6 @@ def run():
             bpy.ops.devil_designer.pattern_editor('INVOKE_DEFAULT')
             op=editor._active
             check(op is not None,'launcher reopens after shortcut toggle')
-            # Pair real edges through the overlay input path.
             s=Session()
             s.add([(-.45,-.2),(-.15,-.2),(-.15,.2),(-.45,.2)])
             s.add([(.15,-.2),(.45,-.2),(.45,.2),(.15,.2)])
@@ -179,7 +176,6 @@ def run():
             row=control(seam.id).rect
             click_rect(Rect(row.x+row.w-23,row.y+5,23,28))
             check(not op.session.document.seams,'custom seam list removes a pair')
-            # Build the same practical sewing demo used by the simulation integration test.
             op.session=Session()
             op.persist()
             bpy.context.scene.dd_spacing=.025
@@ -215,7 +211,6 @@ def run():
             op.refresh_controls()
             op.save_window()
             bpy.ops.wm.save_as_mainfile(filepath=str(ROOT/'build'/'floating-editor-preview.blend'))
-            # Exercise real GPU drawing in the next window redraw.
         (ROOT/'build'/'gui-report.json').write_text(json.dumps({'passed':report},indent=2))
         print('GUI CHECKS:',report)
     except Exception:

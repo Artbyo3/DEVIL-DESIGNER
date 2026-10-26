@@ -132,7 +132,6 @@ def build_panels(context):
     else:
         doc.uv_layout=dict(origin=[minx,miny],scale=extent)
         scene.dd_document=doc.dumps()
-    # Prepare every mesh before mutating the scene: a failed pattern leaves old panels intact.
     prepared = []
     try:
         for piece_index,p in enumerate(doc.patterns):
@@ -213,7 +212,6 @@ def arrange(context):
     low,high = bounds(avatar)
     unit = metres_per_unit(scene)
     center = (low+high)/2
-    # A torso is near the upper quarter of a full avatar. For a torso-only collider use its centre.
     body_height = high.z-low.z
     z = low.z+body_height*(.72 if body_height*unit>1 else .68)
     gap = scene.dd_clearance/unit

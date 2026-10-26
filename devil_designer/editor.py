@@ -2,7 +2,7 @@
 import math
 import bpy
 from .core import Document, Session, contains, validate_polygon
-from .canvas import Layout, View
+from .canvas import Layout, View, Rect
 from .interaction import OverlayControls
 from .design_tools import DesignTools
 from .silhouette import BodyReference, torso_alignment, VIEWS
@@ -519,7 +519,6 @@ class DD_OT_pattern_editor(DesignTools, OverlayControls, bpy.types.Operator):
         if event.type == 'MIDDLEMOUSE' and press:
             self.gesture = {'mode': 'PAN', 'last': self.pointer}
         elif event.type == 'LEFTMOUSE' and press:
-            # Interactive Empty Canvas Quick-Start Cards
             if not self.session.document.patterns and not self.draft and not self.gesture and not self.reference_corners():
                 c = self.canvas_layout.canvas
                 midx, midy = c.x + c.w / 2, c.y + c.h / 2

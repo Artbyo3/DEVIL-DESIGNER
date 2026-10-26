@@ -24,7 +24,6 @@ if report_file.exists():
     except Exception:
         pass
 
-# Run target test module
 target_file = ROOT / "tests" / (test_name if test_name.endswith(".py") else f"{test_name}.py")
 print(f"Loading test: {target_file}")
 print(f"Expecting report: {report_file}")

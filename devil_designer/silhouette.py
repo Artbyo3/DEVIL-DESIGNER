@@ -33,7 +33,6 @@ def torso_alignment(bounds,pattern_points):
     height=high[1]-low[1]
     cx=(min(p[0] for p in pattern_points)+max(p[0] for p in pattern_points))/2
     cy=(min(p[1] for p in pattern_points)+max(p[1] for p in pattern_points))/2
-    # Match the front/back arrangement's torso-height convention.
     return cx,cy-(low[1]+height*(.72 if height>1 else .68))
 
 
@@ -80,7 +79,6 @@ class BodyReference:
             unit=max(1e-6,scene.unit_settings.scale_length)
             matrix=evaluated.matrix_world
             world=[tuple((matrix @ v.co)*unit) for v in mesh.vertices]
-            # Ignore loose vertices so helpers do not distort the reference's real bounds.
             used=sorted({i for tri in mesh.loop_triangles for i in tri.vertices})
             mapping={index:new for new,index in enumerate(used)}
             self.vertices,self.bounds=project_vertices([world[i] for i in used],scene.dd_reference_view)

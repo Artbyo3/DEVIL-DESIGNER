@@ -85,12 +85,10 @@ check(all(a in used and b in used for edge in result.data.edges for a,b in [edge
 face_edges = {tuple(sorted((p.vertices[i],p.vertices[(i+1)%len(p.vertices)])))
               for p in result.data.polygons for i in range(len(p.vertices))}
 check(all(tuple(sorted(e.vertices)) in face_edges for e in result.data.edges),'kept mesh contains no loose sewing edges')
-# Reset cannot delete the kept mesh or original avatar.
 garment.reset(context)
 check(result.name in scene.objects,'reset preserves finished garments')
 check(all(not p.hide_get() for p in garment.generated(scene,'panel')),'reset restores arranged panels')
 check(not garment.generated(scene,'simulation'),'reset discards old cloth cache object')
-# Save/reopen preserves source document, edge pairing, arrangement, and final output.
 expected = scene.dd_document
 output = ROOT/'build'/'garment-test.blend'
 output.parent.mkdir(exist_ok=True)

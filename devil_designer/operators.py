@@ -134,7 +134,6 @@ class DD_OT_demo(bpy.types.Operator):
             torso = context.object
             torso.name = 'DD Demo Torso'
             torso.scale = (.17/unit,.095/unit,.28/unit)
-            # Apply scale so cloth collision uses a clean collider transform.
             bpy.ops.object.transform_apply(location=False,rotation=False,scale=True)
             garment.tag(torso,'demo')
             scene.dd_avatar = torso

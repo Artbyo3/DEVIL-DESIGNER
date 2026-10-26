@@ -36,7 +36,6 @@ def table(control,tolerance=TOLERANCE):
     def visit(c,lo,hi,depth):
         polygon=sum(math.dist(c[i],c[i+1]) for i in range(3))
         chord=math.dist(c[0],c[3])
-        # Both curvature and the control polygon's deviation are bounded.
         if depth>=16 or polygon-chord<tolerance:
             result.append((hi,c[3])); return
         left,right=split(c,.5)
@@ -54,7 +53,6 @@ def speed(control,t):
 
 
 def integral(control,lo,hi):
-    # Five-point Gauss-Legendre integration on each adaptively flattened interval.
     nodes=(0,-.5384693101056831,.5384693101056831,-.906179845938664,.906179845938664)
     weights=(.5688888888888889,.4786286704993665,.4786286704993665,.2369268850561891,.2369268850561891)
     middle,half=(lo+hi)/2,(hi-lo)/2
