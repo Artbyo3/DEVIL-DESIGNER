@@ -359,12 +359,28 @@ class Renderer:
                             control = curves.controls(a, b)
                             mid = view.screen(curves.at_length(control, 0.5), c)
                             length_cm = curves.length(control) * 100
-                            self.text(mid[0] + 6 * s, mid[1] + 6 * s, f"{length_cm:.1f} cm", 10, TEXT_SUB)
+                            dim_str = f"{length_cm:.1f} cm"
+                            blf.size(0, 10 * s)
+                            dw, dh = blf.dimensions(0, dim_str)
+                            dim_r = Rect(mid[0] + 4 * s, mid[1] + 4 * s, dw + 6 * s, dh + 4 * s)
+                            self.round_rect(dim_r, (0.08, 0.10, 0.13, 0.88), radius=3)
+                            self.round_rect_outline(dim_r, BORDER_SUBTLE, radius=3, width=0.8)
+                            self.text(dim_r.x + 3 * s, dim_r.y + 2 * s, dim_str, 10, TEXT_SUB)
 
                 xs, ys = [pt[0] for pt in outline], [pt[1] for pt in outline]
-                # Pattern label
+                # Pattern label with clean CAD pill badge
                 label_txt = pat.name + ' / ' + pat.preset.title()
-                self.text((min(xs) + max(xs)) / 2, max(ys) + 14 * s, label_txt, 11, TEXT if selected else MUTED, True)
+                blf.size(0, 11 * s)
+                lw, dh = blf.dimensions(0, label_txt)
+                lx = (min(xs) + max(xs)) / 2
+                ly = max(ys) + 14 * s
+                lbl_r = Rect(lx - lw / 2 - 6 * s, ly - 2 * s, lw + 12 * s, dh + 6 * s)
+                self.round_rect(lbl_r, (0.08, 0.10, 0.13, 0.88), radius=4)
+                if selected:
+                    self.round_rect_outline(lbl_r, (*color[:3], 0.6), radius=4, width=1.0)
+                else:
+                    self.round_rect_outline(lbl_r, BORDER_SUBTLE, radius=4, width=0.8)
+                self.text(lx, ly + 2 * s, label_txt, 11, TEXT if selected else MUTED, True)
 
             # Anchors (pins / tacks)
             for anchor in ed.session.document.anchors:
@@ -504,18 +520,26 @@ class Renderer:
                     elif name == 'SETTINGS':
                         self.draw_icon('MORE', r.x + r.w / 2, r.y + r.h / 2, 14, MUTED if not hover else TEXT)
                 elif name in {'BUILD', 'ARRANGE', 'SIMULATE', 'STOP', 'RESET', 'KEEP'}:
-                    if hover:
-                        self.round_rect(r, ELEVATED, radius=6)
+                    is_primary = (name in {'BUILD', 'SIMULATE'})
+                    if is_primary:
+                        if hover:
+                            self.round_rect(r, ACCENT_HOVER, radius=6)
+                        else:
+                            self.round_rect(r, ACCENT_BG, radius=6)
+                            self.round_rect_outline(r, ACCENT_BORDER, radius=6, width=1.0)
                     else:
-                        self.round_rect(r, CHROME, radius=6)
-                        self.round_rect_outline(r, BORDER_SUBTLE, radius=6, width=1)
+                        if hover:
+                            self.round_rect(r, ELEVATED, radius=6)
+                        else:
+                            self.round_rect(r, CHROME, radius=6)
+                            self.round_rect_outline(r, BORDER_SUBTLE, radius=6, width=1)
                     playing = False
                     try:
                         import bpy
                         playing = bool(bpy.context.screen.is_animation_playing)
                     except Exception:
                         pass
-                    color = ACCENT if (name == 'SIMULATE' and playing) else (TEXT if hover else TEXT_SUB)
+                    color = ACCENT if (name == 'SIMULATE' and playing) else (TEXT if (is_primary or hover) else TEXT_SUB)
                     display_lbl = 'Keep mesh' if name == 'KEEP' else label.split()[0]
                     self.text(r.x + r.w / 2, r.y + 7 * s, display_lbl, 10, color, True)
                 elif name in {'REFERENCE', 'LENGTHS', 'SNAP', 'FIT', 'INSPECTOR', 'UNDO', 'REDO'}:
@@ -638,7 +662,11 @@ class Renderer:
             y = v.screen((0, i * step), c)[1]
             self.text(l.ruler_left.x + 2 * s, y + 2 * s, f"{i * step * 100:g}", 8, MUTED, max_width=18 * s)
         self.clip(p)
-        self.text(l.ruler_left.x + 3 * s, l.ruler_top.y + 6 * s, "cm", 8, ACCENT)
+        corner = Rect(l.ruler_left.x, l.ruler_top.y, l.ruler_left.w, l.ruler_top.h)
+        self.rect(corner, (0.08, 0.10, 0.12, 1.0))
+        self.lines([(corner.x, corner.y), (corner.x + corner.w, corner.y)], BORDER_SUBTLE)
+        self.lines([(corner.x + corner.w, corner.y), (corner.x + corner.w, corner.y + corner.h)], BORDER_SUBTLE)
+        self.text(corner.x + corner.w / 2, corner.y + 7 * s, "cm", 8, ACCENT, center=True)
 
     def seams(self, ed):
         doc = ed.session.document
