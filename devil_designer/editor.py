@@ -112,6 +112,11 @@ class DD_OT_pattern_editor(DesignTools, OverlayControls, bpy.types.Operator):
             self.set_stage('SEW')
         elif self.stage == 'SEW':
             self.set_stage('ARRANGE')
+            try:
+                import bpy
+                bpy.ops.devil_designer.build_panels('EXEC_DEFAULT')
+            except Exception:
+                pass
         elif self.stage == 'ARRANGE':
             self.set_stage('SIMULATE')
         elif self.stage == 'SIMULATE':
@@ -514,6 +519,24 @@ class DD_OT_pattern_editor(DesignTools, OverlayControls, bpy.types.Operator):
         if event.type == 'MIDDLEMOUSE' and press:
             self.gesture = {'mode': 'PAN', 'last': self.pointer}
         elif event.type == 'LEFTMOUSE' and press:
+            # Interactive Empty Canvas Quick-Start Cards
+            if not self.session.document.patterns and not self.draft and not self.gesture and not self.reference_corners():
+                c = self.canvas_layout.canvas
+                midx, midy = c.x + c.w / 2, c.y + c.h / 2
+                s = self.canvas_layout.scale
+                card1 = Rect(midx - 175 * s, midy - 25 * s, 170 * s, 44 * s)
+                card2 = Rect(midx + 5 * s, midy - 25 * s, 170 * s, 44 * s)
+                if card1.contains(*self.pointer):
+                    self.workflow_action('DEMO')
+                    return {'RUNNING_MODAL'}
+                elif card2.contains(*self.pointer):
+                    self.session.add([(-0.20, 0), (0.20, 0), (0.20, 0.45), (-0.20, 0.45)])
+                    self.session.document.patterns[-1].name = "Front panel"
+                    self.persist()
+                    self.fit()
+                    self.choose_tool('SELECT')
+                    self.message = "Created basic 40 × 45 cm panel. Drag corners to reshape."
+                    return {'RUNNING_MODAL'}
             if self.tool == 'SEW':
                 self.sew_click()
             elif self.tool in {'POLYGON', 'INTERNAL'}:

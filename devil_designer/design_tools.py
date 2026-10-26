@@ -108,7 +108,21 @@ class DesignTools:
                 self.session.set_length(self.session.segment,scene.dd_segment_length)
             elif action=='MERGE':self.session.merge_points(self.session.point_selection)
             elif action=='OFFSET':self.session.offset(scene.dd_offset)
+            elif action == 'DUPLICATE':
+                if not p:raise ValueError('Select a pattern to duplicate.')
+                self.session.duplicate()
+                new_pat = self.session.document.patterns[-1]
+                new_pat.points = [(pt[0] + 0.05, pt[1] + 0.05) for pt in new_pat.points]
+                self.session.selected = new_pat.id
+                self.message = 'Pattern duplicated (Shift D).'
+            elif action.startswith('SET_PRESET_'):
+                p_val = action.replace('SET_PRESET_', '')
+                if not p:raise ValueError('Select a pattern to change fabric.')
+                self.session.commit(lambda: setattr(p, 'preset', p_val))
+                self.message = f"Fabric changed to {p_val.title()}."
             elif action in {'UNFOLD','MIRROR_SEW'}:
+                if not self.session.segment and p:
+                    self.session.segment = self.session.document.edge(p.id, 0)
                 if not self.session.segment:raise ValueError('Select a straight outer fold edge.')
                 self.session.unfold(self.session.segment,action=='MIRROR_SEW');self.session.segment=None
             elif action=='CUT':self.session.cut()

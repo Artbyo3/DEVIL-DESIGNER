@@ -110,6 +110,8 @@ class Inspector:
             if ctx_sel == 'PATTERN':
                 rows += [
                     ('obj_h', pat_name, pat_meta, pat_swatch),
+                    ('preset_chips', 'PRESET_CHIP', ''),
+                    ('pair_buttons', 'DUPLICATE', 'MIRROR_SEW', 'Duplicate', 'Mirror Sew'),
                 ]
             rows += [
                 ('info', 'PATTERN_INFO', ''),
@@ -214,7 +216,7 @@ class Inspector:
         heights = {
             'title': 32, 'body': 54, 'section': 32, 'number': 56, 'text': 56,
             'toggle': 32, 'button': 31, 'hint': 32, 'seam': 64, 'cycle': 32, 'info': 58,
-            'obj_h': 46, 'field_pair': 56, 'pair_buttons': 38
+            'obj_h': 46, 'field_pair': 56, 'pair_buttons': 38, 'preset_chips': 32
         }
         self.total = (sum(heights[r[0]] for r in rows) + 12) * s
         self.max_scroll = max(0, self.total - self.content.h)
@@ -242,6 +244,15 @@ class Inspector:
                 item.label = key
                 item.meta = label
                 item.swatch = entry[3] if len(entry) > 3 else (0.74, 0.65, 0.91)
+            elif kind == 'preset_chips':
+                presets = ['COTTON', 'SILK', 'DENIM', 'KNIT', 'LINEN']
+                n = len(presets)
+                chip_gap = 4 * s
+                chip_w = (r.w - (n - 1) * chip_gap) / n
+                item.chips = []
+                for i, p_name in enumerate(presets):
+                    chip_rect = Rect(r.x + i * (chip_w + chip_gap), r.y + 4 * s, chip_w, 24 * s)
+                    item.chips.append((chip_rect, f'SET_PRESET_{p_name}', p_name.title()))
             elif kind == 'field_pair':
                 item.key = key
                 item.meta = entry[2]
@@ -288,6 +299,10 @@ class Inspector:
                 return 'BODY', item.key
             elif item.kind in {'button', 'cycle'}:
                 return item.key, item.key
+            elif item.kind == 'preset_chips':
+                for chip_r, chip_act, _ in getattr(item, 'chips', []):
+                    if chip_r.contains(*point):
+                        return chip_act, chip_act
             elif item.kind == 'pair_buttons':
                 if item.btn_a and item.btn_a[0].contains(*point):
                     return item.btn_a[1], item.btn_a[1]

@@ -312,12 +312,30 @@ class Renderer:
             self.body_reference(ed)
             self.grid(view, c)
 
-            # Canvas empty guide
+            # Canvas empty guide & interactive quick-start cards
             if not ed.session.document.patterns and not ed.draft and not ed.gesture and not ed.reference_corners():
                 midx, midy = c.x + c.w / 2, c.y + c.h / 2
-                self.text(midx, midy + 24 * s, "Start Drafting Patterns", 16, TEXT, True, max_width=c.w - 32 * s)
-                self.text(midx, midy - 2 * s, "P  Polygon    /    R  Rectangle    /    E  Ellipse", 11, TEXT_SUB, True, max_width=c.w - 24 * s)
-                self.text(midx, midy - 22 * s, "Real measured coordinates with Bezier curves", 10, MUTED, True, max_width=c.w - 24 * s)
+                self.text(midx, midy + 54 * s, "Start Designing Garments", 15, TEXT, True, max_width=c.w - 32 * s)
+                self.text(midx, midy + 32 * s, "Choose a template to start immediately, or draw from scratch", 11, TEXT_SUB, True, max_width=c.w - 24 * s)
+
+                card1 = Rect(midx - 175 * s, midy - 25 * s, 170 * s, 44 * s)
+                card2 = Rect(midx + 5 * s, midy - 25 * s, 170 * s, 44 * s)
+
+                # Card 1: Load Bodice Demo
+                h1 = card1.contains(*ed.pointer)
+                self.round_rect(card1, ACCENT_BG if h1 else ELEVATED, radius=8)
+                self.round_rect_outline(card1, ACCENT_BORDER if h1 else BORDER_SUBTLE, radius=8, width=1.0)
+                self.text(card1.x + card1.w / 2, card1.y + 24 * s, "✨ Load Bodice Demo", 11, ACCENT if h1 else TEXT, True)
+                self.text(card1.x + card1.w / 2, card1.y + 10 * s, "Two-piece sewn top + avatar", 9, MUTED, True)
+
+                # Card 2: Quick Basic Panel
+                h2 = card2.contains(*ed.pointer)
+                self.round_rect(card2, ACCENT_BG if h2 else ELEVATED, radius=8)
+                self.round_rect_outline(card2, ACCENT_BORDER if h2 else BORDER_SUBTLE, radius=8, width=1.0)
+                self.text(card2.x + card2.w / 2, card2.y + 24 * s, "+ Add Basic Panel", 11, ACCENT if h2 else TEXT, True)
+                self.text(card2.x + card2.w / 2, card2.y + 10 * s, "40 × 45 cm rectangle", 9, MUTED, True)
+
+                self.text(midx, midy - 52 * s, "Shortcuts:  P  Polygon   /   R  Rectangle   /   E  Ellipse   /   V  Select", 10, MUTED, True, max_width=c.w - 24 * s)
 
             # Draw patterns
             for index, source in enumerate(ed.session.document.patterns):
@@ -391,6 +409,32 @@ class Renderer:
                             (point[0] - 3 * s, point[1] + 3 * s), (point[0] + 3 * s, point[1] - 3 * s)], BG)
 
             self.seams(ed)
+
+            # Live seam pairing assistant HUD
+            if getattr(ed, 'stage', '') == 'SEW' and ed.pending_edge:
+                doc = ed.session.document
+                try:
+                    len_a = doc.chain_length([ed.pending_edge]) * 100
+                    h_edge = ed.design_hit_edge()
+                    if h_edge and (h_edge.pattern != ed.pending_edge.pattern or h_edge.edge != ed.pending_edge.edge):
+                        len_b = doc.chain_length([h_edge]) * 100
+                        diff = abs(len_a - len_b)
+                        ratio = (min(len_a, len_b) / max(1e-5, max(len_a, len_b))) * 100
+                        is_match = diff <= 0.6
+                        msg = f"Match: {len_a:.1f} cm ↔ {len_b:.1f} cm ({ratio:.0f}%)" if is_match else f"Mismatch: {len_a:.1f} cm vs {len_b:.1f} cm (Δ {diff:.1f} cm)"
+                        badge_bg = (0.08, 0.25, 0.16, 0.95) if is_match else (0.28, 0.18, 0.08, 0.95)
+                        badge_border = (0.2, 0.7, 0.4, 0.9) if is_match else (0.8, 0.5, 0.2, 0.9)
+                        px, py = ed.pointer
+                        blf.size(0, 10 * s)
+                        bw, bh = blf.dimensions(0, msg)
+                        hud_box = Rect(min(c.x + c.w - bw - 20 * s, max(c.x + 10 * s, px + 14 * s)),
+                                       min(c.y + c.h - 32 * s, max(c.y + 10 * s, py - 14 * s)),
+                                       bw + 16 * s, 26 * s)
+                        self.round_rect(hud_box, badge_bg, radius=5)
+                        self.round_rect_outline(hud_box, badge_border, radius=5, width=1.0)
+                        self.text(hud_box.x + 8 * s, hud_box.y + 7 * s, msg, 10, (1, 1, 1, 1))
+                except Exception:
+                    pass
 
             if len(self.triangle_cache) > 250:
                 self.triangle_cache.clear()
@@ -764,6 +808,24 @@ class Renderer:
                     val_str = ed.numeric['text'] if editing else spec.format(getattr(ed._scene, key))
                     self.text(card_r.x + 10 * s, card_r.y + 12 * s, val_str, 13, TEXT)
                     self.text(card_r.x + card_r.w - 24 * s, card_r.y + 12 * s, spec.unit, 10, MUTED)
+            elif item.kind == 'preset_chips':
+                pattern = ed.session.document.find(ed.session.selected)
+                active_preset = pattern.preset.upper() if pattern else 'COTTON'
+                for chip_r, chip_act, chip_lbl in getattr(item, 'chips', []):
+                    p_name = chip_act.replace('SET_PRESET_', '')
+                    is_active = (p_name == active_preset)
+                    hover = chip_r.contains(*ed.pointer)
+                    if is_active:
+                        self.round_rect(chip_r, ACCENT_BG, radius=5)
+                        self.round_rect_outline(chip_r, ACCENT_BORDER, radius=5, width=1.0)
+                    elif hover:
+                        self.round_rect(chip_r, ELEVATED, radius=5)
+                        self.round_rect_outline(chip_r, BORDER_SUBTLE, radius=5, width=0.8)
+                    else:
+                        self.round_rect(chip_r, (0.12, 0.15, 0.18, 1.0), radius=5)
+                        self.round_rect_outline(chip_r, BORDER_SUBTLE, radius=5, width=0.8)
+                    color = ACCENT if is_active else (TEXT if hover else TEXT_SUB)
+                    self.text(chip_r.x + chip_r.w / 2, chip_r.y + 6 * s, chip_lbl, 9, color, center=True)
             elif item.kind == 'pair_buttons':
                 # Two elevated buttons side by side
                 for btn_rect, btn_key, btn_lbl in (item.btn_a, item.btn_b):
