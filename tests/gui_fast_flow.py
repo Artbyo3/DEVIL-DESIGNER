@@ -49,7 +49,7 @@ def check_interaction_regressions(workspace, event, point, check):
         workspace.card_kind = None
         workspace.context_card_hidden = False
         starter = workspace.minimal_card()
-        check(starter[1] == 'Start garment' and len(starter[2]) == 3 and starter[2][0][1][0] == 'START_PANEL',
+        check(starter[1] == 'Start garment' and len(starter[2]) == 4 and starter[2][0][1][0] == 'START_PANEL',
               'the empty garment offers a compact one-click starter alongside custom drawing and the library')
         workspace.minimal_action('START_PANEL')
         created = workspace.session.document.patterns[0]

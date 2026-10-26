@@ -58,6 +58,15 @@ SETTINGS = {
     )
 }
 
+LOCAL_SETTINGS = {
+    spec.key: spec for spec in (
+        Setting('dd_trace_length', 'Measured length', 100, 'cm', .1, .000001, 1000),
+        Setting('dd_trace_width', 'Image width', 100, 'cm', 1, .000001, 1000),
+        Setting('dd_trace_x', 'Image X', 100, 'cm', 1, -1000, 1000),
+        Setting('dd_trace_y', 'Image Y', 100, 'cm', 1, -1000, 1000),
+    )
+}
+
 @dataclass
 class Control:
     kind: str
@@ -113,6 +122,7 @@ class TextSetting:
 
 SETTINGS['dd_library_name'] = TextSetting('dd_library_name', 'Garment name')
 SETTINGS['dd_library_dir'] = TextSetting('dd_library_dir', 'Library folder', maximum=4096, allow_empty=True)
+CONTROL_SETTINGS = {**SETTINGS, **LOCAL_SETTINGS}
 
 
 class Inspector:

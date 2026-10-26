@@ -1,6 +1,6 @@
 import bpy
 from .canvas import Rect
-from .controls import Inspector, BodyMenu, SETTINGS
+from .controls import Inspector, BodyMenu, CONTROL_SETTINGS as SETTINGS
 from .draw import PALETTE
 
 RUNNING = {'RUNNING_MODAL'}

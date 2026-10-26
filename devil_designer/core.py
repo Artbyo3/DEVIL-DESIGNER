@@ -119,6 +119,7 @@ class Pattern:
     preset: str = 'COTTON'
     wrap_radius: float = 0.0
     features: list = field(default_factory=list)
+    mesh_density: str = 'AUTO'
 
     @property
     def points(self): return [(v.x,v.y) for v in self.vertices]
@@ -177,6 +178,7 @@ class Anchor:
     kind: str = 'PIN'
     target: tuple = None
     id: str = field(default_factory=uid)
+    binding: dict = None
 
 
 def vertex_data(v):
@@ -205,7 +207,7 @@ class Document:
         return json.dumps(dict(version=3,patterns=[dict(id=p.id,name=p.name,
             vertices=[vertex_data(v) for v in p.vertices],paths=[dict(id=q.id,name=q.name,closed=q.closed,role=q.role,
             vertices=[vertex_data(v) for v in q.vertices]) for q in p.paths],preset=p.preset,wrap_radius=p.wrap_radius,
-            features=p.features) for p in self.patterns],seams=[dict(id=s.id,a=vars(s.a),b=vars(s.b),reverse=s.reverse,
+            features=p.features,mesh_density=p.mesh_density) for p in self.patterns],seams=[dict(id=s.id,a=vars(s.a),b=vars(s.b),reverse=s.reverse,
             chain_a=[vars(e) for e in s.side(0)],chain_b=[vars(e) for e in s.side(1)]) for s in self.seams],
             anchors=[vars(a) for a in self.anchors],uv_layout=self.uv_layout),separators=(',',':'),allow_nan=False)
 
@@ -220,6 +222,7 @@ class Document:
                 p=Pattern(item['name'],[read_vertex(v) for v in item['vertices']],item['id'])
                 p.paths=[Path(q['name'],[read_vertex(v) for v in q['vertices']],q['closed'],q['role'],q['id']) for q in item.get('paths',[])]
                 p.preset=item.get('preset','COTTON'); p.wrap_radius=float(item.get('wrap_radius',0)); p.features=item.get('features',[])
+                p.mesh_density=item.get('mesh_density','AUTO')
                 patterns.append(p)
             document=cls(patterns,uv_layout=data.get('uv_layout'))
             if data['version']>=2:
@@ -310,6 +313,7 @@ class Document:
             identity(p.id)
             if not isinstance(p.name,str) or not p.name.strip(): raise ValueError('Pattern names must contain text.')
             if p.preset not in {'COTTON','LINEN','SILK','DENIM','KNIT','LEATHER'}: raise ValueError('Unknown cloth preset.')
+            if p.mesh_density not in ('AUTO','COARSE','STANDARD','FINE'): raise ValueError('Unknown mesh density.')
             if not math.isfinite(p.wrap_radius) or p.wrap_radius<0: raise ValueError('Invalid wrap radius.')
             for v in p.vertices: identity(v.id)
             outer=p.outline();validate_polygon(outer)
@@ -348,6 +352,9 @@ class Document:
             if anchor.kind not in {'PIN','TACK'}: raise ValueError('Unknown anchor type.')
             if anchor.target is not None and (len(anchor.target)!=3 or any(not math.isfinite(v) for v in anchor.target)):
                 raise ValueError('Invalid tack target.')
+            if anchor.binding is not None:
+                from .tack_binding import validate_binding
+                validate_binding(anchor.binding)
         self.validate_seams()
         if self.uv_layout is not None:
             scale=self.uv_layout['scale']; origin=self.uv_layout['origin']
@@ -419,6 +426,12 @@ class Session(ConstructionMixin):
         if self.document.dumps()!=before:
             self.undo_stack.append(before); self.undo_stack=self.undo_stack[-100:]; self.redo_stack.clear(); return True
         return False
+
+    def set_mesh_density(self,name):
+        if name not in ('AUTO','COARSE','STANDARD','FINE'):raise ValueError('Unknown mesh density.')
+        pattern=self.document.find(self.selected)
+        if pattern is None:raise ValueError('Select a pattern to change mesh density.')
+        return self.commit(lambda:setattr(pattern,'mesh_density',name))
 
     def add(self,points):
         validate_polygon(points)
@@ -556,9 +569,9 @@ class Session(ConstructionMixin):
             if hole.role=='HOLE':new.paths.append(Path(hole.name,[Vertex(*q) for q in curves.offset_polygon(hole.outline(),-distance)],True,'HOLE'))
         self.commit(lambda:self.document.patterns.append(new));self.selected,self.path,self.corner=new.id,'OUTER',None
 
-    def add_anchor(self,point,kind='PIN',target=None):
+    def add_anchor(self,point,kind='PIN',target=None,binding=None):
         if not self.selected:raise ValueError('Select a pattern for the anchor.')
-        anchor=Anchor(self.selected,*point,kind,target)
+        anchor=Anchor(self.selected,*point,kind,target,binding=binding)
         self.commit(lambda:self.document.anchors.append(anchor));return anchor
 
     def history(self,redo=False):

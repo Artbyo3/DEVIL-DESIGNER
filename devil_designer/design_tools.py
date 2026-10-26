@@ -13,6 +13,8 @@ class DesignTools:
         self.chain_a=[];self.chain_b=[];self.chain_stage=None
         self.free_clicks=[];self.dart_base=[];self.pending_place=None;self.pending_tack=None
         self.library_items=[]
+        self.cut_preview=None
+        self.trace_points=None
 
     def design_hit(self):
         self.hit_path='OUTER';self.hit_segment=None;self.hit_handle=None
@@ -133,7 +135,19 @@ class DesignTools:
                     self.session.segment = self.session.document.edge(p.id, 0)
                 if not self.session.segment:raise ValueError('Select a straight outer fold edge.')
                 self.session.unfold(self.session.segment,action=='MIRROR_SEW');self.session.segment=None
-            elif action=='CUT':self.session.cut()
+            elif action=='CUT':
+                self.cut_preview=self.session.preview_cut()
+                if self.cut_preview['status']=='READY':
+                    self.session.cut()
+                    self.cut_preview=None
+                else:
+                    self.show_card('CUT_RECOVERY')
+                    self.message=self.cut_preview['reason']
+                    return
+            elif action=='CUT_RETRY':
+                self.session.retry_cut(self.cut_preview)
+                self.cut_preview=None
+                self.card_kind=None
             elif action=='TRACE':self.session.trace()
             elif action=='PLACE':
                 if not p:raise ValueError('Select the pattern you want to place.')
@@ -242,7 +256,9 @@ class DesignTools:
                     else:
                         owner,source=self.pending_tack
                         self.session.selected=owner
-                        anchor=self.session.add_anchor(source,'TACK',placement.normalized_target(self._scene,point));self.select_anchor(anchor);self.persist()
+                        from . import tack_binding
+                        binding=tack_binding.bind_target(context,self._scene.dd_avatar,point)
+                        anchor=self.session.add_anchor(source,'TACK',placement.normalized_target(self._scene,point),binding=binding);self.select_anchor(anchor);self.persist()
                     self.pending_place=self.pending_tack=None;self.message='Placement / tack attached to the avatar.'
                 except ValueError as exc:self.message=str(exc)
                 return {'RUNNING_MODAL'}

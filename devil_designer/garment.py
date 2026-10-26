@@ -5,7 +5,8 @@ import bpy
 import bmesh
 from mathutils import Matrix, Vector
 from .core import Document
-from .meshing import edge_counts, fabric_mesh
+from .meshing import fabric_mesh
+from .density import boundary_plan,effective_spacing
 from .core import area
 from .native_features import decorate_mesh,apply_presets,add_anchors
 
@@ -121,7 +122,7 @@ def build_panels(context):
     if not doc.patterns:
         raise ValueError("Draw at least one closed pattern first.")
     doc.validate_seams()
-    counts = edge_counts(doc,scene.dd_spacing)
+    counts = boundary_plan(doc,scene.dd_spacing)
     unit = metres_per_unit(scene)
     all_points = [pt for p in doc.patterns for pt in p.outline()]
     minx,miny = min(p[0] for p in all_points),min(p[1] for p in all_points)
@@ -134,7 +135,7 @@ def build_panels(context):
     prepared = []
     try:
         for piece_index,p in enumerate(doc.patterns):
-            coords,faces,boundaries = fabric_mesh(doc,p,scene.dd_spacing,counts)
+            coords,faces,boundaries = fabric_mesh(doc,p,effective_spacing(p,scene.dd_spacing),counts)
             cx = (min(v[0] for v in p.points)+max(v[0] for v in p.points))/2
             cy = (min(v[1] for v in p.points)+max(v[1] for v in p.points))/2
             mesh = bpy.data.meshes.new('DD '+p.name)
@@ -290,7 +291,7 @@ def compile_garment(context):
             highest = max(v.co.y for v in panel.data.vertices)
             pin.extend(offset+v.index for v in panel.data.vertices if highest-v.co.y<.002/metres_per_unit(scene))
     springs=set()
-    plan=edge_counts(doc,scene.dd_spacing)
+    plan=boundary_plan(doc,scene.dd_spacing)
     def index_of(edge,fraction):
         values=maps[edge.pattern][edge.start]
         t,index=min(values,key=lambda value:abs(value[0]-fraction))

@@ -61,7 +61,7 @@ for loop in new.data.loops:
 obj=garment.compile_garment(bpy.context)
 cloth=next(m for m in obj.modifiers if m.type=='CLOTH')
 check(bool(json.loads(obj['dd_sewing_pairs'])),'M:N ranges compile to real sewing springs')
-check(len(garment.generated(scene,'anchor'))==1,'tack creates an avatar-bound target')
+check(sum(bool(anchor.get('dd_tack_binding')) for anchor in garment.generated(scene,'anchor'))==1,'tack creates an avatar-bound target')
 check(bool(cloth.settings.vertex_group_mass),'pins and tacks feed the cloth pin group')
 scene.frame_set(scene.frame_start)
 deps=bpy.context.evaluated_depsgraph_get()
