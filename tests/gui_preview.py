@@ -67,10 +67,15 @@ def run():
             check(not op.full and abs(op.canvas_layout.panel.x-resized.x)<.01,'restore preserves floating position')
             def control(key):
                 op.refresh_controls()
+                if not any(c.key==key for c in op.inspector.controls):
+                    from devil_designer.controls import TABS,Inspector
+                    for tab in TABS:
+                        if any(c.key==key for c in Inspector(op.inspector.rect,op.canvas_layout.scale,0,op.session.document.seams,tab).controls):
+                            op.inspector_tab=tab;op.inspector_scroll=0;op.refresh_controls();break
                 for _ in range(100):
                     item=next(c for c in op.inspector.controls if c.key==key)
                     center=(item.rect.x+item.rect.w/2,item.rect.y+item.rect.h/2)
-                    r=op.inspector.rect
+                    r=op.inspector.content
                     if r.y+5<center[1]<r.y+r.h-5:
                         return item
                     kind='WHEELDOWNMOUSE' if center[1]<r.y+5 else 'WHEELUPMOUSE'
@@ -206,9 +211,10 @@ def run():
             area.spaces.active.region_3d.view_distance=2.1
             check(op.canvas_layout.panel.w<region.width,'side-by-side layout leaves scene visible')
             op.inspector_scroll=0
+            op.inspector_tab='AVATAR'
             op.refresh_controls()
             op.save_window()
-            bpy.ops.wm.save_as_mainfile(filepath=str(ROOT/'build'/'floating-editor-0.3-preview.blend'))
+            bpy.ops.wm.save_as_mainfile(filepath=str(ROOT/'build'/'floating-editor-preview.blend'))
             # Exercise real GPU drawing in the next window redraw.
         (ROOT/'build'/'gui-report.json').write_text(json.dumps({'passed':report},indent=2))
         print('GUI CHECKS:',report)

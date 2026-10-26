@@ -12,6 +12,7 @@ class OverlayControls:
         self.window_rect=saved if saved[2]>0 and saved[3]>0 else None
         self.settings_open=self._scene.dd_ui_settings
         self.inspector_scroll=0
+        self.inspector_tab='DESIGN'
         self.inspector=None
         self.numeric=None
         self.window_gesture=None
@@ -24,7 +25,7 @@ class OverlayControls:
         self.body_menu=None
         if self.canvas_layout.inspector:
             self.inspector=Inspector(self.canvas_layout.inspector,self.canvas_layout.scale,
-                                     self.inspector_scroll,self.session.document.seams)
+                                     self.inspector_scroll,self.session.document.seams,self.inspector_tab)
             self.inspector_scroll=self.inspector.scroll
             if self.body_open:
                 anchor=next(c.value_rect for c in self.inspector.controls if c.kind=='body')
@@ -115,7 +116,7 @@ class OverlayControls:
             state.update(text=text,cursor=cursor,selected=False)
             return RUNNING
         char=getattr(event,'unicode','')
-        if press and char and all(c in '0123456789.,eE+-' for c in char):
+        if press and char and (state['key']=='dd_library_name' or all(c in '0123456789.,eE+-' for c in char)):
             text,cursor=state['text'],state['cursor']
             if state['selected']:
                 text,cursor='',0
@@ -147,11 +148,11 @@ class OverlayControls:
                 elif gesture['kind']=='RESIZE':
                     available=l.available
                     w=min(available.x+available.w-r.x,max(min(420*l.scale,available.w),r.w+dx))
-                    h=min(r.y+r.h-available.y,max(min(320*l.scale,available.h),r.h-dy))
+                    h=min(r.y+r.h-available.y,max(min(420*l.scale,available.h),r.h-dy))
                     requested=Rect(r.x,r.y+r.h-h,w,h)
                 else:
                     self.inspector_scroll=max(0,min(self.inspector.max_scroll,
-                        gesture['scroll']-dy*self.inspector.total/max(1,self.inspector.rect.h)))
+                        gesture['scroll']-dy*self.inspector.total/max(1,self.inspector.content.h)))
                     self.refresh_controls()
                     return RUNNING
                 self.set_window(requested)
@@ -178,7 +179,7 @@ class OverlayControls:
             if press and event.type=='LEFTMOUSE':
                 for r,obj,_ in self.body_menu.rows:
                     if r.contains(x,y):
-                        self._scene.dd_avatar=obj
+                        self.choose_body(obj,context)
                         self.message='Avatar body selected.' if obj else 'Avatar body cleared.'
                         break
                 self.body_open=False
@@ -226,7 +227,10 @@ class OverlayControls:
                 hit=self.inspector.hit((x,y))
                 if hit:
                     action,key=hit
-                    if action in {'STEP_UP','STEP_DOWN'}:
+                    if action=='TAB':
+                        self.inspector_tab=key;self.inspector_scroll=0
+                        if key=='LIBRARY':self.refresh_library()
+                    elif action in {'STEP_UP','STEP_DOWN'}:
                         self.step_setting(key,1 if action=='STEP_UP' else -1,event)
                     elif action=='EDIT':
                         text=SETTINGS[key].format(getattr(self._scene,key))
@@ -240,10 +244,12 @@ class OverlayControls:
                     elif action=='BODY_USE':
                         obj=context.view_layer.objects.active
                         if obj and obj.type=='MESH' and obj in list(self._scene.objects) and obj.get('dd_kind') not in {'panel','simulation','final'}:
-                            self._scene.dd_avatar=obj
+                            self.choose_body(obj,context)
                             self.message='Selected mesh assigned as avatar body.'
                         else:
                             self.message='Select a body mesh in 3D or choose one from the Avatar body list.'
+                    elif action in {'REFERENCE_VIEW','REFERENCE_ALIGN','REFERENCE_FRAME','REFERENCE_REFRESH'}:
+                        self.reference_action(action)
                     elif action=='DEMO':
                         if self.session.document.patterns:
                             self.message='The demo needs an empty pattern document. Open a new scene to try it.'
@@ -254,9 +260,10 @@ class OverlayControls:
                     elif action=='SEAM_REMOVE':
                         self.run_edit(lambda:self.session.remove_seam(key),'Seam removed.')
                     elif action=='SEAM_SELECT':
-                        self.choose_tool('SEW')
-                        self.seam_selected=key
+                        self.choose_tool('SEW');self.seam_selected=key
                         self.message='Seam selected. B: reverse. X: remove.'
+                    else:
+                        self.design_action(action)
                     self.refresh_controls()
             if event.type not in {'LEFTMOUSE','RIGHTMOUSE','MIDDLEMOUSE','MOUSEMOVE','INBETWEEN_MOUSEMOVE'}:
                 return None

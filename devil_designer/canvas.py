@@ -14,7 +14,7 @@ class Rect:
 def clamp_window(bounds, available, scale):
     """Keep every window edge accessible after dragging, resizing, or changing monitors."""
     x,y,w,h = bounds
-    minimum_w,minimum_h = min(420*scale,available.w),min(320*scale,available.h)
+    minimum_w,minimum_h = min(420*scale,available.w),min(420*scale,available.h)
     w,h = min(available.w,max(minimum_w,w)),min(available.h,max(minimum_h,h))
     x = max(available.x,min(available.x+available.w-w,x))
     y = max(available.y,min(available.y+available.h-h,y))
@@ -42,24 +42,20 @@ class Layout:
         content_w = max(1,p.w-inspector_w)
         self.header = Rect(p.x,p.y+p.h-54*s,p.w,54*s)
         self.inspector = Rect(p.x+content_w,p.y+48*s,inspector_w,max(1,p.h-102*s)) if settings else None
-        self.toolbar = Rect(p.x,self.header.y-42*s,content_w,42*s)
+        self.toolbar = Rect(p.x,self.header.y-68*s,content_w,68*s)
         self.workflow = Rect(p.x,self.toolbar.y-36*s,content_w,36*s)
+        self.utility=Rect(p.x,self.workflow.y-30*s,content_w,30*s)
         self.footer = Rect(p.x,p.y,p.w,48*s)
         self.canvas = Rect(p.x+25*s,self.footer.y+self.footer.h,
-                           max(1,content_w-25*s),max(1,p.h-205*s))
+                           max(1,content_w-25*s),max(1,p.h-261*s))
         self.ruler_top = Rect(self.canvas.x,self.canvas.y+self.canvas.h,self.canvas.w,25*s)
         self.resize = Rect(p.x+p.w-18*s,p.y,18*s,18*s)
         self.buttons = {}
-        compact = content_w<500*s
-        specs = ([("SELECT","V",30),("POLYGON","P",30),("RECTANGLE","R",30),
-                  ("SEW","Sew J",48),("SNAP","Snap",49),("FIT","Fit",36)] if compact else
-                 [("SELECT","Select V",73),("POLYGON","Polygon P",82),
-                  ("RECTANGLE","Rect R",64),("SEW","Sew J",55),("SNAP","Snap",49),("FIT","Fit",36)])
-        if content_w>=310*s:
-            specs += [("UNDO","<",26),("REDO",">",26)]
-        self.button_row(specs,self.toolbar,7,28)
-        self.button_row([("BUILD","Build 3D",70),("ARRANGE","Arrange",62),("SIMULATE","Simulate",65),
-                         ("STOP","Stop",39),("RESET","Reset",44),("KEEP","Keep mesh",74)],self.workflow,5,26)
+        self.button_row([('SELECT','Select V',70),('POLYGON','Polygon P',75),('RECTANGLE','Rect R',62),('ELLIPSE','Ellipse E',72)],self.toolbar,37,26)
+        self.button_row([('INTERNAL','Internal I',75),('SEW','Sew J',62),('PIN','Pin K',62),('TACK','Tack T',62),('DART','Dart D',62)],self.toolbar,6,26)
+        self.button_row([('BUILD','Build 3D',70),('ARRANGE','Arrange',62),('SIMULATE','Simulate',65),
+                         ('STOP','Stop',39),('RESET','Reset',44),('KEEP','Keep mesh',74)],self.workflow,5,26)
+        self.button_row([('SNAP','Snap S',58),('FIT','Fit F',45),('REFERENCE','Body H',58),('LENGTHS','Lengths L',70),('UNDO','<',24),('REDO','>',24)],self.utility,3,24)
         self.buttons["CLOSE"] = (Rect(p.x+p.w-36*s,self.header.y+13*s,25*s,28*s),"X")
         self.buttons["FULL"] = (Rect(p.x+p.w-102*s,self.header.y+13*s,60*s,28*s),"Restore" if full else "Expand")
         self.buttons["SETTINGS"] = (Rect(p.x+p.w-180*s,self.header.y+13*s,72*s,28*s),"Settings")

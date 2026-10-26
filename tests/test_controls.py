@@ -1,7 +1,7 @@
 import unittest
 from types import SimpleNamespace
 from devil_designer.canvas import Layout, Rect, clamp_window
-from devil_designer.controls import SETTINGS, Inspector, BodyMenu
+from devil_designer.controls import SETTINGS, Inspector, BodyMenu, TABS
 
 class WindowTests(unittest.TestCase):
     def test_drag_clamps_every_edge_to_viewport(self):
@@ -40,6 +40,7 @@ class WindowTests(unittest.TestCase):
 class SettingTests(unittest.TestCase):
     def test_display_units_round_trip(self):
         for key,spec in SETTINGS.items():
+            if not hasattr(spec,'low'):continue
             value=(spec.low+spec.high)/2
             if spec.integer: value=round(value)
             self.assertAlmostEqual(spec.parse(spec.format(value)),value,places=5)
@@ -60,13 +61,14 @@ class InspectorTests(unittest.TestCase):
     def test_every_setting_reachable_by_scrolling(self):
         panel=Rect(600,80,248,300)
         seen=set()
-        maximum=Inspector(panel,1,0,[]).max_scroll
-        for scroll in range(0,int(maximum)+50,20):
-            inspector=Inspector(panel,1,scroll,[])
-            for control in inspector.controls:
-                if control.kind=='number' and panel.contains(control.value_rect.x+2,control.value_rect.y+10):
-                    seen.add(control.key)
-                    self.assertEqual(inspector.hit((control.value_rect.x+2,control.value_rect.y+10)),('EDIT',control.key))
+        for tab in TABS:
+            maximum=Inspector(panel,1,0,[],tab).max_scroll
+            for scroll in range(0,int(maximum)+50,20):
+                inspector=Inspector(panel,1,scroll,[],tab)
+                for control in inspector.controls:
+                    if control.kind in {'number','text'} and inspector.content.y<control.value_rect.y+10<inspector.content.y+inspector.content.h:
+                        seen.add(control.key)
+                        self.assertEqual(inspector.hit((control.value_rect.x+2,control.value_rect.y+10)),('EDIT',control.key))
         self.assertEqual(seen,set(SETTINGS))
 
     def test_scroll_limits_and_thumb(self):

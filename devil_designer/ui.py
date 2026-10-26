@@ -25,13 +25,37 @@ def on_load(_):
 classes = (DD_OT_pattern_editor,)+CLASSES
 PROPERTIES = ('dd_document','dd_collection','dd_avatar','dd_spacing','dd_clearance',
               'dd_quality','dd_frames','dd_self_collision','dd_pin_top','dd_weld_distance','dd_thickness',
-              'dd_ui_rect','dd_ui_settings')
+              'dd_ui_rect','dd_ui_settings','dd_reference_visible','dd_reference_view',
+              'dd_reference_opacity','dd_reference_x','dd_reference_y','dd_reference_placed',
+              'dd_point_x','dd_point_y','dd_width','dd_height','dd_segment_length','dd_offset','dd_wrap_radius',
+              'dd_sew_a0','dd_sew_a1','dd_sew_b0','dd_sew_b1','dd_free_sewing','dd_sew_reverse','dd_internal_mode',
+              'dd_lengths_visible','dd_library_name','dd_library_dir','dd_library_selected','dd_library_refit')
 
 
 def register():
     Scene = bpy.types.Scene
     Scene.dd_ui_rect = bpy.props.FloatVectorProperty(name='Editor window bounds',size=4,default=(-1,-1,0,0))
     Scene.dd_ui_settings = bpy.props.BoolProperty(name='Editor settings visible',default=True)
+    Scene.dd_reference_visible = bpy.props.BoolProperty(name='Body silhouette',default=True)
+    Scene.dd_reference_view = bpy.props.EnumProperty(name='Body reference view',items=[
+        ('FRONT','Front','Front orthographic projection'),('BACK','Back','Back orthographic projection'),
+        ('LEFT','Left','Left orthographic projection'),('RIGHT','Right','Right orthographic projection')],default='FRONT')
+    Scene.dd_reference_opacity = bpy.props.FloatProperty(name='Silhouette opacity',default=.20,min=0,max=.65)
+    Scene.dd_reference_x = bpy.props.FloatProperty(name='Reference X (m)',default=0,min=-100,max=100)
+    Scene.dd_reference_y = bpy.props.FloatProperty(name='Reference Y (m)',default=0,min=-100,max=100)
+    Scene.dd_reference_placed = bpy.props.BoolProperty(default=False)
+    for key,default,low,high in [('dd_point_x',0,-100,100),('dd_point_y',0,-100,100),('dd_width',.3,.001,100),
+        ('dd_height',.4,.001,100),('dd_segment_length',.1,.0001,100),('dd_offset',.01,-1,1),('dd_wrap_radius',.06,0,10),
+        ('dd_sew_a0',0,0,1),('dd_sew_a1',1,0,1),('dd_sew_b0',0,0,1),('dd_sew_b1',1,0,1)]:
+        setattr(Scene,key,bpy.props.FloatProperty(default=default,min=low,max=high,precision=4))
+    Scene.dd_free_sewing=bpy.props.BoolProperty(default=False)
+    Scene.dd_sew_reverse=bpy.props.BoolProperty(default=True)
+    Scene.dd_internal_mode=bpy.props.BoolProperty(default=False)
+    Scene.dd_lengths_visible=bpy.props.BoolProperty(default=True)
+    Scene.dd_library_name=bpy.props.StringProperty(default='Garment',maxlen=80)
+    Scene.dd_library_dir=bpy.props.StringProperty(default='',subtype='DIR_PATH')
+    Scene.dd_library_selected=bpy.props.IntProperty(default=0,min=0)
+    Scene.dd_library_refit=bpy.props.BoolProperty(default=True)
     Scene.dd_document = bpy.props.StringProperty(name='Pattern document',default='')
     Scene.dd_collection = bpy.props.PointerProperty(type=bpy.types.Collection)
     Scene.dd_avatar = bpy.props.PointerProperty(type=bpy.types.Object,name='Avatar body',poll=avatar_poll)

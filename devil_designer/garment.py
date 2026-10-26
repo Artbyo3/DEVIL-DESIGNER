@@ -7,6 +7,8 @@ import bmesh
 from mathutils import Matrix, Vector
 from .core import Document
 from .meshing import edge_counts, fabric_mesh
+from .core import area
+from .native_features import decorate_mesh,apply_presets,add_anchors
 
 OWNER = "Artbyo3/DEVIL-DESIGNER"
 _playback_window = None
@@ -89,6 +91,7 @@ def stop(context):
 def reset(context):
     stop(context)
     remove_objects(generated(context.scene,'simulation'))
+    remove_objects(generated(context.scene,'anchor'))
     for obj in generated(context.scene,'panel'):
         obj.hide_set(False)
         obj.hide_render = False
@@ -121,33 +124,46 @@ def build_panels(context):
     doc.validate_seams()
     counts = edge_counts(doc,scene.dd_spacing)
     unit = metres_per_unit(scene)
-    all_points = [pt for p in doc.patterns for pt in p.points]
+    all_points = [pt for p in doc.patterns for pt in p.outline()]
     minx,miny = min(p[0] for p in all_points),min(p[1] for p in all_points)
     extent = max(max(p[0] for p in all_points)-minx,max(p[1] for p in all_points)-miny,.001)
+    if doc.uv_layout:
+        (minx,miny),extent=doc.uv_layout['origin'],doc.uv_layout['scale']
+    else:
+        doc.uv_layout=dict(origin=[minx,miny],scale=extent)
+        scene.dd_document=doc.dumps()
     # Prepare every mesh before mutating the scene: a failed pattern leaves old panels intact.
     prepared = []
     try:
-        for p in doc.patterns:
+        for piece_index,p in enumerate(doc.patterns):
             coords,faces,boundaries = fabric_mesh(doc,p,scene.dd_spacing,counts)
             cx = (min(v[0] for v in p.points)+max(v[0] for v in p.points))/2
             cy = (min(v[1] for v in p.points)+max(v[1] for v in p.points))/2
             mesh = bpy.data.meshes.new('DD '+p.name)
-            prepared.append((p,mesh,boundaries,(cx,cy)))
-            mesh.from_pydata([((x-cx)/unit,(y-cy)/unit,0) for x,y in coords],[],faces)
+            prepared.append((p,mesh,boundaries,(cx,cy),None))
+            def position(x,y):
+                x,y=x-cx,y-cy
+                if p.wrap_radius>0:
+                    angle=x/p.wrap_radius
+                    return (math.sin(angle)*p.wrap_radius/unit,y/unit,(1-math.cos(angle))*p.wrap_radius/unit)
+                return (x/unit,y/unit,0)
+            mesh.from_pydata([position(x,y) for x,y in coords],[],faces)
             uv = mesh.uv_layers.new(name='Pattern UV')
             for loop in mesh.loops:
                 x,y = coords[loop.vertex_index]
                 uv.data[loop.index].uv = ((x-minx)/extent,(y-miny)/extent)
             mesh.update()
+            metadata=decorate_mesh(mesh,piece_index,coords,counts.outputs[p.id])
+            prepared[-1]=(p,mesh,boundaries,(cx,cy),metadata)
     except Exception:
-        for _,mesh,_,_ in prepared:
+        for _,mesh,_,_,_ in prepared:
             bpy.data.meshes.remove(mesh)
         raise
     reset(context)
     old = {o.get('dd_pattern_id'):o for o in generated(scene,'panel')}
     coll = collection(scene)
     result = []
-    for index,(p,mesh,boundaries,center) in enumerate(prepared):
+    for index,(p,mesh,boundaries,center,metadata) in enumerate(prepared):
         obj = old.pop(p.id,None)
         if obj is None:
             obj = bpy.data.objects.new(p.name,mesh)
@@ -161,7 +177,13 @@ def build_panels(context):
                 bpy.data.meshes.remove(previous)
         tag(obj,'panel')
         obj['dd_pattern_id'] = p.id
+        obj['dd_edge_samples']=json.dumps(metadata['samples'],separators=(',',':'))
+        obj['dd_anchor_indices']=json.dumps(metadata['anchors'],separators=(',',':'))
+        boundaries={key:[i for _,i in values] for key,values in metadata['samples'].items()}
         obj['dd_boundaries'] = json.dumps(boundaries,separators=(',',':'))
+        for group in list(obj.vertex_groups):obj.vertex_groups.remove(group)
+        group=obj.vertex_groups.new(name='Piece '+p.name)
+        group.add(list(range(len(mesh.vertices))),1,'REPLACE')
         obj['dd_document'] = doc.dumps()
         obj['dd_spacing'] = scene.dd_spacing
         obj['dd_units'] = unit
@@ -230,26 +252,31 @@ def ensure_collision(scene):
 def compile_garment(context):
     scene = context.scene
     doc = document(scene)
-    if not doc.seams:
-        raise ValueError("Pair pattern edges with the Sew tool before simulating.")
     ensure_collision(scene)
     panels = generated(scene,'panel')
     if not panels or any(o.get('dd_document')!=doc.dumps() or o.get('dd_spacing')!=scene.dd_spacing
                          or o.get('dd_units')!=metres_per_unit(scene) for o in panels) or len(panels)!=len(doc.patterns):
         panels = build_panels(context)
+        doc=document(scene)
     context.view_layer.update()
     marker = signature(scene,panels)
     old = generated(scene,'simulation')
+    old_anchors=generated(scene,'anchor')
     if old and old[0].get('dd_signature')==marker:
         return old[0]
     stop(context)
     scene.frame_set(scene.frame_start)
     verts,faces,uvs,face_materials = [],[],[],[]
     maps = {}
+    anchor_indices={}
+    pieces=[]
+    piece_faces=[]
     materials = []
     pin = []
-    for panel in panels:
+    for piece_index,panel in enumerate(panels):
         offset = len(verts)
+        pattern=doc.find(panel['dd_pattern_id'])
+        pieces.append((list(range(offset,offset+len(panel.data.vertices))),abs(area(pattern.outline())),pattern.preset))
         verts.extend([tuple(panel.matrix_world @ v.co) for v in panel.data.vertices])
         uv = panel.data.uv_layers.active
         material_index = len(materials)
@@ -258,19 +285,24 @@ def compile_garment(context):
             faces.append(tuple(offset+i for i in face.vertices))
             uvs.append([tuple(uv.data[i].uv) for i in face.loop_indices])
             face_materials.append(material_index)
-        boundary = json.loads(panel['dd_boundaries'])
-        maps[panel['dd_pattern_id']] = {key:[offset+i for i in ids] for key,ids in boundary.items()}
+            piece_faces.append(piece_index+1)
+        samples=json.loads(panel['dd_edge_samples'])
+        maps[panel['dd_pattern_id']]={key:[[t,offset+i] for t,i in values] for key,values in samples.items()}
+        anchor_indices.update({key:offset+i for key,i in json.loads(panel['dd_anchor_indices']).items()})
         if scene.dd_pin_top:
             highest = max(v.co.y for v in panel.data.vertices)
             pin.extend(offset+v.index for v in panel.data.vertices if highest-v.co.y<.002/metres_per_unit(scene))
-    springs = set()
-    for seam in doc.seams:
-        a,b = maps[seam.a.pattern][seam.a.start],maps[seam.b.pattern][seam.b.start]
-        if len(a)!=len(b):
-            raise ValueError("Seam samples do not match. Rebuild the panels.")
-        if seam.reverse:
-            b = list(reversed(b))
-        springs.update(tuple(sorted((x,y))) for x,y in zip(a,b))
+    springs=set()
+    plan=edge_counts(doc,scene.dd_spacing)
+    def index_of(edge,fraction):
+        values=maps[edge.pattern][edge.start]
+        t,index=min(values,key=lambda value:abs(value[0]-fraction))
+        if abs(t-fraction)>1e-6:raise ValueError('Sewing samples changed. Rebuild the panels.')
+        return index
+    for _,pairs in plan.seam_pairs:
+        for (edge_a,t_a),(edge_b,t_b) in pairs:
+            a,b=index_of(edge_a,t_a),index_of(edge_b,t_b)
+            if a!=b:springs.add(tuple(sorted((a,b))))
     mesh = bpy.data.meshes.new('DD Sewn Fabric')
     mesh.from_pydata(verts,list(springs),faces)
     mesh.update()
@@ -281,6 +313,9 @@ def compile_garment(context):
             layer.data[loop].uv = uv
     for mat in materials:
         mesh.materials.append(mat)
+    for name in ('dd_piece','.sculpt_face_set'):
+        attr=mesh.attributes.new(name=name,type='INT',domain='FACE')
+        for item,value in zip(attr.data,piece_faces):item.value=value
     obj = bpy.data.objects.new('DD Garment Simulation',mesh)
     collection(scene).objects.link(obj)
     tag(obj,'simulation')
@@ -296,6 +331,12 @@ def compile_garment(context):
     settings.compression_stiffness = 25
     settings.shear_stiffness = 15
     settings.bending_stiffness = .5
+    for ids,_,preset in pieces:
+        pattern=doc.patterns[len(obj.vertex_groups)]
+        group=obj.vertex_groups.new(name='Piece '+pattern.name)
+        group.add(ids,1,'REPLACE')
+    obj['dd_piece_ids']=json.dumps([p.id for p in doc.patterns])
+    apply_presets(obj,cloth,pieces)
     cloth.collision_settings.use_collision = True
     cloth.collision_settings.distance_min = .003/metres_per_unit(scene)
     cloth.collision_settings.use_self_collision = scene.dd_self_collision
@@ -308,6 +349,8 @@ def compile_garment(context):
         group = obj.vertex_groups.new(name='DD Pins')
         group.add(pin,1,'REPLACE')
         settings.vertex_group_mass = group.name
+    add_anchors(context,obj,cloth,doc,anchor_indices)
+    remove_objects(old_anchors)
     remove_objects(old)
     for panel in panels:
         panel.hide_set(True)
@@ -331,7 +374,7 @@ def keep_drape(context):
     if source.get('dd_signature')!=signature(scene,panels):
         raise ValueError("The patterns or arrangement changed. Reset and simulate the current version first.")
     depsgraph = context.evaluated_depsgraph_get()
-    mesh = bpy.data.meshes.new_from_object(source.evaluated_get(depsgraph),depsgraph=depsgraph)
+    mesh = bpy.data.meshes.new_from_object(source.evaluated_get(depsgraph),preserve_all_data_layers=True,depsgraph=depsgraph)
     bm = bmesh.new()
     try:
         bm.from_mesh(mesh)
@@ -364,6 +407,9 @@ def keep_drape(context):
         if targets:
             bmesh.ops.weld_verts(bm,targetmap=targets)
         bmesh.ops.recalc_face_normals(bm,faces=list(bm.faces))
+        bm.verts.index_update()
+        deform=bm.verts.layers.deform.active
+        weights=[dict(v[deform]) if deform else {} for v in bm.verts]
         bm.to_mesh(mesh)
     except Exception:
         bpy.data.meshes.remove(mesh)
@@ -376,6 +422,11 @@ def keep_drape(context):
     collection(scene).objects.link(obj)
     obj.matrix_world = source.matrix_world.copy()
     tag(obj,'final')
+    obj['dd_piece_ids']=source.get('dd_piece_ids','[]')
+    for source_group in source.vertex_groups:obj.vertex_groups.new(name=source_group.name)
+    for i,values in enumerate(weights):
+        for group,weight in values.items():
+            if group<len(obj.vertex_groups):obj.vertex_groups[group].add([i],weight,'REPLACE')
     if scene.dd_thickness>0:
         modifier = obj.modifiers.new('Fabric Thickness','SOLIDIFY')
         modifier.thickness = scene.dd_thickness/metres_per_unit(scene)

@@ -19,7 +19,7 @@ class SeamTests(unittest.TestCase):
         d = Document.loads(json.dumps(old))
         self.assertEqual(d.patterns[0].id,self.s.document.patterns[0].id)
         self.assertEqual(d.seams,[])
-        self.assertEqual(json.loads(d.dumps())['version'],2)
+        self.assertEqual(json.loads(d.dumps())['version'],3)
 
     def test_sewing_round_trip_and_direction(self):
         self.s.sew(self.a,self.b)
@@ -30,16 +30,15 @@ class SeamTests(unittest.TestCase):
         self.assertEqual(loaded.seams[0].a,self.a)
         self.assertEqual(loaded.seams[0].b,self.b)
 
-    def test_shared_edges_and_same_panel_rejected(self):
+    def test_overlapping_ranges_rejected_and_same_piece_sewing_allowed(self):
         self.s.sew(self.a,self.b)
         before = self.s.document.dumps()
         with self.assertRaises(ValueError):
             self.s.sew(self.a,self.b)
         self.assertEqual(self.s.document.dumps(),before)
         self.s.remove_seam(self.s.document.seams[0].id)
-        with self.assertRaises(ValueError):
-            self.s.sew(self.a,self.s.document.edge(self.a.pattern,0))
-        self.assertEqual(self.s.document.seams,[])
+        self.s.sew(self.a,self.s.document.edge(self.a.pattern,0))
+        self.assertEqual(len(self.s.document.seams),1)  # Same-piece sewing is required for darts.
 
     def test_seams_survive_reshape_and_undo(self):
         self.s.sew(self.a,self.b)
