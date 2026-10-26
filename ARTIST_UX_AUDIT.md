@@ -79,5 +79,8 @@ protected panel builder. Malformed library metadata is rejected before that
 builder runs. Save important Blender projects before loading or rebuilding.
 This audit is not a guarantee that every possible artist workflow is defect-free.
 
-The task is prepared on its isolated branch for pull-request review. Merging
-requires an explicit request; no release or merge is part of this acceptance package.
+The testing and shipping handoff follows AGENTS.md: after the artist test handoff,
+PR or ship it confirms acceptance and authorizes final checks, PR creation or
+update, merging into master, post-merge verification, and session closure. Do not
+request another manual test of unchanged accepted behavior. A public release
+remains a separate explicit request.
