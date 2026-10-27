@@ -518,8 +518,12 @@ class MinimalCards:
                 return result
         if self.setting_drag:
             return self.controls_event(context, event)
-        if self.gesture or (press and event.type == 'ESC' and (self.draft or self.pending_edge or self.free_clicks)):
+        if self.gesture or (press and event.type == 'ESC' and (self.draft or self.free_clicks)):
             return None
+        if press and event.type in {'ESC', 'RIGHTMOUSE'} and self.pending_edge:
+            self.pending_edge = None
+            self.message = 'Seam selection cancelled.'
+            return {'RUNNING_MODAL'}
         point = self.pointer
         button = self.canvas_layout.button(*point)
         if press and event.type == 'ESC' and self.card_kind:
@@ -609,6 +613,10 @@ class MinimalCards:
             if anchor:
                 self.select_anchor(anchor)
                 self.show_card('ANCHOR', point)
+                return {'RUNNING_MODAL'}
+            if self.pending_edge:
+                self.pending_edge = None
+                self.message = 'Seam selection cancelled.'
                 return {'RUNNING_MODAL'}
             if self.tool == 'SEW':
                 self.show_card('SEWING')

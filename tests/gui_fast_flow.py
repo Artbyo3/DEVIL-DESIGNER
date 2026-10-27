@@ -170,6 +170,21 @@ def check_interaction_regressions(workspace, event, point, check):
         workspace.perform_action('UNDO')
         check(len(workspace.session.document.seams) == 1 and len(workspace.session.document.patterns) == 2,
               'seam badge keyboard removal is undoable independently of the pieces')
+        workspace.card_kind = None
+        workspace.choose_tool('SEW')
+        workspace.pending_edge = edge
+        rev_before = workspace._scene.dd_sew_reverse
+        workspace.handle_event(bpy.context, event('B', point))
+        check(workspace._scene.dd_sew_reverse != rev_before,
+              'B toggles sewing direction reverse while pending edge is active before commit')
+        workspace.handle_event(bpy.context, event('RIGHTMOUSE', point))
+        check(workspace.pending_edge is None,
+              'right click cancels pending edge selection before commit')
+        workspace.pending_edge = edge
+        with patch.object(workspace, 'design_hit_edge', return_value=edge):
+            workspace.design_sew_click()
+        check(workspace.pending_edge is None,
+              'clicking the selected edge again clears pending edge selection')
         workspace.session = Session(Document.loads(before_numeric))
         workspace.session.selected = workspace.session.document.patterns[0].id
         edge = workspace.session.document.edges(workspace.session.selected)[0]

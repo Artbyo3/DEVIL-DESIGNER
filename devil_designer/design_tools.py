@@ -235,8 +235,10 @@ class DesignTools:
             existing=next((s for s in doc.seams if any(e.full()==edge for i in (0,1) for e in s.side(i))),None)
             if existing:
                 self.seam_selected=existing.id;self.message=self.sewing_message(existing)+' B flips; X removes.'
-            else:self.pending_edge=edge;self.seam_selected=None;self.message='First edge selected. Click its sewing partner.'
+            else:self.pending_edge=edge;self.seam_selected=None;self.message='First edge selected. Click partner edge (B flips, Esc cancels).'
             return
+        if self.pending_edge.full() == edge.full():
+            self.pending_edge=None;self.message='Seam selection cleared.';return
         try:
             a=chain_range(doc,[self.pending_edge],scene.dd_sew_a0,scene.dd_sew_a1)
             b=chain_range(doc,[edge],scene.dd_sew_b0,scene.dd_sew_b1)

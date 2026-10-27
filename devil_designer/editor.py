@@ -801,6 +801,14 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         if self.seam_selected and press and event.type == 'B':
             self.run_edit(lambda: self.session.reverse_seam(self.seam_selected), 'Seam direction reversed.')
             return {'RUNNING_MODAL'}
+        if self.pending_edge and press and event.type == 'B':
+            self._scene.dd_sew_reverse = not self._scene.dd_sew_reverse
+            self.message = 'Sewing direction flipped (reverse: ' + ('on' if self._scene.dd_sew_reverse else 'off') + ').'
+            return {'RUNNING_MODAL'}
+        if self.pending_edge and press and event.type in {'ESC', 'RIGHTMOUSE'}:
+            self.pending_edge = None
+            self.message = 'Seam selection cancelled.'
+            return {'RUNNING_MODAL'}
         if press and event.type in {'X', 'DEL'} and not self.draft:
             self.perform_action('DELETE')
             return {'RUNNING_MODAL'}
