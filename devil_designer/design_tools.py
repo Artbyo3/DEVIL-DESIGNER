@@ -2,7 +2,7 @@ import copy
 import math
 import bpy
 from . import curves
-from .core import Document,Session,EdgeRef,contains
+from .core import EdgeRef
 from .construction import chain_range,path_range
 from .presets import PRESETS
 

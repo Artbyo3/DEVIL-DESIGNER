@@ -1,6 +1,6 @@
 import bpy
 from . import garment
-from .core import Document, Session
+from .core import Session
 
 
 def run(operator, action):

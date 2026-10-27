@@ -11,11 +11,17 @@
 - When removing a docstring or comment would leave an empty required code block, retain valid syntax with `pass`; do not change behavior or protected garment/simulation algorithms.
 - Verify Python with both tokenization and AST inspection: reject every `COMMENT` token and every standalone string-expression node, including all docstrings. Tokenization alone is insufficient because Python treats docstrings as strings, not comment tokens. Apply equivalent comment checks to other code languages and generated code, then verify syntax and run the required tests. Do not claim zero comments based only on a `#` search or tokenizer scan.
 
+## RULE ZERO-B: ZERO DEAD CODE AND ZERO UNUSED IMPORTS
+- **Dead code and unused imports are strictly forbidden across the codebase.**
+- Every import statement must be actively used in the importing file. Never leave unused symbols in `import` or `from ... import ...` statements.
+- Every module-level definition (constant, variable, function, class, or dataclass) must be actively referenced in the project or explicitly exported for Blender extension lifecycle registration (`bl_info`, registered scene operators/properties).
+- No speculative, abandoned, or placeholder UI component classes, layouts, or renderers. When an architecture or workflow is consolidated (such as consolidating on the minimal workspace), all superseded code, layouts, and helpers must be removed immediately rather than left behind.
+- Automated enforcement: `python -m tools.check_dead_code` checks all package modules for unused imports and unreferenced module-level definitions. This is enforced during extension packaging in `tools/build.py` and tested on every test run by `tests/test_dead_code.py`.
+
 ---
 
 ## ARTIST-FACING ANSWERS AND FEATURE REVIEWS
-- Lead with the recommendation and the artist benefit, not implementation details. Use plain, concise language by default.
-- For feature reviews, use "Add [feature] because [practical artist benefit]", "Do not add [feature] because [reason]", or "Prototype [feature] first because [uncertainty]". Explain whether the feature removes a real obstacle when making fitted VRChat clothing in Blender.
+- Lead with the recommendation and the artist benefit, not implementation details. Use plain, concise language by default.\n- For feature reviews, use "Add [feature] because [practical artist benefit]", "Do not add [feature] because [reason]", or "Prototype [feature] first because [uncertainty]". Explain whether the feature removes a real obstacle when making fitted VRChat clothing in Blender.
 - Include technical details only when they are necessary to understand the recommendation, a meaningful limitation, or a decision the artist needs to make. Do not default to source paths, function names, plumbing, or implementation walkthroughs.
 - Keep build priorities distinct from deferred conveniences and rejected features. Do not turn a review request into authorization to implement features.
 - Still verify claims against the source and report uncertainty honestly; concise answers must not hide important risks or imply an untested feature works.
@@ -53,7 +59,7 @@
 - Honor narrower instructions such as "draft PR only", "do not merge", "wait", or "do not push". A mention or quotation of these commands while discussing the rules is not a shipping instruction. If no ready-for-test handoff or prior confirmed artist test exists, ask for that one acceptance step instead of assuming an untested build is approved.
 - Record the accepted source commit or source-tree fingerprint, the tested package checksum, and the acceptance message in the thread or PR. Preserve this acceptance across resumed sessions. Deterministic rebuilds, automated checks, PR creation, merges that do not change behavior, and documentation-only or test-only changes do not require the artist to repeat the same manual test.
 - If a later fix or conflict resolution changes artist-visible behavior from the accepted build, explain exactly what changed and request only the affected manual checks. Do not request a complete repeat of unaffected testing. Never silently apply acceptance to materially different behavior.
-- Once shipping is authorized, execute without another permission round: inspect current status and branch ancestry; preserve unrelated work; run `python tools/dev.py --test --build`, `python tools/check_public.py`, `git diff --check`, Rule Zero token/AST checks, and equivalent checks for other code and generated scripts; verify the package matches the source; commit and push the verified task changes; create or update the PR targeting `master`; and register the PR with the session when supported.
+- Once shipping is authorized, execute without another permission round: inspect current status and branch ancestry; preserve unrelated work; run `python tools/dev.py --test --build`, `python tools/check_public.py`, `python -m tools.check_dead_code`, `git diff --check`, Rule Zero token/AST checks, and equivalent checks for other code and generated scripts; verify the package matches the source; commit and push the verified task changes; create or update the PR targeting `master`; and register the PR with the session when supported.
 - Require all nine suites, Blender package validation, required remote checks, and required reviews to pass on the exact source being merged. Resolve actionable review findings and conflicts without bypassing protections. Reverify after changes and apply the acceptance rule above if behavior changes. Never force-push or overwrite unrelated work merely to finish shipping.
 - Merge the verified PR into `master` as part of the authorized workflow; do not stop at "PR ready" and ask the user to merge it manually. Verify the remote merge, safely synchronize local `master`, and rerun the required tests, build, privacy, and Rule Zero checks against the resulting `master`. Confirm remote checks are green and the final package matches that source.
 - Clean disposable scratch through the validated developer runner after diagnostics and reviews are resolved; preserve `dist/`, required fixtures, and user projects.
@@ -69,7 +75,7 @@
 
 ## DEVELOPER WORKFLOW SHORTCUTS
 Run the unified developer runner from the repository root:
-- `.\dev.cmd --quick`: Fast headless unit tests
+- `.\dev.cmd --quick`: Fast headless unit tests (includes dead code, unused import, and rule checks)
 - `.\dev.cmd --test`: Complete verification across all 9 test suites
 - `.\dev.cmd --build`: Packages extension ZIP in `dist/`, validates it with Blender, and syncs to user addons
 - `.\dev.cmd --shots`: Clean, unobstructed in-engine stage screenshots (~14s)
@@ -93,7 +99,7 @@ Follow this sequence whenever the user requests a release:
 1. Inspect Git status, remotes, branch ancestry, manifest version, tags, and existing GitHub releases. Preserve current work and never release an older commit in its place.
 2. Audit unused prototypes, screenshots, old Blender scenes/backups, logs, downloaded archives, caches, and temporary files. Remove confirmed leftovers only inside the repository; preserve runtime assets, provenance, licenses, tests, and required fixtures. Never touch user projects outside the repository or bypass blocked operations.
 3. Check current source, publication archives, and reachable Git history for personal paths, identities, and credentials with `python tools/check_public.py`. Keep generated files and machine settings ignored. Never print secrets or claim a complete privacy purge from a targeted scan; report its scope and any remaining findings. Do not rewrite history without explicit authorization.
-4. Run `python tools/dev.py --test --build`, `python tools/check_public.py`, and `git diff --check`. Require every suite and Blender package validation to pass. Verify Rule Zero with comment-token and AST standalone-string/docstring checks, not tokenization alone. Confirm archive contents match the exact source being released, with no private or generated artifacts.
+4. Run `python tools/dev.py --test --build`, `python tools/check_public.py`, `python -m tools.check_dead_code`, and `git diff --check`. Require every suite and Blender package validation to pass. Verify Rule Zero with comment-token and AST standalone-string/docstring checks, not tokenization alone. Confirm archive contents match the exact source being released, with no private or generated artifacts.
 5. With user authorization, commit and push the verified current source. Ensure the intended release branch contains that commit without force-pushing or overwriting unrelated work. Tag the exact source commit matching the package; never publish uncommitted changes against a stale source tag.
 6. Publish the manifest version as a GitHub release with accurate release notes, the installable extension ZIP from `dist/`, and its SHA-256 checksum. Upload only deliberate public release assets, never scratch, local scenes, screenshots, or test reports. Delete scratch after verification is complete.
 7. Verify the remote commit, tag, release status, downloadable assets, checksums, and final working-tree status. Report the release URL, validation results, cleanup performed, privacy scan scope, and any remaining blockers. Never mark incomplete cleanup or publication complete.
