@@ -1,4 +1,5 @@
 import math
+from .measurements import estimate_body_measurements
 
 VIEWS = ('FRONT','BACK','LEFT','RIGHT')
 
@@ -37,8 +38,26 @@ class BodyReference:
         self.vertices=[]
         self.triangles=[]
         self.bounds=None
+        self._measurements=None
+        self._last_body=None
+        self._last_scene=None
         self.revision=0
         self.error=''
+
+    @property
+    def measurements(self):
+        if self._measurements is not None:
+            return self._measurements
+        if self._last_body and self._last_scene and self.bounds and self.vertices:
+            try:
+                self._measurements=estimate_body_measurements(self._last_body,self._last_scene,reference=self)
+            except Exception:
+                self._measurements=None
+        return self._measurements
+
+    @measurements.setter
+    def measurements(self,value):
+        self._measurements=value
 
     def refresh(self,context,force=False):
         scene=context.scene
@@ -56,6 +75,9 @@ class BodyReference:
             return False
         self.key=key
         self.vertices,self.triangles,self.bounds=[],[],None
+        self._measurements=None
+        self._last_body=body
+        self._last_scene=scene
         self.error=''
         self.revision+=1
         if body is None:
@@ -82,6 +104,7 @@ class BodyReference:
                 raise ValueError('The body has no usable height in this view.')
         except (ValueError,RuntimeError,ReferenceError) as exc:
             self.vertices,self.triangles,self.bounds=[],[],None
+            self._measurements=None
             self.error=str(exc)
         finally:
             if evaluated is not None:

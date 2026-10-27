@@ -97,8 +97,61 @@ class DesignTools:
     def design_action(self,action):
         scene=self._scene;doc=self.session.document;p=doc.find(self.session.selected)
         def operation():
-            if action == 'START_PANEL':
-                self.session.add([(-.2,0),(.2,0),(.2,.45),(-.2,.45)])
+            if action in {'STARTER_TEE', 'STARTER_TANK', 'STARTER_SKIRT'}:
+                from .starters import STARTER_GENERATORS
+                from . import arrangement, garment
+                label, generator, mode = STARTER_GENERATORS[action]
+                measurements = None
+                if hasattr(self, 'reference') and getattr(self.reference, 'measurements', None):
+                    measurements = self.reference.measurements
+                elif scene.dd_avatar:
+                    from .measurements import estimate_body_measurements
+                    measurements = estimate_body_measurements(scene.dd_avatar, scene)
+                before = scene.dd_document
+                self.session.undo_stack.append(before)
+                self.session.redo_stack.clear()
+                starter_doc = generator(measurements, getattr(self.session.document, 'preset', 'COTTON'))
+                self.clear_interaction_references()
+                self.session.document = starter_doc
+                self.session.selected = starter_doc.patterns[0].id if starter_doc.patterns else None
+                self.session.path = 'OUTER'
+                self.session.corner = None
+                self.session.segment = None
+                self.session.point_selection = []
+                self.persist()
+                if scene.dd_avatar:
+                    try:
+                        arrangement.arrange(bpy.context, mode)
+                    except Exception:
+                        try:
+                            garment.arrange(bpy.context)
+                        except Exception:
+                            pass
+                    self.reveal_3d()
+                self.update_reference(bpy.context, align=False)
+                self.fit()
+                self.message = f"{label} starter created. Pre-sewn and placed on avatar."
+                return
+            elif action in {'ADD_PANEL', 'DEMO_PANEL'}:
+                ref_bounds = getattr(self.reference, 'bounds', None) if hasattr(self, 'reference') else None
+                ref_h = (ref_bounds[1][1] - ref_bounds[0][1]) if ref_bounds else 0.0
+                ref_y = scene.dd_reference_y
+                ref_x = scene.dd_reference_x
+                base_y = (ref_y + max(0.20, ref_h * 0.50)) if ref_h > 0 else 0.0
+                base_x = ref_x if ref_h > 0 else 0.0
+                self.session.add([(base_x - .20, base_y), (base_x + .20, base_y),
+                                  (base_x + .20, base_y + .45), (base_x - .20, base_y + .45)])
+                self.session.document.find(self.session.selected).name = 'Basic panel'
+                self.fit()
+            elif action == 'START_PANEL':
+                ref_bounds = getattr(self.reference, 'bounds', None) if hasattr(self, 'reference') else None
+                ref_h = (ref_bounds[1][1] - ref_bounds[0][1]) if ref_bounds else 0.0
+                ref_y = scene.dd_reference_y
+                ref_x = scene.dd_reference_x
+                base_y = (ref_y + max(0.20, ref_h * 0.50)) if ref_h > 0 else 0.0
+                base_x = ref_x if ref_h > 0 else 0.0
+                self.session.add([(base_x - .2, base_y), (base_x + .2, base_y),
+                                  (base_x + .2, base_y + .45), (base_x - .2, base_y + .45)])
                 self.session.document.find(self.session.selected).name = 'Front panel'
             elif action in {'NUM_RECT','NUM_ELLIPSE'}:
                 a=(scene.dd_point_x,scene.dd_point_y);b=(a[0]+scene.dd_width,a[1]+scene.dd_height)

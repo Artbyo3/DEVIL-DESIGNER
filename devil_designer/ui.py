@@ -29,7 +29,7 @@ PROPERTIES = ('dd_document','dd_history','dd_collection','dd_avatar','dd_spacing
               'dd_reference_opacity','dd_reference_x','dd_reference_y','dd_reference_placed',
               'dd_point_x','dd_point_y','dd_width','dd_height','dd_segment_length','dd_offset','dd_wrap_radius',
               'dd_sew_a0','dd_sew_a1','dd_sew_b0','dd_sew_b1','dd_free_sewing','dd_sew_reverse','dd_internal_mode',
-              'dd_lengths_visible','dd_library_name','dd_library_dir','dd_library_selected','dd_library_refit','dd_fabric')
+              'dd_lengths_visible','dd_measure_visible','dd_library_name','dd_library_dir','dd_library_selected','dd_library_refit','dd_fabric')
 
 
 def register():
@@ -49,12 +49,13 @@ def register():
     Scene.dd_reference_placed = bpy.props.BoolProperty(default=False)
     for key,default,low,high in [('dd_point_x',0,-100,100),('dd_point_y',0,-100,100),('dd_width',.3,.001,100),
         ('dd_height',.4,.001,100),('dd_segment_length',.1,.0001,100),('dd_offset',.01,-1,1),('dd_wrap_radius',.06,0,10),
-        ('dd_sew_a0',0,0,1),('dd_sew_a1',1,0,1),('dd_sew_b0',0,0,1),('dd_sew_b1',1,0,1)]:
+        ('dd_sew_a0',0,0,1),('dd_sew_a1',1,0,1),('dd_sew_b0',0,0,1),('dd_sew_b1',1,0,1)]:\
         setattr(Scene,key,bpy.props.FloatProperty(default=default,min=low,max=high,precision=4))
     Scene.dd_free_sewing=bpy.props.BoolProperty(default=False)
     Scene.dd_sew_reverse=bpy.props.BoolProperty(default=True)
     Scene.dd_internal_mode=bpy.props.BoolProperty(default=False)
     Scene.dd_lengths_visible=bpy.props.BoolProperty(default=True)
+    Scene.dd_measure_visible=bpy.props.BoolProperty(default=False)
     Scene.dd_library_name=bpy.props.StringProperty(default='Garment',maxlen=80)
     Scene.dd_library_dir=bpy.props.StringProperty(default='',subtype='DIR_PATH')
     Scene.dd_library_selected=bpy.props.IntProperty(default=0,min=0)

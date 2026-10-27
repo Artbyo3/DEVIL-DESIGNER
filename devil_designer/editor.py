@@ -826,7 +826,14 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                     self.workflow_action('DEMO')
                     return {'RUNNING_MODAL'}
                 elif card2.contains(*self.pointer):
-                    self.session.add([(-0.20, 0), (0.20, 0), (0.20, 0.45), (-0.20, 0.45)])
+                    ref_bounds = self.reference.bounds
+                    ref_h = (ref_bounds[1][1] - ref_bounds[0][1]) if ref_bounds else 0.0
+                    ref_y = self._scene.dd_reference_y
+                    ref_x = self._scene.dd_reference_x
+                    base_y = (ref_y + max(0.20, ref_h * 0.50)) if ref_h > 0 else 0.0
+                    base_x = ref_x if ref_h > 0 else 0.0
+                    self.session.add([(base_x - 0.20, base_y), (base_x + 0.20, base_y),
+                                      (base_x + 0.20, base_y + 0.45), (base_x - 0.20, base_y + 0.45)])
                     self.session.document.patterns[-1].name = "Front panel"
                     self.persist()
                     self.fit()

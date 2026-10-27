@@ -452,7 +452,13 @@ class Renderer:
                         diff = abs(len_a - len_b)
                         ratio = (min(len_a, len_b) / max(1e-5, max(len_a, len_b))) * 100
                         is_match = diff <= 0.6
-                        rev_label = "rev" if ed._scene.dd_sew_reverse else "direct"
+                        pa0 = doc.edge_point(ed.pending_edge, ed.pending_edge.t0)
+                        pa1 = doc.edge_point(ed.pending_edge, ed.pending_edge.t1)
+                        pb0 = doc.edge_point(h_edge, h_edge.t0)
+                        pb1 = doc.edge_point(h_edge, h_edge.t1)
+                        same_dir = ((pa1[0] - pa0[0]) * (pb1[0] - pb0[0]) + (pa1[1] - pa0[1]) * (pb1[1] - pb0[1])) >= 0
+                        rev = not ed._scene.dd_sew_reverse if same_dir else bool(ed._scene.dd_sew_reverse)
+                        rev_label = "rev" if rev else "direct"
                         msg = f"Match: {len_a:.1f} cm ↔ {len_b:.1f} cm ({ratio:.0f}%) [{rev_label}] · B flip" if is_match else f"Mismatch: {len_a:.1f} cm vs {len_b:.1f} cm (Δ {diff:.1f} cm) [{rev_label}] · B flip"
                         badge_bg = (0.08, 0.25, 0.16, 0.95) if is_match else (0.28, 0.18, 0.08, 0.95)
                         badge_border = (0.2, 0.7, 0.4, 0.9) if is_match else (0.8, 0.5, 0.2, 0.9)
@@ -1028,7 +1034,10 @@ class Renderer:
                     prev_col = (0.22, 0.82, 0.48, 0.95) if is_match else (1.0, 0.65, 0.25, 0.95)
                     pts_b = [ed.view.screen(doc.edge_point(h_edge, h_edge.t0 + (h_edge.t1 - h_edge.t0) * i / 16), c) for i in range(17)]
                     self.lines(pts_b, prev_col, 3.2, True)
-                    rev = bool(ed._scene.dd_sew_reverse)
+                    va = (pts_a[-1][0] - pts_a[0][0], pts_a[-1][1] - pts_a[0][1])
+                    vb = (pts_b[-1][0] - pts_b[0][0], pts_b[-1][1] - pts_b[0][1])
+                    same_dir = (va[0] * vb[0] + va[1] * vb[1]) >= 0
+                    rev = not ed._scene.dd_sew_reverse if same_dir else bool(ed._scene.dd_sew_reverse)
                     dot_b = pts_b[-1] if rev else pts_b[0]
                     self.dot(dot_b, 5.5, prev_col)
                     for s_idx in range(5):
@@ -1262,23 +1271,53 @@ class Renderer:
     def body_reference(self, ed):
         scene = ed._scene
         reference = ed.reference
-        if not scene.dd_reference_visible or not reference.vertices or scene.dd_reference_opacity <= 0:
+        show_guide = getattr(scene, 'dd_measure_visible', False)
+        if (not scene.dd_reference_visible and not show_guide) or not reference.vertices:
             return
+        c = ed.canvas_layout.canvas
         if self.reference_revision != reference.revision:
             self.reference_batch = batch_for_shader(self.shader, 'TRIS', {'pos': reference.vertices}, indices=reference.triangles)
             self.reference_revision = reference.revision
-        alpha = scene.dd_reference_opacity
-        tint = (0.48, 0.56, 0.64)
-        color = tuple(BG[i] * (1 - alpha) + tint[i] * alpha for i in range(3)) + (1,)
-        origin = ed.view.screen((scene.dd_reference_x, scene.dd_reference_y), ed.canvas_layout.canvas)
-        zoom = ed.view.zoom
-        transform = Matrix(((zoom, 0, 0, origin[0]), (0, zoom, 0, origin[1]), (0, 0, 1, 0), (0, 0, 0, 1)))
-        with gpu.matrix.push_pop():
-            gpu.matrix.multiply_matrix(transform)
-            self.shader.bind()
-            self.shader.uniform_float('color', color)
-            self.reference_batch.draw(self.shader)
-        c = ed.canvas_layout.canvas
-        height = reference.bounds[1][1] - reference.bounds[0][1]
-        self.text(c.x + 10 * self.s, c.y + c.h - 18 * self.s,
-                  f"{scene.dd_reference_view.title()} body reference / {height * 100:.1f} cm", 9, MUTED, max_width=c.w - 20 * self.s)
+        if scene.dd_reference_visible and scene.dd_reference_opacity > 0:
+            alpha = scene.dd_reference_opacity
+            tint = (0.48, 0.56, 0.64)
+            color = tuple(BG[i] * (1 - alpha) + tint[i] * alpha for i in range(3)) + (1,)
+            origin = ed.view.screen((scene.dd_reference_x, scene.dd_reference_y), c)
+            zoom = ed.view.zoom
+            transform = Matrix(((zoom, 0, 0, origin[0]), (0, zoom, 0, origin[1]), (0, 0, 1, 0), (0, 0, 0, 1)))
+            with gpu.matrix.push_pop():
+                gpu.matrix.multiply_matrix(transform)
+                self.shader.bind()
+                self.shader.uniform_float('color', color)
+                self.reference_batch.draw(self.shader)
+        if show_guide and getattr(reference, 'measurements', None) and reference.bounds:
+            m = reference.measurements
+            line_color = (0.35, 0.65, 0.90, 0.85)
+            text_color = (0.85, 0.92, 0.98, 0.95)
+            ref_h = reference.bounds[1][1] - reference.bounds[0][1]
+            landmarks = (
+                ('Chest', m['chest'], m.get('chest_y', m['chest_z'] - m['low_z'])),
+                ('Waist', m['waist'], m.get('waist_y', m['waist_z'] - m['low_z'])),
+                ('Hips', m['hip'], m.get('hip_y', m['hip_z'] - m['low_z'])),
+            )
+            for label, val, ly in landmarks:
+                wy = scene.dd_reference_y + ly
+                sy = ed.view.screen((0, wy), c)[1]
+                if c.y <= sy <= c.y + c.h:
+                    near_xs = [p[0] for p in reference.vertices if abs(p[1] - ly) < 0.025 and abs(p[0]) < 0.28 * ref_h]
+                    if near_xs:
+                        lx = min(near_xs) - 0.02
+                        rx = max(near_xs) + 0.02
+                    else:
+                        lx = -0.16
+                        rx = 0.16
+                    sx_left = ed.view.screen((scene.dd_reference_x + lx, 0), c)[0]
+                    sx_right = ed.view.screen((scene.dd_reference_x + rx, 0), c)[0]
+                    self.lines([(sx_left, sy), (sx_right, sy)], line_color, 1.2)
+                    self.dot((sx_left, sy), 2.5 * self.s, line_color)
+                    self.dot((sx_right, sy), 2.5 * self.s, line_color)
+                    self.text(sx_right + 6 * self.s, sy - 5 * self.s, f"{label} {val:.1f} cm", 9, text_color)
+        if reference.bounds:
+            height = reference.bounds[1][1] - reference.bounds[0][1]
+            self.text(c.x + 10 * self.s, c.y + c.h - 18 * self.s,
+                      f"{scene.dd_reference_view.title()} body reference / {height * 100:.1f} cm", 9, MUTED, max_width=c.w - 20 * self.s)
