@@ -134,7 +134,27 @@ class MinimalCards:
             title = 'Garment'
             rows = [('NAME', scene.dd_library_name, 'Rename'),
                     ('LIBRARY_SAVE', 'Save garment', ''),
-                    ('REFERENCE_IMAGE', 'Reference image', 'Trace a photo')]
+                    ('REFERENCE_IMAGE', 'Reference image', 'Trace a photo'),
+                    ('TOGGLE_MEASURE', 'Measure guide', 'Hide' if scene.dd_measure_visible else 'Show')]
+            measurements = getattr(getattr(self, 'reference', None), 'measurements', None)
+            if measurements:
+                rows.append(('INFO', 'Height', f"{measurements['height']:.1f} cm"))
+                rows.append(('INFO', 'Chest', f"{measurements['chest']:.1f} cm"))
+                rows.append(('INFO', 'Waist', f"{measurements['waist']:.1f} cm"))
+                rows.append(('INFO', 'Hips', f"{measurements['hip']:.1f} cm"))
+                rows.append(('INFO', 'Shoulders', f"{measurements['shoulder_width']:.1f} cm"))
+                rows.append(('INFO', 'Torso length', f"{measurements['torso_length']:.1f} cm"))
+                rows.append(('INFO', 'Inseam', f"{measurements['inseam']:.1f} cm"))
+                if measurements.get('fallback'):
+                    rows.append(('INFO', 'Landmarks', 'Estimated by height proportions'))
+            elif scene.dd_avatar:
+                rows.append(('INFO', 'Measurements', 'Choose body to refresh'))
+            else:
+                rows.append(('INFO', 'Measurements', 'Choose body first'))
+            if not doc.patterns:
+                rows.append(('STARTER_TEE', 'Tee starter', 'Fitted top'))
+                rows.append(('STARTER_TANK', 'Tank starter', 'Sleeveless top'))
+                rows.append(('STARTER_SKIRT', 'Skirt starter', 'A-line skirt'))
             if any(obj.get('dd_kind') == 'simulation' for obj in scene.objects):
                 rows.append(('RESET', 'Reset drape', ''))
         elif kind == 'BODY':
@@ -202,6 +222,13 @@ class MinimalCards:
         elif kind == 'CANVAS_MENU':
             title = 'Garment & View'
             rows.append(('MENU', 'BODY_CHANGE', 'Body', scene.dd_avatar.name if scene.dd_avatar else 'None'))
+            if not doc.patterns:
+                rows.append(('STARTER_TEE', 'Tee starter', 'Fitted top'))
+                rows.append(('STARTER_TANK', 'Tank starter', 'Sleeveless top'))
+                rows.append(('STARTER_SKIRT', 'Skirt starter', 'A-line skirt'))
+                rows.append(('DEMO_PANEL', 'Create panel', '40 × 45 cm'))
+                rows.append(('SET_DRAW_POLYGON', 'Draw your own', 'Tool'))
+                rows.append(('MENU_LIBRARY', 'Library', 'Open'))
             rows.append(('CHOICES_FABRIC', 'Default fabric', ('INSP_GARMENT_FABRIC', FABRICS, getattr(doc, 'preset', 'COTTON'))))
             rows.append(('CHOICES', 'Mesh density', ('INSP_GARMENT_DENSITY', DENSITY, self.named_choice(scene.dd_spacing, DENSITY))))
             rows.append(('CHOICES', 'Quality', ('INSP_QUALITY', QUALITY, self.named_choice(scene.dd_quality, QUALITY))))
@@ -341,6 +368,18 @@ class MinimalCards:
         elif key.startswith('INSP_OPACITY_'):
             choice = key.removeprefix('INSP_OPACITY_')
             scene.dd_reference_opacity = GUIDE_OPACITY[choice]
+        elif key == 'TOGGLE_MEASURE':
+            scene.dd_measure_visible = not scene.dd_measure_visible
+            if scene.dd_measure_visible:
+                scene.dd_reference_visible = True
+        elif key in {'STARTER_TEE', 'STARTER_TANK', 'STARTER_SKIRT'}:
+            self.perform_action(key)
+            self.card_kind = None
+        elif key == 'DEMO_PANEL':
+            self.perform_action('DEMO_PANEL')
+            self.card_kind = None
+        elif key == 'MENU_LIBRARY':
+            self.show_card('LIBRARY', self.card_anchor)
         elif key == 'BODY_CHANGE':
             self.show_card('BODY', self.card_anchor)
         elif key == 'PIECE_FABRIC_MENU':

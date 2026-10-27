@@ -160,6 +160,18 @@ def build_panels(context):
         raise
     reset(context)
     old = {o.get('dd_pattern_id'):o for o in generated(scene,'panel')}
+    avatar = scene.dd_avatar
+    has_avatar = (avatar is not None and getattr(avatar, 'type', None) == 'MESH' and avatar in list(scene.objects)
+                  and avatar.get('dd_kind') not in {'panel', 'simulation', 'final', 'anchor'}
+                  and bool(avatar.data.vertices))
+    if has_avatar:
+        low, high = bounds(avatar)
+        center_3d = (low + high) / 2
+        body_height = high.z - low.z
+        gap = scene.dd_clearance / unit
+        ref_x = getattr(scene, 'dd_reference_x', 0.0)
+        ref_y = getattr(scene, 'dd_reference_y', 0.0)
+        placed = getattr(scene, 'dd_reference_placed', False)
     coll = collection(scene)
     result = []
     for index,(p,mesh,boundaries,center,metadata) in enumerate(prepared):
@@ -167,8 +179,17 @@ def build_panels(context):
         if obj is None:
             obj = bpy.data.objects.new(p.name,mesh)
             coll.objects.link(obj)
-            obj.location = (center[0]/unit,0,center[1]/unit)
-            obj.rotation_euler = (math.pi/2,0,0)
+            if has_avatar:
+                is_back = 'back' in p.name.casefold() or (index == 1 and len(prepared) == 2)
+                side = 1 if is_back else -1
+                pan_x = center_3d.x if is_back else (center_3d.x + (center[0] - ref_x) / unit)
+                pan_y = high.y + gap if side > 0 else low.y - gap
+                pan_z = (low.z + (center[1] - ref_y) / unit) if (placed and center[1] > ref_y) else (low.z + body_height * (.72 if body_height * unit > 1 else .68))
+                obj.location = (pan_x, pan_y, pan_z)
+                obj.rotation_euler = (math.pi/2, 0, math.pi if side > 0 else 0)
+            else:
+                obj.location = (center[0]/unit, 0, center[1]/unit)
+                obj.rotation_euler = (math.pi/2, 0, 0)
         else:
             previous = obj.data
             obj.data = mesh
@@ -213,11 +234,17 @@ def arrange(context):
     unit = metres_per_unit(scene)
     center = (low+high)/2
     body_height = high.z-low.z
-    z = low.z+body_height*(.72 if body_height*unit>1 else .68)
+    default_z = low.z+body_height*(.72 if body_height*unit>1 else .68)
     gap = scene.dd_clearance/unit
+    doc = document(scene)
+    placed = getattr(scene, 'dd_reference_placed', False)
+    ref_y = getattr(scene, 'dd_reference_y', 0.0)
     for index,obj in enumerate(panels):
         side = -1 if index==0 else 1
-        obj.location = (center.x,(low.y-gap if side<0 else high.y+gap),z)
+        pattern = doc.find(obj.get('dd_pattern_id'))
+        cy = (min(v[1] for v in pattern.points)+max(v[1] for v in pattern.points))/2 if pattern and pattern.points else None
+        panel_z = (low.z + (cy - ref_y) / unit) if (cy is not None and placed and cy > ref_y) else default_z
+        obj.location = (center.x,(low.y-gap if side<0 else high.y+gap),panel_z)
         obj.rotation_euler = (math.pi/2,0,0 if index==0 else math.pi)
     context.view_layer.update()
     return panels

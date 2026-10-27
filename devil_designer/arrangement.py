@@ -126,9 +126,18 @@ def arrange(context, mode):
     if len(by_id) != len(plan) or set(by_id) != {target.pattern_id for target in plan}:
         raise ValueError('Generated panels do not match the arrangement pieces.')
     previous = [(panel, panel.matrix_world.copy()) for panel in panels]
+    low, high = garment.bounds(avatar)
+    ref_y = getattr(scene, 'dd_reference_y', 0.0)
+    placed = getattr(scene, 'dd_reference_placed', False)
     try:
         for target in plan:
-            placement.place(context, target.pattern_id, Vector(target.point), Vector(target.normal))
+            target_pt = list(target.point)
+            pattern = document.find(target.pattern_id)
+            if pattern and pattern.points and placed:
+                cy = (min(v[1] for v in pattern.points) + max(v[1] for v in pattern.points)) / 2
+                if cy > ref_y:
+                    target_pt[2] = low[2] + (cy - ref_y) / unit
+            placement.place(context, target.pattern_id, Vector(tuple(target_pt)), Vector(target.normal))
     except Exception:
         for panel, matrix in previous:
             panel.matrix_world = matrix

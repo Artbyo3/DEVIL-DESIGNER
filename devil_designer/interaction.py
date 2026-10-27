@@ -223,7 +223,9 @@ class OverlayControls:
             return False
         if not confirmed:
             prompt = ''
-            if action == 'LIBRARY_LOAD' and self.session.document.patterns:
+            if action in {'STARTER_TEE', 'STARTER_TANK', 'STARTER_SKIRT'} and self.session.document.patterns:
+                prompt = 'Replace current garment with this starter? You can undo this change.'
+            elif action == 'LIBRARY_LOAD' and self.session.document.patterns:
                 prompt = 'Replace this garment with the library item? You can undo the source change.'
             elif action == 'RESET':
                 prompt = 'Discard this drape and restore the positioned panels?'
