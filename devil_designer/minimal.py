@@ -16,17 +16,15 @@ def minimal_layout(layout, pending=False, confirmation=False, playing=False):
     panel = layout.panel
     layout.minimal = True
     layout.inspector = None
-    layout.canvas = Rect(panel.x + 4 * scale, panel.y + 4 * scale,
-                         panel.w - 8 * scale, panel.h - 8 * scale)
+    layout.inspector_collapsed = True
     layout.header = Rect(panel.x, panel.y + panel.h - 32 * scale, panel.w, 32 * scale)
     layout.footer = Rect(panel.x, panel.y, panel.w, 0)
-    dock_height = min(594 * scale, panel.h - 112 * scale)
-    dock_width = (60 if dock_height >= 500 * scale else 48) * scale
+    dock_height = min(540 * scale, panel.h - 112 * scale)
+    dock_width = (60 if dock_height >= 460 * scale else 48) * scale
     layout.rail = Rect(panel.x + 14 * scale, panel.y + (panel.h - dock_height) / 2, dock_width, dock_height)
     layout.buttons = {}
-    tools = [('SELECT', 'Select'), ('POLYGON', 'Polygon'), ('RECTANGLE', 'Panel'),
-             ('ELLIPSE', 'Ellipse'), ('INTERNAL', 'Internal'), ('SEW', 'Sew'),
-             ('PIN', 'Pin'), ('DART', 'Dart'), ('UNDO', 'Undo'), ('REDO', 'Redo'), ('LIBRARY', 'Library')]
+    tools = [('SELECT', 'Select'), ('DRAW', 'Draw'), ('INTERNAL', 'Internal'), ('SEW', 'Sew'),
+             ('PIN', 'Pin'), ('UNDO', 'Undo'), ('REDO', 'Redo'), ('LIBRARY', 'Library')]
     indicator_h = 22 * scale
     tools_h = dock_height - indicator_h - 10 * scale
     row_height = tools_h / len(tools)
@@ -42,11 +40,11 @@ def minimal_layout(layout, pending=False, confirmation=False, playing=False):
     right = panel.x + panel.w - 14 * scale
     layout.buttons['CLOSE'] = (Rect(right - 24 * scale, panel.y + panel.h - 30 * scale, 24 * scale, 24 * scale), 'Close')
     right -= 28 * scale
-    layout.buttons['WORKSPACE_PANEL'] = (Rect(right - 88 * scale, panel.y + panel.h - 30 * scale, 82 * scale, 24 * scale), 'Workspace')
     if not layout.full:
         right -= 88 * scale
-        layout.buttons['RESTORE_CANVAS'] = (Rect(right - 88 * scale, panel.y + panel.h - 30 * scale, 82 * scale, 24 * scale), 'Full canvas')
+        layout.buttons['RESTORE_CANVAS'] = (Rect(right, panel.y + panel.h - 30 * scale, 82 * scale, 24 * scale), 'Full canvas')
     layout.buttons['GARMENT'] = (Rect(panel.x + 14 * scale, panel.y + panel.h - 36 * scale, min(220 * scale, panel.w * .40), 30 * scale), 'Garment')
+    layout.canvas = Rect(panel.x + 4 * scale, panel.y + 4 * scale, panel.w - 8 * scale, panel.h - 8 * scale)
     bottom = panel.y + 14 * scale
     right = panel.x + panel.w - 14 * scale
     specs = [('SIMULATE', 'Pause' if playing else 'Simulate'), ('KEEP', 'Keep mesh')]
@@ -58,26 +56,29 @@ def minimal_layout(layout, pending=False, confirmation=False, playing=False):
         width = 142 * scale
         right -= width
         layout.buttons[key] = (Rect(right, bottom, width, 40 * scale), label)
-        if key in {'SIMULATE', 'KEEP'}:
-            layout.buttons[key + '_OPTIONS'] = (Rect(right + 112 * scale, bottom, 30 * scale, 40 * scale), 'Options')
-            layout.buttons[key] = (Rect(right, bottom, 112 * scale, 40 * scale), label)
+        if key == 'KEEP':
+            layout.buttons['KEEP_OPTIONS'] = (Rect(right + 112 * scale, bottom, 30 * scale, 40 * scale), 'Options')
+            layout.buttons['KEEP'] = (Rect(right, bottom, 112 * scale, 40 * scale), label)
         right -= 8 * scale
 
 
 class MinimalCards:
     def initialize_minimal(self):
         self.minimal_ui = True
-        self.workspace_panel_open = True
-        self.workspace_panel_pinned = True
+        self.advanced_tools = False
+        self.weld_manual = False
         self.card_kind = None
-        self.context_card_hidden = False
         self.card_anchor = None
         self.card_page = 0
-        self.weld_manual = False
         self.card_models = []
-        self.toast_text = ''
+        self.library_items = []
+        self.toast_message = ''
         self.toast_until = 0
         self._scene.dd_reference_visible = False
+        self._scene.dd_fabric = getattr(self.session.document, 'preset', 'COTTON')
+        self.draw_shape = 'RECTANGLE'
+        self.internal_tool = 'INTERNAL'
+        self.pin_tool = 'PIN'
 
     def named_choice(self, value, choices):
         return min(choices, key=lambda name: abs(choices[name] - value))
@@ -119,49 +120,131 @@ class MinimalCards:
         if kind == 'LIBRARY':
             self.refresh_library()
 
-    def minimal_card(self, kind_override=None):
-        if self.confirm_action or ((self.draft or self.gesture) and kind_override != 'WORKSPACE'):
+    def minimal_card(self):
+        kind = self.card_kind
+        if not kind:
             return None
-        pattern = self.session.document.find(self.session.selected)
-        kind = kind_override or self.card_kind
-        anchor = next((anchor for anchor in self.session.document.anchors if anchor.id == self.selected_anchor), None)
-        if kind is None and anchor and self.tool in {'PIN', 'TACK'}:
-            kind = 'ANCHOR'
-        if kind is None and pattern:
-            kind = 'PIECE'
-        if kind is None:
-            kind = 'GARMENT'
         scene = self._scene
+        doc = self.session.document
+        pattern = doc.find(self.session.selected)
+        anchor = next((a for a in doc.anchors if a.id == self.selected_anchor), None)
         rows = []
         title = kind.title()
-        if kind == 'PIECE':
+        if kind == 'GARMENT':
+            title = 'Garment'
+            rows = [('NAME', scene.dd_library_name, 'Rename'),
+                    ('LIBRARY_SAVE', 'Save garment', ''),
+                    ('REFERENCE_IMAGE', 'Reference image', 'Trace a photo')]
+            if any(obj.get('dd_kind') == 'simulation' for obj in scene.objects):
+                rows.append(('RESET', 'Reset drape', ''))
+        elif kind == 'BODY':
+            title = 'Choose body'
+            self.card_models = sorted((obj for obj in scene.objects if obj.type == 'MESH' and not obj.get('dd_kind')), key=lambda obj: obj.name.casefold())
+            rows = [('BODY_' + str(index), obj.name, '') for index, obj in enumerate(self.card_models) if self.card_page * 8 <= index < (self.card_page + 1) * 8]
+            if len(self.card_models) > 8:
+                pages = math.ceil(len(self.card_models) / 8)
+                rows.append(('PAGE_BODY', f'More bodies ({self.card_page + 1}/{pages})', 'Next'))
+            if not rows:
+                rows = [('INFO', 'No body in scene', 'Add in Blender')]
+        elif kind == 'LIBRARY':
+            title = 'Garment library'
+            rows = [('LOAD_' + str(index), item.stem.replace('.garment', ''), 'Load') for index, item in enumerate(self.library_items) if self.card_page * 8 <= index < (self.card_page + 1) * 8]
+            if len(self.library_items) > 8:
+                pages = math.ceil(len(self.library_items) / 8)
+                rows.append(('PAGE_LIBRARY', f'More garments ({self.card_page + 1}/{pages})', 'Next'))
+            rows.append(('LIBRARY_SAVE', 'Save current garment', ''))
+        elif kind == 'KEEP':
+            title = 'Keep mesh'
+            rows = [('WELD_AUTO', 'Weld', 'Manual' if self.weld_manual else 'Auto'),
+                    ('CHOICES', 'Thickness', ('THICKNESS', THICKNESS, self.named_choice(scene.dd_thickness, THICKNESS)))]
+            if scene.get('dd_unwelded_seams', 0) > 0:
+                rows += [('SLIDER', 'dd_weld_distance', 'Weld tolerance'), ('KEEP_RETRY', 'Retry keep', f"{scene['dd_unwelded_seams']} unwelded pairs")]
+        elif kind == 'DRAW_CHOOSER':
+            title = 'Draw shape'
+            rows = [('SET_DRAW_POLYGON', 'Polygon', 'P'),
+                    ('SET_DRAW_RECTANGLE', 'Rectangle', 'R'),
+                    ('SET_DRAW_ELLIPSE', 'Ellipse', 'E')]
+        elif kind == 'INTERNAL_CHOOSER':
+            title = 'Internal'
+            rows = [('SET_INTERNAL_PATH', 'Internal path', 'I'),
+                    ('SET_INTERNAL_DART', 'Dart', 'D'),
+                    ('CUT', 'Cut along path', '')]
+        elif kind == 'PIN_CHOOSER':
+            title = 'Pin or tack'
+            rows = [('SET_PIN_FABRIC', 'Pin on fabric', 'K'),
+                    ('SET_PIN_BODY', 'Attach to body', 'T')]
+        elif kind == 'PIECE_FABRIC':
+            title = 'Fabric override'
+            rows = [('SET_PIECE_FABRIC_AUTO', 'Garment default', '')]
+            rows += [('SET_PIECE_FABRIC_' + name, name.title(), '') for name in FABRICS]
+        elif kind == 'PIECE_DENSITY':
+            title = 'Mesh density override'
+            rows = [('SET_DENSITY_AUTO', 'Garment default', ''),
+                    ('SET_DENSITY_COARSE', 'Coarse', ''),
+                    ('SET_DENSITY_STANDARD', 'Standard', ''),
+                    ('SET_DENSITY_FINE', 'Fine', '')]
+        elif kind == 'PIECE':
             if pattern is None:
                 return None
             title = pattern.name
-            rows = [('FABRIC', 'Fabric', pattern.preset.title()),
-                    ('PIECE_DENSITY', 'Mesh density', pattern.mesh_density.title()),
-                    ('INFO', f'{len(pattern.points)} edges', f'{sum(edge.pattern == pattern.id for seam in self.session.document.seams for side in (0, 1) for edge in seam.side(side))} sewn'),
-                    ('EDIT_CARD', 'Edit piece', 'Right-click')]
-        elif kind == 'WORKSPACE':
-            title = 'Workspace'
-            rows = [('WORKSPACE_SNAP', 'Snapping', 'On' if self.snap else 'Off'),
-                    ('WORKSPACE_LENGTHS', 'Measurements', 'Shown' if scene.dd_lengths_visible else 'Hidden'),
-                    ('WORKSPACE_GUIDE', 'Body guide', 'Shown' if scene.dd_reference_visible else 'Hidden')]
-            if scene.dd_reference_visible:
-                rows.append(('CHOICES', 'Guide opacity', ('WORKSPACE_OPACITY', GUIDE_OPACITY,
-                            self.named_choice(scene.dd_reference_opacity, GUIDE_OPACITY))))
-            rows.append(('WORKSPACE_FIT', 'Fit design', ''))
-        elif kind == 'PIECE_DENSITY':
-            if pattern is None:
+            outline = pattern.outline()
+            xs = [p[0] for p in outline]
+            ys = [p[1] for p in outline]
+            pw = (max(xs) - min(xs)) * 100
+            ph = (max(ys) - min(ys)) * 100
+            rows.append(('INFO', 'Size', f'{pw:.1f} × {ph:.1f} cm'))
+            fabric_override = pattern.preset.title() if getattr(pattern, 'fabric_override', False) else 'Garment default'
+            rows.append(('MENU', 'PIECE_FABRIC_MENU', 'Fabric', fabric_override))
+            density_label = {'AUTO': 'Garment default', 'COARSE': 'Coarse', 'STANDARD': 'Standard', 'FINE': 'Fine'}.get(pattern.mesh_density, pattern.mesh_density.title())
+            rows.append(('MENU', 'PIECE_DENSITY_MENU', 'Mesh density', density_label))
+            rows.append(('PAIR_ACTIONS', 'DUPLICATE', 'MIRROR_SEW', 'Duplicate', 'Mirror'))
+            rows.append(('PAIR_ACTIONS', 'UNFOLD', 'DELETE_PIECE', 'Unfold', 'Delete'))
+        elif kind == 'CANVAS_MENU':
+            title = 'Garment & View'
+            rows.append(('MENU', 'BODY_CHANGE', 'Body', scene.dd_avatar.name if scene.dd_avatar else 'None'))
+            rows.append(('CHOICES_FABRIC', 'Default fabric', ('INSP_GARMENT_FABRIC', FABRICS, getattr(doc, 'preset', 'COTTON'))))
+            rows.append(('CHOICES', 'Mesh density', ('INSP_GARMENT_DENSITY', DENSITY, self.named_choice(scene.dd_spacing, DENSITY))))
+            rows.append(('CHOICES', 'Quality', ('INSP_QUALITY', QUALITY, self.named_choice(scene.dd_quality, QUALITY))))
+            rows.append(('CHOICES', 'Guide opacity', ('INSP_OPACITY', GUIDE_OPACITY, self.named_choice(scene.dd_reference_opacity, GUIDE_OPACITY))))
+            rows.append(('INSP_FIT', 'Fit design', ''))
+        elif kind == 'POINT':
+            title = 'Point'
+            rows = [('CURVE', 'Corner / curve', ''),
+                    ('SLIDER', 'dd_point_x', 'X position'),
+                    ('SLIDER', 'dd_point_y', 'Y position')]
+            if len(self.session.point_selection) > 1:
+                rows.append(('MERGE', 'Merge selected points', ''))
+        elif kind == 'EDGE':
+            title = 'Edge'
+            rows = [('SLIDER', 'dd_segment_length', 'Exact length'),
+                    ('SPLIT', 'Split edge', ''),
+                    ('PAIR_ACTIONS', 'UNFOLD', 'MIRROR_SEW', 'Unfold', 'Mirror')]
+        elif kind == 'INTERNAL_EDGE':
+            title = 'Internal edge'
+            rows = [('SLIDER', 'dd_segment_length', 'Exact length'),
+                    ('SPLIT', 'Split edge', ''),
+                    ('CUT', 'Cut along path', '')]
+            if pattern and pattern.path(self.session.path).closed:
+                rows.append(('TRACE', 'Trace as piece', ''))
+        elif kind == 'EDIT':
+            title = pattern.name if pattern else 'Edit piece'
+            rows = [('DUPLICATE', 'Duplicate', ''),
+                    ('MIRROR_SEW', 'Mirror and sew', ''),
+                    ('UNFOLD', 'Unfold', ''),
+                    ('DELETE_PIECE', 'Delete piece', '')]
+        elif kind == 'ANCHOR':
+            if anchor is None:
                 return None
-            title = 'Piece mesh density'
-            rows = [('SET_DENSITY_' + name, label, 'Selected' if pattern.mesh_density == name else '')
-                    for name, label in [('AUTO', 'Garment default'), ('COARSE', 'Coarse'), ('STANDARD', 'Standard'), ('FINE', 'Fine')]]
-        elif kind == 'ARRANGEMENT':
-            title = 'Arrange pieces'
-            rows = [('ARRANGE_BODICE', 'Bodice panels', 'Front / back'),
-                    ('ARRANGE_SLEEVES', 'Sleeves', 'Left / right'),
-                    ('ARRANGE_SKIRT', 'Skirt panels', 'Around hips')]
+            title = 'Body tack' if anchor.kind == 'TACK' else 'Pin'
+            rows = [('INFO', 'Attached to', pattern.name if pattern else 'Pattern'),
+                    ('REMOVE_ANCHOR', 'Remove tack' if anchor.kind == 'TACK' else 'Remove pin', 'Delete')]
+        elif kind == 'SEAM':
+            seam = next((s for s in doc.seams if s.id == self.seam_selected), None)
+            title = 'Selected seam'
+            if seam:
+                _, _, diff, pct = doc.seam_stats(seam)
+                rows.append(('INFO', 'Mismatch', f'{diff * 100:.1f} cm ({pct:.1f}%)'))
+            rows.append(('PAIR_ACTIONS', 'FLIP_SEAM', 'REMOVE_SEAM', 'Reverse', 'Remove'))
         elif kind == 'REFERENCE_IMAGE':
             title = 'Reference image'
             rows = [('TRACE_LOAD', 'Load image', 'Choose file')]
@@ -181,67 +264,6 @@ class MinimalCards:
             title = 'Image placement'
             rows = [('SLIDER', 'dd_trace_width', 'Width'), ('SLIDER', 'dd_trace_x', 'X position'),
                     ('SLIDER', 'dd_trace_y', 'Y position'), ('TRACE_FIT', 'Fit image and pieces', '')]
-        elif kind == 'FABRIC':
-            if pattern is None:
-                return None
-            title = 'Fabric'
-            rows = [('SET_PRESET_' + name, name.title(), 'Selected' if pattern.preset == name else '') for name in FABRICS]
-        elif kind == 'SIMULATE':
-            title = 'Simulation'
-            rows = [('CHOICES', 'Mesh density', ('DENSITY', DENSITY, self.named_choice(scene.dd_spacing, DENSITY))),
-                    ('CHOICES', 'Simulation quality', ('QUALITY', QUALITY, self.named_choice(scene.dd_quality, QUALITY)))]
-        elif kind == 'KEEP':
-            title = 'Keep mesh'
-            rows = [('WELD_AUTO', 'Weld', 'Manual' if self.weld_manual else 'Auto'),
-                    ('CHOICES', 'Thickness', ('THICKNESS', THICKNESS, self.named_choice(scene.dd_thickness, THICKNESS)))]
-            if scene.get('dd_unwelded_seams', 0) > 0:
-                rows += [('SLIDER', 'dd_weld_distance', 'Weld tolerance'), ('KEEP_RETRY', 'Retry keep', f"{scene['dd_unwelded_seams']} unwelded pairs")]
-        elif kind == 'SEAM':
-            title = 'Selected seam'
-            if not any(seam.id == self.seam_selected for seam in self.session.document.seams):
-                return None
-            rows = [('FLIP_SEAM', 'Reverse direction', ''), ('REMOVE_SEAM', 'Remove seam', '')]
-        elif kind == 'GARMENT' and not self.session.document.patterns:
-            title = 'Start garment'
-            rows = [('START_PANEL', 'Create panel', '40 x 45 cm'),
-                    ('RECTANGLE', 'Draw custom panel', 'Drag on canvas'),
-                    ('LIBRARY', 'Saved garments', 'Open library'),
-                    ('REFERENCE_IMAGE', 'Reference image', 'Trace a photo')]
-        elif kind == 'GARMENT':
-            title = 'Garment'
-            rows = [('NAME', scene.dd_library_name, 'Rename'),
-                    ('BODY_CARD', 'Body: ' + scene.dd_avatar.name if scene.dd_avatar else 'Body', 'Change' if scene.dd_avatar else 'Choose'),
-                    ('INFO', 'Pieces', str(len(self.session.document.patterns))),
-                    ('LIBRARY_SAVE', 'Save garment', '')]
-            rows.append(('REFERENCE_IMAGE', 'Reference image', 'Trace a photo'))
-            if any(obj.get('dd_kind') == 'simulation' for obj in scene.objects):
-                rows.append(('RESET', 'Reset drape', ''))
-        elif kind == 'BODY':
-            title = 'Choose body'
-            self.card_models = sorted((obj for obj in scene.objects if obj.type == 'MESH' and not obj.get('dd_kind')), key=lambda obj: obj.name.casefold())
-            rows = [('BODY_' + str(index), obj.name, '') for index, obj in enumerate(self.card_models) if self.card_page * 8 <= index < (self.card_page + 1) * 8]
-            if len(self.card_models) > 8:
-                pages = math.ceil(len(self.card_models) / 8)
-                rows.append(('PAGE_BODY', f'More bodies ({self.card_page + 1}/{pages})', 'Next'))
-            if not rows:
-                rows = [('INFO', 'No body in scene', 'Add in Blender')]
-        elif kind == 'LIBRARY':
-            title = 'Garment library'
-            rows = [('LOAD_' + str(index), item.stem.replace('.garment', ''), 'Load') for index, item in enumerate(self.library_items) if self.card_page * 8 <= index < (self.card_page + 1) * 8]
-            if len(self.library_items) > 8:
-                pages = math.ceil(len(self.library_items) / 8)
-                rows.append(('PAGE_LIBRARY', f'More garments ({self.card_page + 1}/{pages})', 'Next'))
-            rows.append(('LIBRARY_SAVE', 'Save current garment', ''))
-        elif kind == 'EDGE':
-            title = 'Edge'
-            rows = [('SLIDER', 'dd_segment_length', 'Exact length'), ('SPLIT', 'Split edge', ''),
-                    ('UNFOLD', 'Unfold', ''), ('MIRROR_SEW', 'Mirror and sew', '')]
-        elif kind == 'INTERNAL_EDGE':
-            title = 'Internal edge'
-            rows = [('SLIDER', 'dd_segment_length', 'Exact length'), ('SPLIT', 'Split edge', ''),
-                    ('CUT', 'Cut along path', '')]
-            if pattern and pattern.path(self.session.path).closed:
-                rows.append(('TRACE', 'Trace as piece', ''))
         elif kind == 'CUT_RECOVERY':
             title = 'Crossing cut'
             preview = self.cut_preview
@@ -251,116 +273,41 @@ class MinimalCards:
             if preview['can_retry']:
                 rows.append(('CUT_RETRY', 'Split and retry', f"{preview['split_count']} splits"))
             rows.append(('CANCEL_CUT', 'Back to editing', ''))
-        elif kind == 'ANCHOR':
-            if anchor is None:
-                return None
-            title = 'Body tack' if anchor.kind == 'TACK' else 'Pin'
-            rows = [('INFO', 'Attached to', pattern.name if pattern else 'Pattern'),
-                    ('REMOVE_ANCHOR', 'Remove tack' if anchor.kind == 'TACK' else 'Remove pin', 'Delete')]
-        elif kind == 'POINT':
-            title = 'Point'
-            rows = [('CURVE', 'Corner / curve', ''), ('SLIDER', 'dd_point_x', 'X position'),
-                    ('SLIDER', 'dd_point_y', 'Y position'), ('MERGE', 'Merge selected points', '')]
-        elif kind == 'EDIT':
-            title = pattern.name if pattern else 'Draw'
-            rows = ([('DUPLICATE', 'Duplicate', ''), ('MIRROR_SEW', 'Mirror and sew', ''),
-                     ('PLACEMENT', 'Placement', ''), ('INTERNAL_EDIT', 'Internal shapes', ''), ('DELETE_PIECE', 'Delete piece', '')]
-                    if pattern else [('RECTANGLE', 'Panel', ''), ('POLYGON', 'Polygon', ''), ('ELLIPSE', 'Ellipse', ''), ('INTERNAL', 'Internal path', ''), ('GARMENT', 'Garment', '')])
-        elif kind == 'PLACEMENT':
-            title = 'Placement'
-            rows = [('PLACE', 'Place on body', ''), ('TACK', 'Tack to body', ''), ('PIN', 'Pin', ''), ('REMOVE_ANCHOR', 'Remove selected anchor', ''), ('ARRANGE', 'Arrange pieces', '')]
-        elif kind == 'INTERNAL_EDIT':
-            title = 'Internal shapes'
-            rows = [('INTERNAL', 'Draw internal path', ''), ('DART', 'Dart', ''), ('CUT', 'Cut path', ''), ('TRACE', 'Trace as piece', ''), ('OFFSET_CARD', 'Offset outline', '')]
-        elif kind == 'OFFSET':
-            title = 'Offset outline'
-            rows = [('SLIDER', 'dd_offset', 'Distance'), ('OFFSET', 'Create offset copy', '')]
-        elif kind == 'SEWING':
-            title = 'Sewing'
-            rows = [('SEW', 'Pair edges', ''), ('FREE_SEW', 'Pick range on edges', ''),
-                    ('CHAIN_A', 'Collect side A', ''), ('CHAIN_B', 'Collect side B', ''),
-                    ('CHAIN_SEW', 'Sew chains', '')]
-        elif kind == 'RESULT':
-            title = 'Drape'
-            rows = [('RESET', 'Reset drape', ''), ('VIEW_3D', 'Show 3D', '')]
-        elif kind == 'HELP':
-            title = 'Shortcuts'
-            rows = [('INFO', 'V / P / R / E', 'Select / Poly / Rect / Ellipse'),
-                    ('INFO', 'I / D', 'Internal path / Dart'),
-                    ('INFO', 'J / K / T', 'Sew / Pin / Tack'),
-                    ('INFO', 'S / H / L', 'Snap / Body guide / Lengths'),
-                    ('INFO', 'Ctrl+Z / Ctrl+Shift+Z', 'Undo / Redo'),
-                    ('INFO', 'F / Home', 'Fit to design'),
-                    ('INFO', 'Esc', 'Step back / Cancel / Exit')]
+        else:
+            return None
+
         scale = self.canvas_layout.scale
-        compact = self.canvas_layout.panel.w < 760 * scale
-        if compact and kind == 'PIECE':
-            rows = [row for row in rows if row[0] != 'INFO']
-        width = min((210 if kind == 'WORKSPACE' or compact else 246) * scale, self.canvas_layout.panel.w - 24 * scale)
-        row_heights = [64 if row[0] == 'CHOICES' else 40 for row in rows]
-        height = (42 + sum(row_heights)) * scale
+        width = min(220 * scale, self.canvas_layout.panel.w - 24 * scale)
+        row_heights = [64 if row[0] == 'CHOICES_FABRIC' else 48 if row[0] == 'CHOICES' else 32 for row in rows]
+        height = (38 + sum(row_heights)) * scale
         bounds = self.canvas_layout.panel
-        anchor = self.card_anchor
-        if anchor is None:
-            anchor = (bounds.x + 76 * scale, bounds.y + 220 * scale)
-        card_x = max(bounds.x + 8 * scale, min(anchor[0], bounds.x + bounds.w - width - 8 * scale))
-        card_y = max(bounds.y + 58 * scale, min(anchor[1] - height, bounds.y + bounds.h - height - 34 * scale))
-        if kind == 'WORKSPACE':
-            card_x = bounds.x + bounds.w - width - 14 * scale
-            card_y = bounds.y + (bounds.h - height) / 2
-        elif kind in {'PIECE', 'EDIT'} and pattern:
-            points = [self.view.screen(point, self.canvas_layout.canvas) for point in pattern.points]
-            anchor = (max(point[0] for point in points) + 18 * scale, sum(point[1] for point in points) / len(points))
-            card_x = max(bounds.x + 8 * scale, min(anchor[0], bounds.x + bounds.w - width - (230 if self.workspace_panel_open else 14) * scale))
-            card_y = max(bounds.y + 58 * scale, min(anchor[1] - height / 2, bounds.y + bounds.h - height - 34 * scale))
-        elif kind in {'PIECE', 'EDIT'}:
-            card_x = bounds.x + bounds.w - width - (230 if self.workspace_panel_open else 14) * scale
-            card_y = bounds.y + bounds.h - height - 44 * scale
-        elif kind in {'SIMULATE', 'KEEP', 'RESULT'}:
-            card_x = bounds.x + bounds.w - width - 14 * scale
-            card_y = bounds.y + 58 * scale
-        elif kind in {'GARMENT', 'HELP', 'LIBRARY', 'BODY', 'REFERENCE_IMAGE', 'TRACE_CALIBRATION', 'TRACE_POSITION'}:
-            card_x = bounds.x + 80 * scale
-            card_y = bounds.y + bounds.h - height - 44 * scale
-        elif kind == 'FABRIC':
-            card_x = bounds.x + bounds.w - width - (230 if self.workspace_panel_open else 14) * scale
-            card_y = max(bounds.y + 58 * scale, bounds.y + bounds.h - height - 220 * scale)
+        anchor_pt = self.card_anchor or (bounds.x + 80 * scale, bounds.y + bounds.h - 100 * scale)
+        card_x = max(bounds.x + 8 * scale, min(anchor_pt[0], bounds.x + bounds.w - width - 8 * scale))
+        card_y = max(bounds.y + 58 * scale, min(anchor_pt[1] - height, bounds.y + bounds.h - height - 34 * scale))
         rect = Rect(card_x, card_y, width, height)
         controls = []
-        top = card_y + height - 40 * scale
-        for row, row_height in zip(rows, row_heights):
-            top -= row_height * scale
-            controls.append((Rect(card_x + 8 * scale, top, width - 16 * scale, row_height * scale), row))
+        top = card_y + height - 36 * scale
+        for row, row_h in zip(rows, row_heights):
+            top -= row_h * scale
+            controls.append((Rect(card_x + 8 * scale, top, width - 16 * scale, row_h * scale), row))
         return rect, title, controls
 
     def visible_cards(self):
-        cards = [self.workspace_card()]
-        if self.card_kind == 'FABRIC':
-            cards.append(self.minimal_card('PIECE'))
-        if self.card_kind or not self.context_card_hidden:
-            cards.append(self.minimal_card())
-        return [card for card in cards if card is not None]
-
-    def workspace_card(self):
-        return self.minimal_card('WORKSPACE') if self.workspace_panel_open else None
-
-    def workspace_header_controls(self, rect):
-        scale = self.canvas_layout.scale
-        return [(Rect(rect.x + rect.w - 66 * scale, rect.y + rect.h - 29 * scale, 36 * scale, 24 * scale), 'WORKSPACE_PIN'),
-                (Rect(rect.x + rect.w - 28 * scale, rect.y + rect.h - 29 * scale, 22 * scale, 24 * scale), 'WORKSPACE_CLOSE')]
+        card = self.minimal_card()
+        return [card] if card is not None else []
 
     def card_close_rect(self, rect):
         scale = self.canvas_layout.scale
-        return Rect(rect.x + rect.w - 32 * scale, rect.y + rect.h - 32 * scale, 24 * scale, 24 * scale)
+        return Rect(rect.x + rect.w - 28 * scale, rect.y + rect.h - 28 * scale, 22 * scale, 22 * scale)
 
     def tool_hint(self):
         if self.draft:
             return 'Click to add points / Enter to finish / Esc to cancel'
         if self.tool == 'SEW':
             if self.chain_stage:
-                return 'Click edges in order / Right-click for sewing options'
-            return 'Pick the matching edge' if self.pending_edge else 'Click two edges to sew / Right-click for ranges or chains'
-        return {'SELECT': 'Drag points or pieces / Right-click a point, edge or piece to edit',
+                return 'Click edges in order'
+            return 'Pick the matching edge' if self.pending_edge else 'Click two edges to sew'
+        return {'SELECT': 'Drag points or pieces / Right-click for options',
                 'RECTANGLE': 'Drag to draw a panel / Shift for a square',
                 'ELLIPSE': 'Drag to draw an ellipse / Shift for a circle',
                 'POLYGON': 'Click to draw / Click the first point or Enter to finish',
@@ -381,37 +328,63 @@ class MinimalCards:
 
     def minimal_action(self, key):
         scene = self._scene
-        cards = {'FABRIC': 'FABRIC', 'GARMENT': 'GARMENT', 'BODY_CARD': 'BODY', 'LIBRARY': 'LIBRARY',
-                 'PIECE_DENSITY': 'PIECE_DENSITY',
-                 'ARRANGE': 'ARRANGEMENT',
-                 'REFERENCE_IMAGE': 'REFERENCE_IMAGE', 'TRACE_CALIBRATION': 'TRACE_CALIBRATION',
-                 'TRACE_POSITION': 'TRACE_POSITION',
-                 'EDIT_CARD': 'EDIT',
-                 'PLACEMENT': 'PLACEMENT', 'INTERNAL_EDIT': 'INTERNAL_EDIT', 'OFFSET_CARD': 'OFFSET',
-                 'SIMULATE_OPTIONS': 'SIMULATE', 'KEEP_OPTIONS': 'KEEP',
-                 'HELP': 'HELP'}
-        if key.startswith('WORKSPACE_'):
-            if key == 'WORKSPACE_PANEL':
-                self.workspace_panel_open = not self.workspace_panel_open
-            elif key == 'WORKSPACE_CLOSE':
-                self.workspace_panel_open = False
-            elif key == 'WORKSPACE_PIN':
-                self.workspace_panel_pinned = not self.workspace_panel_pinned
-            elif key == 'WORKSPACE_SNAP':
-                self.snap = not self.snap
-            elif key == 'WORKSPACE_LENGTHS':
-                scene.dd_lengths_visible = not scene.dd_lengths_visible
-            elif key == 'WORKSPACE_GUIDE':
-                scene.dd_reference_visible = not scene.dd_reference_visible
-                if scene.dd_reference_visible and scene.dd_avatar is None:
-                    self.message = 'Choose a body from the garment card to show its guide.'
-                self.update_reference(bpy.context, force=True)
-            elif key == 'WORKSPACE_FIT':
-                self.fit()
-            elif key.startswith('WORKSPACE_OPACITY_'):
-                scene.dd_reference_opacity = GUIDE_OPACITY[key.removeprefix('WORKSPACE_OPACITY_')]
-        elif key in cards:
-            self.show_card(cards[key])
+        if key.startswith('INSP_GARMENT_FABRIC_'):
+            name = key.removeprefix('INSP_GARMENT_FABRIC_')
+            self.run_edit(lambda: self.session.set_document_preset(name), f'Default fabric set to {name.title()}.')
+            scene.dd_fabric = name
+        elif key.startswith('INSP_GARMENT_DENSITY_'):
+            choice = key.removeprefix('INSP_GARMENT_DENSITY_')
+            scene.dd_spacing = DENSITY[choice]
+        elif key.startswith('INSP_QUALITY_'):
+            choice = key.removeprefix('INSP_QUALITY_')
+            scene.dd_quality = QUALITY[choice]
+        elif key.startswith('INSP_OPACITY_'):
+            choice = key.removeprefix('INSP_OPACITY_')
+            scene.dd_reference_opacity = GUIDE_OPACITY[choice]
+        elif key == 'BODY_CHANGE':
+            self.show_card('BODY', self.card_anchor)
+        elif key == 'PIECE_FABRIC_MENU':
+            self.show_card('PIECE_FABRIC', self.card_anchor)
+        elif key.startswith('SET_PIECE_FABRIC_'):
+            choice = key.removeprefix('SET_PIECE_FABRIC_')
+            self.run_edit(lambda: self.session.set_fabric_override(choice),
+                          f'Fabric override set to {choice.title() if choice != "AUTO" else "Garment default"}.')
+            self.card_kind = None
+        elif key == 'PIECE_DENSITY_MENU':
+            self.show_card('PIECE_DENSITY', self.card_anchor)
+        elif key.startswith('SET_DENSITY_'):
+            choice = key.removeprefix('SET_DENSITY_')
+            self.run_edit(lambda: self.session.set_mesh_density(choice), 'Piece mesh density updated.')
+            self.card_kind = None
+        elif key == 'EDIT_ACTIONS':
+            self.show_card('EDIT', self.card_anchor)
+        elif key.startswith('SET_DRAW_'):
+            tool_name = key.removeprefix('SET_DRAW_')
+            self.draw_shape = tool_name
+            self.choose_tool(tool_name)
+            self.card_kind = None
+        elif key.startswith('SET_INTERNAL_'):
+            sub = key.removeprefix('SET_INTERNAL_')
+            tool_name = 'INTERNAL' if sub == 'PATH' else 'DART'
+            self.internal_tool = tool_name
+            self.choose_tool(tool_name)
+            self.card_kind = None
+        elif key.startswith('SET_PIN_'):
+            sub = key.removeprefix('SET_PIN_')
+            tool_name = 'PIN' if sub == 'FABRIC' else 'TACK'
+            self.pin_tool = tool_name
+            self.choose_tool(tool_name)
+            self.card_kind = None
+        elif key == 'DELETE_PIECE':
+            self.perform_action('DELETE_PIECE')
+            self.card_kind = None
+        elif key.startswith('THICKNESS_'):
+            choice = key.removeprefix('THICKNESS_')
+            scene.dd_thickness = THICKNESS[choice]
+        elif key == 'WELD_AUTO':
+            self.weld_manual = not getattr(self, 'weld_manual', False)
+        elif key in {'WORKSPACE_FIT', 'INSP_FIT'}:
+            self.fit()
         elif key == 'TRACE_LOAD':
             bpy.ops.devil.load_trace_image('INVOKE_DEFAULT')
         elif key == 'TRACE_VISIBLE':
@@ -427,221 +400,274 @@ class MinimalCards:
                 scene.dd_trace_visible = True
                 self.trace_points = []
                 self.card_kind = None
-                self.context_card_hidden = True
                 self.message = 'Click the first end of the measured length on the image. Escape cancels.'
         elif key in {'CUT', 'CUT_RETRY'}:
-            self.perform_action(key)
+            self.design_action(key)
+            self.card_kind = None
         elif key == 'CANCEL_CUT':
             self.cut_preview = None
             self.card_kind = None
-        elif key.startswith('SET_DENSITY_'):
-            self.run_edit(lambda: self.session.set_mesh_density(key.removeprefix('SET_DENSITY_')), 'Piece mesh density updated.')
-        elif key.startswith('ARRANGE_'):
-            from . import arrangement
-            try:
-                self.persist()
-                count = arrangement.arrange(bpy.context, key.removeprefix('ARRANGE_'))
-                self.card_kind = None
-                self.message = f'{count} pieces arranged. Adjust in 3D before simulation.'
-            except (ValueError, RuntimeError) as exc:
-                self.message = str(exc)
-            finally:
-                self.reconcile_generated_document()
-        elif key.startswith(('DENSITY_', 'QUALITY_', 'THICKNESS_')):
-            prefix, choice = key.split('_', 1)
-            property_name, choices = {'DENSITY': ('dd_spacing', DENSITY), 'QUALITY': ('dd_quality', QUALITY),
-                                      'THICKNESS': ('dd_thickness', THICKNESS)}[prefix]
-            setattr(scene, property_name, choices[choice])
-        elif key == 'NAME':
-            value = scene.dd_library_name
-            self.numeric = dict(key='dd_library_name', text=value, cursor=len(value), selected=True)
-        elif key == 'WELD_AUTO':
-            self.weld_manual = False
-            scene.dd_weld_distance = .01
-        elif key == 'TOGGLE_SNAP':
-            self.snap = not self.snap
-            self.message = f"Snap {'enabled' if self.snap else 'disabled'} [S]."
-        elif key == 'TOGGLE_GUIDE':
-            scene.dd_reference_visible = not scene.dd_reference_visible
-            if scene.dd_reference_visible and scene.dd_avatar is None:
-                self.message = 'Choose a body from the garment card to show its guide.'
-            else:
-                self.message = f"Body guide {'shown' if scene.dd_reference_visible else 'hidden'} [H]."
-            self.update_reference(bpy.context, force=True)
-        elif key == 'TOGGLE_LENGTHS':
-            scene.dd_lengths_visible = not scene.dd_lengths_visible
-            self.message = f"Edge lengths {'shown' if scene.dd_lengths_visible else 'hidden'} [L]."
-        elif key == 'RESTORE_CANVAS':
-            self.restore_canvas()
-        elif key.startswith('PAGE_'):
-            count = len(self.card_models) if key == 'PAGE_BODY' else len(self.library_items)
-            self.card_page = (self.card_page + 1) % max(1, math.ceil(count / 8))
+            self.message = 'Cut cancelled.'
+        elif key == 'CURVE':
+            self.perform_action('CURVE')
+            self.card_kind = None
+        elif key == 'SPLIT':
+            self.perform_action('SPLIT')
+            self.card_kind = None
+        elif key == 'MERGE':
+            self.perform_action('MERGE')
+            self.card_kind = None
+        elif key == 'UNFOLD':
+            self.perform_action('UNFOLD')
+            self.card_kind = None
+        elif key == 'MIRROR_SEW':
+            self.perform_action('MIRROR_SEW')
+            self.card_kind = None
+        elif key == 'DUPLICATE':
+            self.perform_action('DUPLICATE')
+            self.card_kind = None
+        elif key == 'TRACE':
+            self.perform_action('TRACE')
+            self.card_kind = None
+        elif key == 'FLIP_SEAM':
+            if self.seam_selected:
+                self.run_edit(lambda: self.session.reverse_seam(self.seam_selected), 'Seam direction reversed.')
+            self.card_kind = None
+        elif key == 'REMOVE_SEAM':
+            if self.seam_selected:
+                self.perform_action('DELETE')
+            self.card_kind = None
+        elif key == 'REMOVE_ANCHOR':
+            if self.selected_anchor:
+                self.perform_action('DELETE')
+            self.card_kind = None
         elif key.startswith('BODY_'):
-            self.choose_body(self.card_models[int(key[5:])], bpy.context)
+            idx = int(key.removeprefix('BODY_'))
+            if 0 <= idx < len(self.card_models):
+                self.choose_body(self.card_models[idx], bpy.context)
             self.card_kind = None
         elif key.startswith('LOAD_'):
-            scene.dd_library_selected = int(key[5:])
-            self.perform_action('LIBRARY_LOAD')
+            idx = int(key.removeprefix('LOAD_'))
+            if 0 <= idx < len(self.library_items):
+                scene.dd_library_selected = idx
+                self.perform_action('LIBRARY_LOAD')
             self.card_kind = None
-        elif key == 'START_PANEL':
-            if self.perform_action(key):
-                self.choose_tool('SELECT')
-                self.fit()
-                self.card_kind = None
-        elif key in {'FLIP_SEAM', 'REMOVE_SEAM'}:
-            identity = self.seam_selected
-            if key == 'FLIP_SEAM':
-                self.run_edit(lambda: self.session.reverse_seam(identity), 'Seam reversed.')
-            else:
-                self.run_edit(lambda: self.session.remove_seam(identity), 'Seam removed.')
-                self.seam_selected = None
-                self.card_kind = None
-        elif key in {'FULL', 'CLOSE'}:
-            if key == 'CLOSE':
-                if self.draft or self.gesture:
-                    self.cancel_gesture()
-                self.cleanup()
-        else:
-            if key in {'SIMULATE', 'KEEP', 'KEEP_RETRY'}:
-                self.automatic_defaults(finalize=key != 'SIMULATE')
-            self.perform_action('KEEP' if key == 'KEEP_RETRY' else key)
-            if not self.pending_simulation:
-                self.card_kind = None
-            if key.startswith('SET_PRESET_'):
-                self.card_kind = None
+        elif key == 'PAGE_BODY':
+            self.card_page = (self.card_page + 1) % math.ceil(max(1, len(self.card_models)) / 8)
+        elif key == 'PAGE_LIBRARY':
+            self.card_page = (self.card_page + 1) % math.ceil(max(1, len(self.library_items)) / 8)
+        elif key == 'LIBRARY_SAVE':
+            self.design_action('LIBRARY_SAVE')
+            self.card_kind = None
+        elif key == 'RESET':
+            self.workflow_action('RESET')
+            self.card_kind = None
+        elif key == 'NAME':
+            self.numeric = dict(key='dd_library_name', text=scene.dd_library_name)
+        elif key == 'REFERENCE_IMAGE':
+            self.show_card('REFERENCE_IMAGE', self.card_anchor)
+        elif key == 'KEEP_RETRY':
+            self.perform_action('KEEP')
+            self.card_kind = None
 
     def minimal_event(self, context, event):
-        press = event.value == 'PRESS'
+        point = (event.mouse_x - self._region.x, event.mouse_y - self._region.y)
+        layout = self.canvas_layout
         if self.numeric:
             result = self.numeric_event(event)
             if result is not None:
                 return result
         if self.setting_drag:
             return self.controls_event(context, event)
+        card = next((c for c in self.visible_cards() if c[0].contains(*point)), None)
+        press = event.value == 'PRESS'
         if self.gesture or (press and event.type == 'ESC' and (self.draft or self.free_clicks)):
             return None
         if press and event.type in {'ESC', 'RIGHTMOUSE'} and self.pending_edge:
             self.pending_edge = None
             self.message = 'Seam selection cancelled.'
             return {'RUNNING_MODAL'}
-        point = self.pointer
-        button = self.canvas_layout.button(*point)
+        if press and event.ctrl and event.type == 'S':
+            return {'PASS_THROUGH'}
+        if press and event.ctrl and event.type in {'Z', 'Y'}:
+            redo = event.type == 'Y' or event.shift
+            self.perform_action('REDO' if redo else 'UNDO')
+            return {'RUNNING_MODAL'}
         if press and event.type == 'ESC' and self.card_kind:
             self.card_kind = None
-            self.pending_simulation = False
             return {'RUNNING_MODAL'}
         pointer_event = event.type in {'LEFTMOUSE', 'RIGHTMOUSE', 'MIDDLEMOUSE', 'MOUSEMOVE',
-                                     'WHEELUPMOUSE', 'WHEELDOWNMOUSE', 'TRACKPADPAN', 'TRACKPADZOOM'}
-        if not pointer_event:
+                                       'WHEELUPMOUSE', 'WHEELDOWNMOUSE'}
+        if not pointer_event or not layout.panel.contains(*point):
             return None
-        card = next((card for card in reversed(self.visible_cards()) if card[0].contains(*point)), None)
         if card and self.card_kind in {'BODY', 'LIBRARY'} and event.type in {'WHEELUPMOUSE', 'WHEELDOWNMOUSE'}:
-            count = len(self.card_models) if self.card_kind == 'BODY' else len(self.library_items)
-            pages = max(1, math.ceil(count / 8))
             delta = -1 if event.type == 'WHEELUPMOUSE' else 1
-            self.card_page = (self.card_page + delta) % pages
-            return {'RUNNING_MODAL'}
+            max_pages = math.ceil(len(self.card_models if self.card_kind == 'BODY' else self.library_items) / 8)
+            if max_pages > 1:
+                self.card_page = max(0, min(max_pages - 1, self.card_page + delta))
+                return {'RUNNING_MODAL'}
         if self.card_kind and press and event.type == 'RIGHTMOUSE':
             self.card_kind = None
-            self.pending_simulation = False
             return {'RUNNING_MODAL'}
+        button = layout.button(*point)
+        scale = layout.scale
         if button and not card and press and event.type in {'LEFTMOUSE', 'RIGHTMOUSE'}:
             if self.card_kind:
                 self.card_kind = None
                 self.pending_simulation = False
-            if event.type == 'RIGHTMOUSE':
-                if button in {'SIMULATE', 'KEEP'}:
-                    self.show_card(button)
-                elif button == 'SEW':
-                    self.show_card('SEWING')
+            btn_rect = layout.buttons[button][0]
+            if button == 'SELECT':
+                self.choose_tool('SELECT')
+            elif button in {'TOGGLE_SNAP', 'SNAP'}:
+                self.snap = not self.snap
+            elif button in {'TOGGLE_GUIDE', 'REFERENCE'}:
+                self._scene.dd_reference_visible = not self._scene.dd_reference_visible
+            elif button in {'TOGGLE_LENGTHS', 'LENGTHS'}:
+                self._scene.dd_lengths_visible = not self._scene.dd_lengths_visible
+            elif button in {'UNDO', 'REDO'}:
+                self.perform_action(button)
+            elif button == 'SEW':
+                self.choose_tool('SEW')
+            elif button == 'LIBRARY':
+                self.show_card('LIBRARY', (btn_rect.x + btn_rect.w + 10 * scale, btn_rect.y + btn_rect.h / 2))
+            elif button == 'CLOSE':
+                if self.draft or self.gesture:
+                    self.cancel_gesture()
+                self.cleanup()
+                return {'FINISHED'}
+            elif button == 'RESTORE_CANVAS':
+                self.restore_canvas()
+                return {'RUNNING_MODAL'}
+            elif button == 'DRAW':
+                if event.type == 'RIGHTMOUSE' or self.tool in {'RECTANGLE', 'POLYGON', 'ELLIPSE'}:
+                    self.show_card('DRAW_CHOOSER', (btn_rect.x + btn_rect.w + 10 * scale, btn_rect.y + btn_rect.h / 2))
                 else:
-                    return {'RUNNING_MODAL'}
+                    self.choose_tool(getattr(self, 'draw_shape', 'RECTANGLE'))
+            elif button == 'INTERNAL':
+                if event.type == 'RIGHTMOUSE' or self.tool in {'INTERNAL', 'DART'}:
+                    self.show_card('INTERNAL_CHOOSER', (btn_rect.x + btn_rect.w + 10 * scale, btn_rect.y + btn_rect.h / 2))
+                else:
+                    self.choose_tool(getattr(self, 'internal_tool', 'INTERNAL'))
+            elif button == 'PIN':
+                if event.type == 'RIGHTMOUSE' or self.tool in {'PIN', 'TACK'}:
+                    self.show_card('PIN_CHOOSER', (btn_rect.x + btn_rect.w + 10 * scale, btn_rect.y + btn_rect.h / 2))
+                else:
+                    self.choose_tool(getattr(self, 'pin_tool', 'PIN'))
+            elif button == 'GARMENT':
+                self.show_card('GARMENT', (btn_rect.x, btn_rect.y - 10 * scale))
+            elif button in {'SIMULATE', 'KEEP'}:
+                self.automatic_defaults(finalize=button == 'KEEP')
+                self.perform_action(button)
+            elif button == 'KEEP_OPTIONS':
+                self.show_card('KEEP', (btn_rect.x, btn_rect.y + 45 * scale))
             else:
                 self.minimal_action(button)
             return {'FINISHED'} if self._closed else {'RUNNING_MODAL'}
         if card:
             if press and event.type == 'LEFTMOUSE':
-                workspace_card = self.workspace_card()
-                if card != workspace_card and self.card_close_rect(card[0]).contains(*point):
-                    self.context_card_hidden = True
+                if self.card_close_rect(card[0]).contains(*point):
                     self.card_kind = None
                     self.pending_simulation = False
                     return {'RUNNING_MODAL'}
-                if workspace_card and card == workspace_card:
-                    for rect, key in self.workspace_header_controls(card[0]):
-                        if rect.contains(*point):
-                            self.minimal_action(key)
-                            return {'RUNNING_MODAL'}
                 for rect, row in card[2]:
                     if not rect.contains(*point):
                         continue
-                    key, label, value = row
-                    if key == 'CHOICES':
-                        prefix, choices, active = value
-                        index = min(len(choices) - 1, int((point[0] - rect.x) / (rect.w / len(choices))))
-                        self.minimal_action(prefix + '_' + list(choices)[index])
+                    key = row[0]
+                    if key in {'CHOICES', 'CHOICES_FABRIC'}:
+                        prefix, choices, active = row[2]
+                        choices_list = list(choices)
+                        if len(choices_list) <= 4:
+                            index = min(len(choices_list) - 1, int((point[0] - rect.x) / (rect.w / len(choices_list))))
+                        else:
+                            cols = 3
+                            c_idx = min(cols - 1, int((point[0] - rect.x) / (rect.w / cols)))
+                            r_idx = 0 if point[1] > rect.y + rect.h / 2 else 1
+                            index = min(len(choices_list) - 1, r_idx * cols + c_idx)
+                        self.minimal_action(prefix + '_' + choices_list[index])
+                        self.card_kind = None
+                    elif key == 'PAIR_ACTIONS':
+                        action1, action2 = row[1], row[2]
+                        if point[0] < rect.x + rect.w / 2:
+                            self.minimal_action(action1)
+                        else:
+                            self.minimal_action(action2)
+                        self.card_kind = None
                     elif key == 'SLIDER':
+                        label = row[1]
                         self.setting_drag = dict(key=label, value=getattr(self._scene, label), pointer=point, moved=False)
                         if label == 'dd_weld_distance':
-                            scale = self.canvas_layout.scale
+                            scale = layout.scale
                             self.setting_drag['absolute'] = Rect(rect.x + 6 * scale, rect.y, rect.w - 12 * scale, rect.h)
                     elif key != 'INFO':
-                        self.minimal_action(key)
+                        action = row[1] if key == 'MENU' else key
+                        self.minimal_action(action)
+                        if action not in {'BODY_CHANGE', 'PIECE_FABRIC_MENU', 'PIECE_DENSITY_MENU', 'EDIT_ACTIONS'}:
+                            self.card_kind = None
                     break
             return {'RUNNING_MODAL'}
         if self.gesture:
             return None
-        if press and event.type in {'LEFTMOUSE', 'RIGHTMOUSE'} and not self.workspace_panel_pinned:
-            self.workspace_panel_open = False
         if press and event.type == 'LEFTMOUSE':
-            self.context_card_hidden = False
+            self.card_kind = None
             for rect, identity, label in self.seam_badges():
                 if rect.contains(*point):
                     self.selected_anchor = None
-                    self.seam_selected = identity
-                    self.show_card('SEAM', (rect.x + rect.w + 6, rect.y + rect.h))
-                    return {'RUNNING_MODAL'}
-            if self.card_kind:
-                self.card_kind = None
-                self.pending_simulation = False
-                return {'RUNNING_MODAL'}
-            self.seam_selected = None
-        if press and event.type == 'RIGHTMOUSE' and self.canvas_layout.canvas.contains(*point) and not self.draft:
-            scale = self.canvas_layout.scale
-            anchor = next((anchor for anchor in self.session.document.anchors
-                           if math.dist(self.view.screen((anchor.x, anchor.y), self.canvas_layout.canvas), point) <= 10 * scale), None)
-            if anchor:
-                self.select_anchor(anchor)
-                self.show_card('ANCHOR', point)
-                return {'RUNNING_MODAL'}
-            if self.pending_edge:
-                self.pending_edge = None
-                self.message = 'Seam selection cancelled.'
-                return {'RUNNING_MODAL'}
-            if self.tool == 'SEW':
-                self.show_card('SEWING')
-            else:
-                self.selected_anchor = None
-                self.seam_selected = None
-                pattern, corner = self.hit()
-                if pattern is None:
                     self.session.selected = None
                     self.session.corner = None
                     self.session.segment = None
                     self.session.point_selection = []
-                    self.card_kind = None
-                    self.sync_selection()
+                    self.seam_selected = identity
                     return {'RUNNING_MODAL'}
-                if (self.session.selected != pattern.id or self.session.path != self.hit_path
-                        or corner not in self.session.point_selection):
-                    self.session.point_selection = [corner] if corner is not None else []
-                self.session.selected = pattern.id
-                self.session.corner = corner
-                self.session.path = self.hit_path
-                self.session.segment = self.hit_edge() if corner is None else None
+            self.seam_selected = None
+        if press and event.type == 'RIGHTMOUSE' and layout.canvas.contains(*point) and not self.draft:
+            scale = layout.scale
+            anchor = next((a for a in self.session.document.anchors
+                           if math.dist(self.view.screen((a.x, a.y), layout.canvas), point) <= 10 * scale), None)
+            if anchor:
+                self.select_anchor(anchor)
+                self.show_card('ANCHOR', point)
+                return {'RUNNING_MODAL'}
+            for rect, identity, label in self.seam_badges():
+                if rect.contains(*point):
+                    self.selected_anchor = None
+                    self.session.selected = None
+                    self.session.corner = None
+                    self.session.segment = None
+                    self.session.point_selection = []
+                    self.seam_selected = identity
+                    self.show_card('SEAM', point)
+                    return {'RUNNING_MODAL'}
+            self.seam_selected = None
+            self.selected_anchor = None
+            if self.pending_edge:
+                self.pending_edge = None
+                self.message = 'Seam selection cancelled.'
+                return {'RUNNING_MODAL'}
+            pattern, corner = self.hit()
+            if pattern is None:
+                self.session.selected = None
+                self.session.corner = None
+                self.session.segment = None
+                self.session.point_selection = []
                 self.sync_selection()
-                self.show_card('POINT' if corner is not None else
-                               'INTERNAL_EDGE' if self.session.segment and self.session.path != 'OUTER' else
-                               'EDGE' if self.session.segment else 'EDIT')
+                self.show_card('CANVAS_MENU', point)
+                return {'RUNNING_MODAL'}
+            if (self.session.selected != pattern.id or self.session.path != self.hit_path
+                    or corner not in self.session.point_selection):
+                self.session.point_selection = [corner] if corner is not None else []
+            self.session.selected = pattern.id
+            self.session.corner = corner
+            self.session.path = self.hit_path
+            self.session.segment = self.hit_edge() if corner is None else None
+            self.sync_selection()
+            if corner is not None:
+                self.show_card('POINT', point)
+            elif self.session.segment:
+                if self.session.path != 'OUTER':
+                    self.show_card('INTERNAL_EDGE', point)
+                else:
+                    self.show_card('EDGE', point)
+            else:
+                self.show_card('PIECE', point)
             return {'RUNNING_MODAL'}
         return None

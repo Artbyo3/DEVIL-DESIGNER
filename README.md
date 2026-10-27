@@ -14,19 +14,25 @@ menu > Install from Disk**. Disable the previous version and restart Blender to
 unload its old Python modules. Enable Devil Designer if necessary.
 
 In a 3D Viewport use **Ctrl+Alt+D**, **F3 > Devil Designer**, or **View > Devil Designer**.
-There is no full-height sidebar or all-settings popup. The workspace opens as a full canvas with
-a compact tool dock, persistent micro-indicators for Snapping `[S]`, Body Guide `[H]`, and Lengths `[L]`, and an optional Workspace side card. When the 3D viewport is revealed for placement or drape inspection, click Full canvas to return. Other Blender
-controls remain available outside the editor when the 3D view is revealed.
+There is no full-height sidebar, searchable all-settings inspector, docked sidebar, or universal
+cursor menu. The workspace opens with a pure 100% full-screen canvas, a compact 8-tool left dock,
+persistent micro-indicators for Snapping `[S]`, Body Guide `[H]`, and Lengths `[L]`, and focused
+right-click contextual menus anchored directly at the cursor. When the 3D viewport is revealed for
+placement or drape inspection, click Full canvas to return. Other Blender controls remain available
+outside the editor when the 3D view is revealed.
 
-The compact **Workspace** card controls snapping, measured edge labels, body-guide
-visibility, and Fit design. Guide opacity offers Light / Medium / Strong only while
-the guide is shown. Pin keeps the card open while working; unpin dismisses it on
-canvas input. Close hides it, and Workspace at the top right reopens it without
-changing the canvas layout or the active piece/task card. Other controls stay in
-their existing contextual locations.
-The pinned card remains visible while drawing. Escape cancels active drafting or gestures
-first, dismisses open context cards next, and exits the editor when idle without blocking or trapping the artist.
-Use Close or Ctrl+Alt+D to leave the editor explicitly.
+Pure contextual interaction:
+- Selecting pieces, seams, points, or edges highlights them cleanly with zero auto-opened overlays.
+- Right-clicking any item (piece, seam, point, edge, internal path, pin/tack, or empty canvas) opens
+  a small, focused contextual menu directly at your cursor.
+- Choosing an action immediately executes it and dismisses the menu back to pure canvas.
+- Right-clicking empty canvas opens the Garment & View menu: Body avatar selection, Garment default
+  fabric chips, Mesh density, Simulation quality, Guide opacity, and Fit design.
+- Individual pieces can override their fabric preset or mesh density via their right-click menu.
+
+Escape cancels active drafting or gestures first, dismisses open contextual menus next, and exits
+the editor when idle without blocking or trapping the artist. Use Close or Ctrl+Alt+D to leave the
+editor explicitly.
 
 The default workspace has three primary actions: **Panel > Sew > Simulate**.
 Panel drawing is ready on open: drag the canvas to create pieces, click Sew and
@@ -38,16 +44,9 @@ An empty garment also offers **Create panel**, a one-click editable 40 x 45 cm
 starter, alongside custom panel drawing and the garment library. Starter creation
 is undoable. See `ARTIST_UX_AUDIT.md` for the workflow fixes and artist test checklist.
 
-Selecting a piece shows its small card. **Fabric** opens Cotton, Linen, Denim, Silk,
-Leather, and Knit beneath the card. Presets own physical parameters; there are no
-cloth-parameter fields. With nothing selected the card describes the garment, its
-name, body, and piece count. The dock grid opens the local garment library.
-
-The arrow on **Simulate** opens Mesh density (Coarse / Standard / Fine) and Quality
-(Draft / Standard / High). The arrow on **Keep mesh** opens Auto weld and Thickness
-(None / Thin / Standard). A manual weld tolerance appears only after Keep actually
-reports unwelded seam pairs. Self-collision, body clearance, body-height refit, and
-automatic defaults are program decisions, not settings the artist must configure.
+The arrow on **Keep mesh** opens Auto weld and Thickness (None / Thin / Standard). A manual weld
+tolerance appears only after Keep actually reports unwelded seam pairs. Self-collision, body clearance,
+body-height refit, and automatic defaults are program decisions, not settings the artist must configure.
 
 Select a seam badge to reverse or remove that seam in place. Right-click a point,
 edge, or piece for a small task-specific card, not a list of unrelated options.

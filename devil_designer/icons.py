@@ -11,5 +11,5 @@ def icon_geometry():
 def icon_spans(name):
     aliases = {'FREE_SEW': 'SEW', 'LIBRARY': 'GRID', 'FULL': 'EXPAND',
                'WORKSPACE_PANEL': 'SETTINGS', 'WORKSPACE_CLOSE': 'CLOSE',
-               'WORKSPACE_PIN': 'PIN', 'SIMULATE': 'PLAY'}
+               'WORKSPACE_PIN': 'PIN', 'SIMULATE': 'PLAY', 'DRAW': 'RECTANGLE', 'INSPECTOR_COLLAPSE': 'CHEVRON', 'INSPECTOR_TOGGLE': 'SETTINGS'}
     return icon_geometry().get(aliases.get(name, name))

@@ -187,7 +187,7 @@ class ConstructionMixin:
         if not source.closed:raise ValueError('Trace a closed internal shape as a pattern.')
         nodes=copy.deepcopy(source.vertices)
         for v in nodes:v.id=uid();v.x+=.03;v.y-=.03
-        result=Pattern(source.name+' traced',nodes,preset=p.preset,wrap_radius=p.wrap_radius,mesh_density=p.mesh_density)
+        result=Pattern(source.name+' traced',nodes,preset=p.preset,wrap_radius=p.wrap_radius,mesh_density=p.mesh_density,fabric_override=getattr(p,'fabric_override',False))
         self.commit(lambda:self.document.patterns.append(result));self.selected,self.path,self.corner=result.id,'OUTER',None
 
     def cut(self):
@@ -235,7 +235,7 @@ class ConstructionMixin:
                 if v in (a,b) or v in inside:
                     other=copy.deepcopy(originals.get(v.id,v));other.id=uid();mapping[v.id]=other.id;new_nodes.append(other)
                 else:new_nodes.append(v)
-            new=Pattern(p.name+' cut',new_nodes,preset=p.preset,wrap_radius=p.wrap_radius,mesh_density=p.mesh_density)
+            new=Pattern(p.name+' cut',new_nodes,preset=p.preset,wrap_radius=p.wrap_radius,mesh_density=p.mesh_density,fabric_override=getattr(p,'fabric_override',False))
             next(v for v in new.vertices if v.id==mapping[a.id]).outgoing=path.vertices[0].outgoing
             next(v for v in new.vertices if v.id==mapping[b.id]).incoming=path.vertices[-1].incoming
             cut_map={path.vertices[0].id:mapping[a.id],path.vertices[-1].id:mapping[b.id]}
