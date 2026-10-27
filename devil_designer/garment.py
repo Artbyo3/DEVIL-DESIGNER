@@ -3,7 +3,7 @@ import json
 import math
 import bpy
 import bmesh
-from mathutils import Matrix, Vector
+from mathutils import Vector
 from .core import Document
 from .meshing import fabric_mesh
 from .density import boundary_plan,effective_spacing

@@ -1,7 +1,6 @@
 import math
 import bpy
 from .canvas import Rect
-from .controls import CONTROL_SETTINGS as SETTINGS
 
 
 DENSITY = {'Coarse': .04, 'Standard': .02, 'Fine': .01}

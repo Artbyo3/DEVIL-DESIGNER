@@ -29,34 +29,6 @@ STATUS_BAR_H = 28
 VIEWBAR_H = 38
 INSPECTOR_W = 280
 
-STAGE_TOOLS = {
-    'DRAFT': [
-        ('SELECT', 'Select', 'V'),
-        ('POLYGON', 'Polygon', 'P'),
-        ('RECTANGLE', 'Rectangle', 'R'),
-        ('ELLIPSE', 'Ellipse', 'E'),
-        ('INTERNAL', 'Internal', 'I'),
-        ('DART', 'Dart', 'D'),
-    ],
-    'SEW': [
-        ('SELECT', 'Select', 'V'),
-        ('SEW', 'Pair edges', 'J'),
-        ('FREE_SEW', 'Free sewing', 'F'),
-    ],
-    'ARRANGE': [
-        ('SELECT', 'Select', 'V'),
-        ('PLACE', 'Place', 'G'),
-        ('PIN', 'Pin', 'K'),
-        ('TACK', 'Tack', 'T'),
-    ],
-    'SIMULATE': [
-        ('SELECT', 'Select', 'V'),
-        ('PIN', 'Pin', 'K'),
-    ],
-    'LIBRARY': [
-        ('SELECT', 'Select', 'V'),
-    ],
-}
 
 ALL_TOOLS = [
     ('SELECT', 'Select', 'V'),

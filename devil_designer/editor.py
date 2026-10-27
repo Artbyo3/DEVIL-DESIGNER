@@ -1,6 +1,6 @@
 import math
 import bpy
-from .core import Document, Session, contains, validate_polygon
+from .core import Document, Session
 from .canvas import Layout, View, Rect
 from .interaction import OverlayControls
 from .minimal import MinimalCards, minimal_layout

@@ -1,6 +1,3 @@
-import json
-import math
-import bpy
 import bmesh
 from mathutils import Matrix
 from .meshing import distance_to_segment

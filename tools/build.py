@@ -7,10 +7,12 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, str(root))
 from tools.workspace import extension_archive
 from tools.check_comments import check_repository
+from tools.check_dead_code import check_dead_code
 
 
 def build_extension():
     check_repository(root)
+    check_dead_code(root)
     source = root / 'devil_designer'
     output = extension_archive()
     output.parent.mkdir(exist_ok=True)
