@@ -452,7 +452,8 @@ class Renderer:
                         diff = abs(len_a - len_b)
                         ratio = (min(len_a, len_b) / max(1e-5, max(len_a, len_b))) * 100
                         is_match = diff <= 0.6
-                        msg = f"Match: {len_a:.1f} cm ↔ {len_b:.1f} cm ({ratio:.0f}%)" if is_match else f"Mismatch: {len_a:.1f} cm vs {len_b:.1f} cm (Δ {diff:.1f} cm)"
+                        rev_label = "rev" if ed._scene.dd_sew_reverse else "direct"
+                        msg = f"Match: {len_a:.1f} cm ↔ {len_b:.1f} cm ({ratio:.0f}%) [{rev_label}] · B flip" if is_match else f"Mismatch: {len_a:.1f} cm vs {len_b:.1f} cm (Δ {diff:.1f} cm) [{rev_label}] · B flip"
                         badge_bg = (0.08, 0.25, 0.16, 0.95) if is_match else (0.28, 0.18, 0.08, 0.95)
                         badge_border = (0.2, 0.7, 0.4, 0.9) if is_match else (0.8, 0.5, 0.2, 0.9)
                         px, py = ed.pointer
@@ -980,8 +981,50 @@ class Renderer:
                 steps = max(2, int(math.dist(a, b) / (10 * self.s)))
                 for i in range(0, steps, 2):
                     self.lines([curves.mix(a, b, i / steps), curves.mix(a, b, min(i + 1, steps) / steps)], (*color[:3], 0.35))
-        for edge in ([ed.pending_edge] if ed.pending_edge else []) + ed.chain_a + ed.chain_b:
+        for edge in ed.chain_a + ed.chain_b:
             points = [ed.view.screen(doc.edge_point(edge, edge.t0 + (edge.t1-edge.t0) * i / 16), c) for i in range(17)]
+            self.lines(points, (1, 0.82, 0.3, 1), 3, True)
+        if ed.tool == 'SEW':
+            h_edge = ed.design_hit_edge()
+            if ed.pending_edge:
+                edge_a = ed.pending_edge
+                pts_a = [ed.view.screen(doc.edge_point(edge_a, edge_a.t0 + (edge_a.t1 - edge_a.t0) * i / 16), c) for i in range(17)]
+                self.lines(pts_a, (1, 0.82, 0.3, 1), 3.2, True)
+                self.dot(pts_a[0], 5.5, (1, 0.82, 0.3, 1))
+                mid_a = pts_a[8]
+                if h_edge and (h_edge.pattern != edge_a.pattern or h_edge.edge != edge_a.edge):
+                    len_a = doc.chain_length([edge_a]) * 100
+                    len_b = doc.chain_length([h_edge]) * 100
+                    diff = abs(len_a - len_b)
+                    is_match = diff <= 0.6
+                    prev_col = (0.22, 0.82, 0.48, 0.95) if is_match else (1.0, 0.65, 0.25, 0.95)
+                    pts_b = [ed.view.screen(doc.edge_point(h_edge, h_edge.t0 + (h_edge.t1 - h_edge.t0) * i / 16), c) for i in range(17)]
+                    self.lines(pts_b, prev_col, 3.2, True)
+                    rev = bool(ed._scene.dd_sew_reverse)
+                    dot_b = pts_b[-1] if rev else pts_b[0]
+                    self.dot(dot_b, 5.5, prev_col)
+                    for s_idx in range(5):
+                        u = (s_idx + 0.5) / 5.0
+                        v = (1.0 - u) if rev else u
+                        pa = ed.view.screen(doc.edge_point(edge_a, edge_a.t0 + (edge_a.t1 - edge_a.t0) * u), c)
+                        pb = ed.view.screen(doc.edge_point(h_edge, h_edge.t0 + (h_edge.t1 - h_edge.t0) * v), c)
+                        st_steps = max(2, int(math.dist(pa, pb) / (8 * self.s)))
+                        col_alpha = 0.55 if s_idx == 2 else 0.32
+                        width = 1.4 if s_idx == 2 else 1.0
+                        for st_i in range(0, st_steps, 2):
+                            self.lines([curves.mix(pa, pb, st_i / st_steps), curves.mix(pa, pb, min(st_i + 1, st_steps) / st_steps)], (*prev_col[:3], col_alpha), width)
+                else:
+                    dist_to_cursor = math.dist(mid_a, ed.pointer)
+                    if dist_to_cursor > 12 * self.s:
+                        st_steps = max(2, int(dist_to_cursor / (10 * self.s)))
+                        for st_i in range(0, st_steps, 2):
+                            self.lines([curves.mix(mid_a, ed.pointer, st_i / st_steps), curves.mix(mid_a, ed.pointer, min(st_i + 1, st_steps) / st_steps)], (1, 0.82, 0.3, 0.35), 1.2)
+            elif not ed.chain_stage and h_edge:
+                pts_h = [ed.view.screen(doc.edge_point(h_edge, h_edge.t0 + (h_edge.t1 - h_edge.t0) * i / 16), c) for i in range(17)]
+                self.lines(pts_h, (0.35, 0.75, 0.95, 0.75), 2.5, True)
+                self.dot(pts_h[0], 4.5, (0.35, 0.75, 0.95, 0.75))
+        elif ed.pending_edge:
+            points = [ed.view.screen(doc.edge_point(ed.pending_edge, ed.pending_edge.t0 + (ed.pending_edge.t1-ed.pending_edge.t0) * i / 16), c) for i in range(17)]
             self.lines(points, (1, 0.82, 0.3, 1), 3, True)
         for edge, t in ed.free_clicks + ed.dart_base:
             self.dot(ed.view.screen(doc.edge_point(edge, t), c), 6, (1, 0.82, 0.3, 1))
