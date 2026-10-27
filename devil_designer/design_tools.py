@@ -276,6 +276,12 @@ class DesignTools:
             if event.type == 'D' and event.shift and not event.ctrl and not event.alt:
                 self.perform_action('DUPLICATE');return {'RUNNING_MODAL'}
             if event.type in {'E','I','K','T','D','G'} and not event.ctrl and not event.alt:
+                if event.type == 'E':
+                    self.draw_shape = 'ELLIPSE'
+                elif event.type in {'I','D'}:
+                    self.internal_tool = {'I':'INTERNAL','D':'DART'}[event.type]
+                elif event.type in {'K','T'}:
+                    self.pin_tool = {'K':'PIN','T':'TACK'}[event.type]
                 self.choose_tool({'E':'ELLIPSE','I':'INTERNAL','K':'PIN','T':'TACK','D':'DART','G':'PLACE'}[event.type]);return {'RUNNING_MODAL'}
             if event.type in {'C','Q','M','U'} and not event.ctrl:
                 self.perform_action({'C':'CURVE','Q':'SPLIT','M':'MERGE','U':'MIRROR_SEW' if event.shift else 'UNFOLD'}[event.type]);return {'RUNNING_MODAL'}

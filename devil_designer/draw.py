@@ -338,7 +338,7 @@ class Renderer:
             self.grid(view, c)
 
             if (not l.advanced and not ed.session.document.patterns and not ed.draft
-                    and not (ed.minimal_ui and (ed.card_kind or not ed.context_card_hidden))):
+                    and not (ed.minimal_ui and ed.card_kind)):
                 self.text(c.x + c.w / 2, c.y + c.h / 2 + 12 * s, 'Drag to draw your first panel', 17, TEXT, True, max_width=c.w - 32 * s)
                 self.text(c.x + c.w / 2, c.y + c.h / 2 - 14 * s, 'Then pick Sew, pair the edges, and Simulate.', 11, TEXT_SUB, True, max_width=c.w - 32 * s)
 
@@ -719,11 +719,14 @@ class Renderer:
         self.round_rect(shadow, (0, 0, 0, .18), radius=14)
         self.round_rect(layout.rail, SURFACE_FLOATING, radius=14)
         self.round_rect_outline(layout.rail, SURFACE_OUTLINE, radius=14)
-        icons = {'LIBRARY': 'GRID'}
-        shortcuts = {'SELECT': 'V', 'POLYGON': 'P', 'RECTANGLE': 'R', 'ELLIPSE': 'E',
-                     'INTERNAL': 'I', 'SEW': 'J', 'PIN': 'K', 'DART': 'D',
+        icons = {'LIBRARY': 'GRID', 'DRAW': 'RECTANGLE', 'INTERNAL': 'INTERNAL', 'PIN': 'PIN',
+                 'SELECT': 'SELECT', 'SEW': 'SEW', 'UNDO': 'UNDO', 'REDO': 'REDO'}
+        draw_shape = getattr(ed, 'draw_shape', 'RECTANGLE')
+        icons['DRAW'] = 'POLYGON' if draw_shape == 'POLYGON' else 'ELLIPSE' if draw_shape == 'ELLIPSE' else 'RECTANGLE'
+        icons['INTERNAL'] = 'DART' if ed.tool == 'DART' else 'INTERNAL'
+        shortcuts = {'SELECT': 'V', 'DRAW': 'R', 'INTERNAL': 'I', 'SEW': 'J', 'PIN': 'K',
                      'UNDO': 'Ctrl Z', 'REDO': 'Ctrl Shift Z',
-                     'CLOSE': 'Esc', 'WORKSPACE_PANEL': 'Workspace',
+                     'CLOSE': 'Esc', 'INSPECTOR_TOGGLE': 'Inspector',
                      'GARMENT': 'Garment settings', 'HELP': '?',
                      'RESTORE_CANVAS': 'Expand'}
         self.lines([(layout.rail.x + 6 * scale, layout.rail.y + 28 * scale),
@@ -735,7 +738,7 @@ class Renderer:
             if key in {'SIMULATE', 'KEEP', 'FINISH_DRAFT', 'CANCEL_DRAFT', 'CONFIRM_ACTION', 'CANCEL_ACTION'}:
                 primary = key in {'SIMULATE', 'FINISH_DRAFT', 'CONFIRM_ACTION'}
                 surface = SURFACE_FLOATING if blocker else ACCENT_HOVER if hover else ACCENT
-                joined = Rect(rect.x, rect.y, rect.w + (30 * scale if key in {'SIMULATE', 'KEEP'} else 0), rect.h)
+                joined = Rect(rect.x, rect.y, rect.w + (30 * scale if key == 'KEEP' else 0), rect.h)
                 self.round_rect(joined, surface if primary else ELEVATED if hover else SURFACE_FLOATING, radius=10)
                 self.round_rect_outline(joined, ACCENT_BORDER if primary else SURFACE_OUTLINE, radius=10)
                 ink = MUTED if blocker else TEXT_ON_ACCENT if primary else TEXT
@@ -745,9 +748,11 @@ class Renderer:
                     self.text(rect.x + 34 * scale, rect.y + 14 * scale, label, 12, ink)
                 else:
                     self.text(rect.x + rect.w / 2, rect.y + 14 * scale, label, 12, ink, True)
-            elif key == 'WORKSPACE_PANEL':
-                self.round_rect(rect, ELEVATED if hover or ed.workspace_panel_open else FIELD_BG, radius=7)
+            elif key == 'INSPECTOR_TOGGLE':
+                self.round_rect(rect, ELEVATED if hover else FIELD_BG, radius=7)
                 self.text(rect.x + rect.w / 2, rect.y + 8 * scale, label, 10, TEXT_SUB, True)
+            elif key == 'INSPECTOR_COLLAPSE':
+                pass
             elif key == 'RESTORE_CANVAS':
                 self.round_rect(rect, ELEVATED if hover else FIELD_BG, radius=7)
                 self.text(rect.x + rect.w / 2, rect.y + 8 * scale, label, 10, TEXT_SUB, True)
@@ -757,10 +762,8 @@ class Renderer:
                 char = 'S' if key == 'TOGGLE_SNAP' else 'H' if key == 'TOGGLE_GUIDE' else 'L'
                 self.text(rect.x + rect.w / 2, rect.y + 6 * scale, char, 10, ACCENT if active else TEXT_SUB, True)
             elif key.endswith('_OPTIONS'):
-                self.lines([(rect.x, rect.y + 10 * scale), (rect.x, rect.y + rect.h - 10 * scale)],
-                           ACCENT_BORDER if key == 'SIMULATE_OPTIONS' else SURFACE_OUTLINE)
-                self.draw_icon('CHEVRON', rect.x + rect.w / 2, rect.y + rect.h / 2, 12,
-                               TEXT_ON_ACCENT if key == 'SIMULATE_OPTIONS' and not ed.action_blocker('SIMULATE') else TEXT_SUB)
+                self.lines([(rect.x, rect.y + 10 * scale), (rect.x, rect.y + rect.h - 10 * scale)], SURFACE_OUTLINE)
+                self.draw_icon('CHEVRON', rect.x + rect.w / 2, rect.y + rect.h / 2, 12, TEXT_SUB)
             elif key == 'GARMENT':
                 self.round_rect(rect, ELEVATED if hover else SURFACE_FLOATING, radius=8)
                 self.draw_icon('GARMENT', rect.x + 16 * scale, rect.y + rect.h / 2, 20, TEXT_SUB)
@@ -768,72 +771,104 @@ class Renderer:
                           12, TEXT, max_width=rect.w - 52 * scale)
                 self.draw_icon('DOWN', rect.x + rect.w - 13 * scale, rect.y + rect.h / 2, 10, MUTED)
             else:
-                if key == ed.tool or hover:
-                    self.round_rect(rect, ACCENT_BG if key == ed.tool else ELEVATED, radius=10)
+                is_active = (key == ed.tool or
+                             (key == 'DRAW' and ed.tool in {'RECTANGLE', 'POLYGON', 'ELLIPSE'}) or
+                             (key == 'INTERNAL' and ed.tool in {'INTERNAL', 'DART'}) or
+                             (key == 'PIN' and ed.tool in {'PIN', 'TACK'}))
+                if is_active or hover:
+                    self.round_rect(rect, ACCENT_BG if is_active else ELEVATED, radius=10)
                 labelled = layout.rail.w >= 60 * scale and key not in {'FULL', 'CLOSE'}
                 icon_y = rect.y + rect.h / 2 + (6 * scale if labelled else 0)
-                self.draw_icon(icons.get(key, key), rect.x + rect.w / 2, icon_y, 22 if labelled else 18, ACCENT if key == ed.tool else TEXT_SUB)
+                self.draw_icon(icons.get(key, key), rect.x + rect.w / 2, icon_y, 22 if labelled else 18, ACCENT if is_active else TEXT_SUB)
                 if labelled:
-                    self.text(rect.x + rect.w / 2, rect.y + 5 * scale, label, 9, ACCENT if key == ed.tool else TEXT_SUB, True)
+                    self.text(rect.x + rect.w / 2, rect.y + 5 * scale, label, 9, ACCENT if is_active else TEXT_SUB, True)
                 if key in {'UNDO', 'LIBRARY'}:
                     self.lines([(rect.x + 8 * scale, rect.y + rect.h + 2 * scale),
                                 (rect.x + rect.w - 8 * scale, rect.y + rect.h + 2 * scale)], BORDER_SUBTLE)
-            if hover:
+            if hover and key != 'INSPECTOR_COLLAPSE':
                 position = (rect.x + rect.w + 8 * scale, rect.y + rect.h / 2)
                 if key in {'SIMULATE', 'KEEP'}:
                     position = (max(layout.panel.x + 8 * scale, rect.x - (220 if blocker else 60) * scale), rect.y + rect.h + 20 * scale)
-                elif key in {'CLOSE', 'WORKSPACE_PANEL', 'RESTORE_CANVAS'}:
+                elif key in {'CLOSE', 'RESTORE_CANVAS', 'INSPECTOR_TOGGLE'}:
                     position = (rect.x - 70 * scale, rect.y - 18 * scale)
                 elif key == 'GARMENT':
                     position = (rect.x + 20 * scale, rect.y - 18 * scale)
                 tip_label = ('Snap: On' if ed.snap else 'Snap: Off') if key == 'TOGGLE_SNAP' else                             ('Body guide: On' if ed._scene.dd_reference_visible else 'Body guide: Off') if key == 'TOGGLE_GUIDE' else                             ('Lengths: On' if ed._scene.dd_lengths_visible else 'Lengths: Off') if key == 'TOGGLE_LENGTHS' else blocker or label
-                tip_shortcut = 'S' if key == 'TOGGLE_SNAP' else 'H' if key == 'TOGGLE_GUIDE' else 'L' if key == 'TOGGLE_LENGTHS' else shortcuts.get(key, 'Right-click for options' if key == 'SEW' else '')
+                tip_shortcut = 'S' if key == 'TOGGLE_SNAP' else 'H' if key == 'TOGGLE_GUIDE' else 'L' if key == 'TOGGLE_LENGTHS' else shortcuts.get(key, 'Right-click for options' if key in {'DRAW', 'INTERNAL', 'PIN', 'SEW'} else '')
                 tooltip = (tip_label, tip_shortcut, position)
         for rect, identity, label in ed.seam_badges():
             self.round_rect(rect, ACCENT_BG, radius=10)
             self.round_rect_outline(rect, ACCENT_BORDER, radius=10)
             self.text(rect.x + rect.w / 2, rect.y + 5 * scale, label, 10, ACCENT, True)
         cards = ed.visible_cards()
-        workspace_card = ed.workspace_card()
         card_tooltip = None
         for card in cards:
             rect, title, controls = card
             self.round_rect(Rect(rect.x + 3 * scale, rect.y - 5 * scale, rect.w, rect.h), (0, 0, 0, .20), radius=12)
             self.round_rect(rect, SURFACE_FLOATING, radius=12)
             self.round_rect_outline(rect, SURFACE_OUTLINE, radius=12)
-            is_workspace = workspace_card is not None and card == workspace_card
-            self.text(rect.x + 14 * scale, rect.y + rect.h - 26 * scale, title, 13, TEXT, max_width=rect.w - (82 if is_workspace else 52) * scale)
+            self.text(rect.x + 14 * scale, rect.y + rect.h - 26 * scale, title, 13, TEXT, max_width=rect.w - 52 * scale)
             self.lines([(rect.x + 12 * scale, rect.y + rect.h - 39 * scale),
                         (rect.x + rect.w - 12 * scale, rect.y + rect.h - 39 * scale)], BORDER)
-            if is_workspace:
-                for header, action in ed.workspace_header_controls(rect):
-                    active = action == 'WORKSPACE_PIN' and ed.workspace_panel_pinned
-                    self.round_rect(header, ACCENT_BG if active else ELEVATED, radius=5)
-                    self.draw_icon(action, header.x + header.w / 2, header.y + header.h / 2,
-                                   15, ACCENT if active else TEXT_SUB)
-                    if header.contains(*ed.pointer):
-                        caption = ('Unpin Workspace' if active else 'Pin Workspace') if action == 'WORKSPACE_PIN' else 'Close Workspace'
-                        card_tooltip = Tooltip(text=caption, pos=(rect.x - 120 * scale, header.y - 18 * scale), visible=True)
-            else:
-                close = ed.card_close_rect(rect)
-                if close.contains(*ed.pointer):
-                    self.round_rect(close, ELEVATED, radius=5)
-                    card_tooltip = Tooltip(text='Close card', pos=(rect.x, close.y - 18 * scale), visible=True)
-                self.draw_icon('CLOSE', close.x + close.w / 2, close.y + close.h / 2, 12, TEXT_SUB)
+            close = ed.card_close_rect(rect)
+            if close.contains(*ed.pointer):
+                self.round_rect(close, ELEVATED, radius=5)
+                card_tooltip = Tooltip(text='Close card', pos=(rect.x, close.y - 18 * scale), visible=True)
+            self.draw_icon('CLOSE', close.x + close.w / 2, close.y + close.h / 2, 12, TEXT_SUB)
             for control, row in controls:
-                key, label, value = row
+                key = row[0]
                 hover = control.contains(*ed.pointer)
-                if key == 'CHOICES':
+                if key in {'CHOICES', 'CHOICES_FABRIC'}:
+                    label, value = row[1], row[2]
                     prefix, choices, active = value
-                    self.text(control.x + 6 * scale, control.y + 46 * scale, label, 11, TEXT_SUB)
-                    choice_width = control.w / len(choices)
-                    for index, choice in enumerate(choices):
-                        chip = Rect(control.x + index * choice_width + 2 * scale, control.y + 7 * scale, choice_width - 4 * scale, 29 * scale)
-                        self.round_rect(chip, ACCENT_BG if choice == active else ELEVATED, radius=7)
-                        if choice == active:
-                            self.round_rect_outline(chip, ACCENT_BORDER, radius=7)
-                        self.text(chip.x + chip.w / 2, chip.y + 10 * scale, choice, 11, ACCENT if choice == active else TEXT_SUB, True)
+                    self.text(control.x + 6 * scale, control.y + control.h - 14 * scale, label, 11, TEXT_SUB)
+                    choices_list = list(choices)
+                    if len(choices_list) <= 4:
+                        choice_width = control.w / len(choices_list)
+                        for index, choice in enumerate(choices_list):
+                            chip = Rect(control.x + index * choice_width + 2 * scale, control.y + 4 * scale, choice_width - 4 * scale, 24 * scale)
+                            self.round_rect(chip, ACCENT_BG if choice == active else ELEVATED, radius=6)
+                            if choice == active:
+                                self.round_rect_outline(chip, ACCENT_BORDER, radius=6)
+                            self.text(chip.x + chip.w / 2, chip.y + 7 * scale, choice, 10, ACCENT if choice == active else TEXT_SUB, True)
+                    else:
+                        cols = 3
+                        choice_w = control.w / cols
+                        row_h = 20 * scale
+                        for index, choice in enumerate(choices_list):
+                            r_idx = index // cols
+                            c_idx = index % cols
+                            chip = Rect(control.x + c_idx * choice_w + 2 * scale, control.y + (1 - r_idx) * (row_h + 3 * scale) + 4 * scale, choice_w - 4 * scale, row_h)
+                            self.round_rect(chip, ACCENT_BG if choice == active else ELEVATED, radius=5)
+                            if choice == active:
+                                self.round_rect_outline(chip, ACCENT_BORDER, radius=5)
+                            self.text(chip.x + chip.w / 2, chip.y + 5 * scale, choice, 9, ACCENT if choice == active else TEXT_SUB, True)
+                elif key == 'PAIR_ACTIONS':
+                    action1, action2, label1, label2 = row[1], row[2], row[3], row[4]
+                    w2 = (control.w - 6 * scale) / 2
+                    r1 = Rect(control.x, control.y + 2 * scale, w2, control.h - 4 * scale)
+                    r2 = Rect(control.x + w2 + 6 * scale, control.y + 2 * scale, w2, control.h - 4 * scale)
+                    h1 = r1.contains(*ed.pointer)
+                    h2 = r2.contains(*ed.pointer)
+                    dest1 = action1 in {'DELETE_PIECE', 'REMOVE_SEAM', 'REMOVE_ANCHOR'}
+                    dest2 = action2 in {'DELETE_PIECE', 'REMOVE_SEAM', 'REMOVE_ANCHOR'}
+                    ink1 = (1, .55, .49, 1) if dest1 else ACCENT if h1 else TEXT_SUB
+                    ink2 = (1, .55, .49, 1) if dest2 else ACCENT if h2 else TEXT_SUB
+                    self.round_rect(r1, ACCENT_BG if h1 else ELEVATED, radius=6)
+                    self.round_rect(r2, ACCENT_BG if h2 else ELEVATED, radius=6)
+                    self.text(r1.x + r1.w / 2, r1.y + 7 * scale, label1, 10, ink1, True)
+                    self.text(r2.x + r2.w / 2, r2.y + 7 * scale, label2, 10, ink2, True)
+                elif key == 'MENU':
+                    menu_key, label = row[1], row[2]
+                    value = row[3] if len(row) > 3 else ''
+                    self.round_rect(control, ACCENT_BG if hover else ELEVATED, radius=6)
+                    label_width = control.w - 12 * scale if not value else control.w * .58
+                    self.text(control.x + 6 * scale, control.y + 15 * scale, label, 11, ACCENT if hover else TEXT_SUB, max_width=label_width)
+                    if value:
+                        self.text(control.x + control.w * .60, control.y + 15 * scale, str(value), 11, TEXT_SUB, max_width=control.w * .38)
+                    self.draw_icon('DISCLOSURE', control.x + control.w - 16 * scale, control.y + control.h / 2, 14, MUTED)
                 elif key == 'SLIDER':
+                    label, value = row[1], row[2]
                     spec = SETTINGS[label]
                     text = spec.display(getattr(ed._scene, label)) + ' ' + spec.unit
                     if ed.numeric and ed.numeric['key'] == label:
@@ -849,6 +884,8 @@ class Renderer:
                         self.lines([(start, middle), (end, middle)], BORDER_SUBTLE, 2)
                         self.dot((start + (end - start) * fraction, middle), 4, ACCENT)
                 else:
+                    label = row[1] if len(row) > 1 else ''
+                    value = row[2] if len(row) > 2 else ''
                     active = value == 'Selected'
                     reason = ed.action_blocker(key) if key not in {'INFO', 'NAME'} else ''
                     if hover and reason:
@@ -858,25 +895,16 @@ class Renderer:
                     text = label
                     if key == 'NAME' and ed.numeric and ed.numeric['key'] == 'dd_library_name':
                         text = ed.numeric['text'] + '|'
-                    destructive = key in {'DELETE', 'REMOVE_SEAM', 'REMOVE_ANCHOR', 'RESET'}
+                    destructive = key in {'DELETE', 'REMOVE_SEAM', 'REMOVE_ANCHOR', 'RESET', 'DELETE_PIECE'}
                     ink = MUTED if reason else (1, .55, .49, 1) if destructive else MUTED if key == 'INFO' else TEXT_SUB
-                    toggle = key in {'WORKSPACE_SNAP', 'WORKSPACE_LENGTHS', 'WORKSPACE_GUIDE'}
-                    label_width = control.w - (54 if toggle else 12) * scale if not value or toggle else control.w * .58
+                    label_width = control.w - 12 * scale if not value else control.w * .58
                     self.text(control.x + 6 * scale, control.y + 15 * scale, text, 11, ink, max_width=label_width)
-                    if toggle:
-                        enabled = value in {'On', 'Shown'}
-                        switch = Rect(control.x + control.w - 42 * scale, control.y + 11 * scale, 34 * scale, 19 * scale)
-                        self.round_rect(switch, ACCENT_BG if enabled else ELEVATED, radius=10)
-                        self.round_rect_outline(switch, ACCENT_BORDER if enabled else BORDER_SUBTLE, radius=10)
-                        self.dot((switch.x + (24 if enabled else 10) * scale, switch.y + switch.h / 2), 6,
-                                 ACCENT if enabled else MUTED)
-                    elif active:
+                    if active:
                         self.draw_icon('CHECK', control.x + control.w - 18 * scale, control.y + control.h / 2, 16, ACCENT)
                     elif value:
                         self.text(control.x + control.w * .60, control.y + 15 * scale, str(value), 11, TEXT_SUB, max_width=control.w * .38)
-                    elif key != 'INFO':
-                        self.draw_icon('FIT' if key == 'WORKSPACE_FIT' else 'DISCLOSURE',
-                                       control.x + control.w - 16 * scale, control.y + control.h / 2, 14, MUTED)
+                    elif key not in {'INFO', 'CUT', 'TRACE', 'SPLIT', 'CURVE', 'MERGE', 'DELETE', 'REMOVE_SEAM', 'REMOVE_ANCHOR', 'RESET', 'DELETE_PIECE', 'INSP_FIT', 'DUPLICATE', 'MIRROR_SEW', 'UNFOLD'}:
+                        self.draw_icon('DISCLOSURE', control.x + control.w - 16 * scale, control.y + control.h / 2, 14, MUTED)
         if ed.confirm_action or ed.pending_edge or ed.chain_stage or ed.pending_place or ed.pending_tack or ed.dart_base:
             panel = layout.panel
             message = ed.confirm_message if ed.confirm_action else ed.message
@@ -888,10 +916,10 @@ class Renderer:
             self.round_rect(toast, (.45, .12, .12, .96), radius=12)
             self.text(toast.x + 12 * scale, toast.y + 10 * scale, ed.error_message, 10, (1.0, .85, .85, 1.0), max_width=toast.w - 24 * scale)
         elif ed.message:
-            if ed.toast_text != ed.message:
+            if getattr(ed, 'toast_text', None) != ed.message:
                 ed.toast_text = ed.message
                 ed.toast_until = time.monotonic() + 3
-            if time.monotonic() < ed.toast_until:
+            if time.monotonic() < getattr(ed, 'toast_until', 0):
                 panel = layout.panel
                 width = min(420 * scale, max(80 * scale, panel.w - 390 * scale))
                 toast = Rect(panel.x + 76 * scale, panel.y + 15 * scale, width, 30 * scale)

@@ -23,9 +23,6 @@ def check_interaction_regressions(workspace, event, point, check):
     original_library_items = workspace.library_items
     original_free_sewing = workspace._scene.dd_free_sewing
     original_view = (workspace.view.cx, workspace.view.cy, workspace.view.zoom)
-    original_workspace_open = workspace.workspace_panel_open
-    original_workspace_pinned = workspace.workspace_panel_pinned
-    original_context_card_hidden = workspace.context_card_hidden
     reference_names = ('gesture', 'preview', 'pending_edge', 'handle_preview', 'seam_selected',
                        'selected_anchor', 'chain_a', 'chain_b', 'chain_stage', 'free_clicks',
                        'dart_base', 'pending_place', 'pending_tack', 'pending_simulation')
@@ -47,15 +44,13 @@ def check_interaction_regressions(workspace, event, point, check):
         workspace.session = Session(Document())
         workspace.persist()
         workspace.card_kind = None
-        workspace.context_card_hidden = False
-        starter = workspace.minimal_card()
-        check(starter[1] == 'Start garment' and len(starter[2]) == 4 and starter[2][0][1][0] == 'START_PANEL',
-              'the empty garment offers a compact one-click starter alongside custom drawing and the library')
-        workspace.minimal_action('START_PANEL')
+        check(workspace.minimal_card() is None,
+              'the empty garment offers clean canvas with no overlay')
+        workspace.perform_action('START_PANEL')
         created = workspace.session.document.patterns[0]
         check(created.name == 'Front panel' and abs(created.points[1][0] - created.points[0][0] - .4) < 1e-6 and
-              abs(created.points[2][1] - created.points[1][1] - .45) < 1e-6 and workspace.tool == 'SELECT',
-              'one-click starter creates and frames an editable 40 by 45 cm panel ready for selection')
+              abs(created.points[2][1] - created.points[1][1] - .45) < 1e-6,
+              'START_PANEL creates an editable 40 by 45 cm panel')
         check(workspace.perform_action('START_PANEL') is False and len(workspace.session.document.patterns) == 1,
               'starter creation cannot silently add another template to an existing garment')
         workspace.perform_action('UNDO')
@@ -159,7 +154,7 @@ def check_interaction_regressions(workspace, event, point, check):
         workspace.selected_anchor = 'old-anchor'
         workspace.card_kind = None
         workspace.handle_event(bpy.context, event('LEFTMOUSE', (badge.x + badge.w / 2, badge.y + badge.h / 2)))
-        check(workspace.seam_selected == seam.id and workspace.selected_anchor is None and workspace.card_kind == 'SEAM',
+        check(workspace.seam_selected == seam.id and workspace.selected_anchor is None and workspace.card_kind is None,
               'a seam badge selects the seam instead of retaining a competing anchor selection')
         direction = seam.reverse
         workspace.handle_event(bpy.context, event('B', point))
@@ -315,22 +310,20 @@ def check_interaction_regressions(workspace, event, point, check):
               'library replacement retains undo back to the previous garment')
 
         workspace.choose_tool('SELECT')
-        workspace.workspace_panel_open = workspace.workspace_panel_pinned = True
         workspace.card_kind = None
-        card = workspace.workspace_card()[0]
-        workspace_point = (card.x + 12, card.y + card.h - 12)
-        save_event = event('S', workspace_point)
+        canvas_point = (workspace.canvas_layout.canvas.x + 12, workspace.canvas_layout.canvas.y + 12)
+        save_event = event('S', canvas_point)
         save_event.ctrl = True
         check(workspace.handle_event(bpy.context, save_event) == {'PASS_THROUGH'},
-              'Ctrl S over Workspace passes through to native Blender save')
+              'Ctrl S passes through to native Blender save')
         before = workspace.session.document.dumps()
         workspace.session.add([(.5, 0), (.7, 0), (.7, .4), (.5, .4)])
         workspace.persist()
-        undo_event = event('Z', workspace_point)
+        undo_event = event('Z', canvas_point)
         undo_event.ctrl = True
         workspace.handle_event(bpy.context, undo_event)
         check(workspace.session.document.dumps() == before,
-              'Ctrl Z over Workspace reaches document undo instead of being swallowed by the card')
+              'Ctrl Z reaches document undo instead of being swallowed')
 
         workspace.session = Session(Document())
         workspace.session.add([(-.4, 0), (.4, 0), (.4, .6), (-.4, .6)])
@@ -338,11 +331,9 @@ def check_interaction_regressions(workspace, event, point, check):
         closed_path = workspace.session.add_path([(-.2, .3), (.2, .3), (.2, .45), (-.2, .45)], True)
         owner = workspace.session.selected
         workspace.persist()
-        workspace.workspace_panel_open = False
         workspace.fit()
         for internal_path in (open_path, closed_path):
             workspace.card_kind = None
-            workspace.context_card_hidden = True
             edge = workspace.session.document.edges(owner, internal_path.id)[0]
             edge_point = workspace.view.screen(workspace.session.document.edge_point(edge, .5), workspace.canvas_layout.canvas)
             workspace.handle_event(bpy.context, event('RIGHTMOUSE', edge_point))
@@ -359,24 +350,16 @@ def check_interaction_regressions(workspace, event, point, check):
         close = workspace.card_close_rect(workspace.minimal_card()[0])
         document_before_close = workspace.session.document.dumps()
         workspace.handle_event(bpy.context, event('LEFTMOUSE', (close.x + close.w / 2, close.y + close.h / 2)))
-        check(workspace.card_kind is None and workspace.context_card_hidden and
-              workspace.session.document.dumps() == document_before_close,
-              'context card close hides the automatic replacement without editing garment data')
+        check(workspace.card_kind is None and workspace.session.document.dumps() == document_before_close,
+              'popover card close dismisses the popover without editing garment data')
         workspace.show_card('EDIT', point)
-        dock = workspace.canvas_layout.buttons['RECTANGLE'][0]
+        dock = workspace.canvas_layout.buttons['DRAW'][0]
         workspace.handle_event(bpy.context, event('RIGHTMOUSE', (dock.x + dock.w / 2, dock.y + dock.h / 2)))
         check(workspace.card_kind is None and workspace.tool == 'SELECT',
               'right click dismisses an explicit popover before dispatching an underlying dock action')
-        workspace.context_card_hidden = True
-        reopen_point = (workspace.canvas_layout.canvas.x + 100, workspace.canvas_layout.canvas.y + 80)
-        workspace.handle_event(bpy.context, event('LEFTMOUSE', reopen_point))
-        workspace.handle_event(bpy.context, event('LEFTMOUSE', reopen_point, 'RELEASE'))
-        check(not workspace.context_card_hidden,
-              'the next canvas click restores automatic contextual card reachability')
 
         workspace.clear_interaction_references()
         workspace.choose_tool('SELECT')
-        workspace.workspace_panel_open = False
         workspace.session = Session(Document())
         workspace.session.add([(0, 0), (.3, 0), (.3, .4), (0, .4)])
         first_piece = workspace.session.selected
@@ -472,7 +455,6 @@ def check_interaction_regressions(workspace, event, point, check):
 
         fit_session = Session(Document())
         fit_session.add([(-1.5, 0), (1.5, 0), (1.5, .4), (-1.5, .4)])
-        workspace.workspace_panel_open = workspace.workspace_panel_pinned = True
         for scale in (1, 1.5):
             layout = Layout(1600 * scale, 1000 * scale, scale, full=True)
             minimal_layout(layout)
@@ -482,48 +464,13 @@ def check_interaction_regressions(workspace, event, point, check):
                     patch.object(workspace, 'reference_corners', return_value=[]):
                 workspace.fit()
                 projected = [workspace.view.screen(vertex, canvas) for vertex in fit_session.document.patterns[0].points]
-                card = workspace.workspace_card()[0]
                 check(min(vertex[0] for vertex in projected) > layout.rail.x + layout.rail.w and
-                      max(vertex[0] for vertex in projected) < card.x and layout.canvas is canvas,
-                      'minimal Fit clears the dock and pinned Workspace without resizing the canvas at scale ' + str(scale))
-                center = workspace.view.screen((0, .2), canvas)
-                usable_left = layout.rail.x + layout.rail.w + 16 * scale
-                usable_right = card.x - 16 * scale
-                check(abs(center[0] - (usable_left + usable_right) / 2) < 1e-6,
-                      'minimal Fit compensates world center for the temporary fit rectangle origin')
-                workspace.workspace_panel_pinned = False
-                workspace.fit()
-                center = workspace.view.screen((0, .2), canvas)
-                check(abs(center[0] - (usable_left + canvas.x + canvas.w) / 2) < 1e-6 and layout.canvas is canvas,
-                      'unpinned Workspace does not reserve permanent design canvas space')
-                workspace.workspace_panel_pinned = True
-                crowded_card = (Rect(canvas.x + 300 * scale, canvas.y, 210 * scale, 200 * scale), '', [])
-                with patch.object(workspace, 'workspace_card', return_value=crowded_card):
-                    workspace.fit()
-                center = workspace.view.screen((0, .2), canvas)
-                check(abs(center[0] - (usable_left + canvas.x + canvas.w) / 2) < 1e-6,
-                      'Fit skips Workspace reservation when fewer than 400 scaled pixels remain')
-        split = Layout(853, 900, 1, full=True)
-        minimal_layout(split)
-        with patch.object(workspace, 'session', fit_session), \
-                patch.object(workspace, 'canvas_layout', split), \
-                patch.object(workspace, 'reference_corners', return_value=[]):
-            workspace.fit()
-            projected = [workspace.view.screen(vertex, split.canvas) for vertex in fit_session.document.patterns[0].points]
-            check(max(vertex[0] for vertex in projected) < workspace.workspace_card()[0].x,
-                  '853 pixel split preview reserves the 210 pixel Workspace when at least 400 usable pixels remain')
+                      max(vertex[0] for vertex in projected) < layout.canvas.x + layout.canvas.w,
+                      'minimal Fit clears the dock and fills the canvas at scale ' + str(scale))
         compact = Layout(628, 700, 1, full=True)
         minimal_layout(compact)
-        with patch.object(workspace, 'session', fit_session), \
-                patch.object(workspace, 'canvas_layout', compact), \
-                patch.object(workspace, 'reference_corners', return_value=[]):
-            workspace.fit()
-            center = workspace.view.screen((0, .2), compact.canvas)
-            usable_left = compact.rail.x + compact.rail.w + 16
-            usable_right = workspace.workspace_card()[0].x - 16
-            check(abs(center[0] - (usable_left + usable_right) / 2) < 1e-6 and
-                  abs(workspace.view.cy - .2) < 1e-6,
-                  '628 pixel compact workspace keeps both dock and pinned Workspace clear when 260 usable pixels remain')
+        check(compact.inspector is None and compact.canvas.w >= compact.panel.w - 16,
+              '628 pixel compact workspace maintains full canvas without sidebars')
     finally:
         workspace.clear_interaction_references()
         workspace.session = original_session
@@ -533,9 +480,6 @@ def check_interaction_regressions(workspace, event, point, check):
         workspace.choose_tool(original_tool)
         workspace._scene.dd_free_sewing = original_free_sewing
         workspace.view.cx, workspace.view.cy, workspace.view.zoom = original_view
-        workspace.workspace_panel_open = original_workspace_open
-        workspace.workspace_panel_pinned = original_workspace_pinned
-        workspace.context_card_hidden = original_context_card_hidden
 
 
 def run():
@@ -549,7 +493,8 @@ def run():
     try:
         import devil_designer
         from devil_designer import editor, garment
-        from devil_designer.minimal import FABRICS, DENSITY, QUALITY, THICKNESS
+        from devil_designer.canvas import Layout
+        from devil_designer.minimal import FABRICS, DENSITY, QUALITY, THICKNESS, GUIDE_OPACITY, minimal_layout
         devil_designer.register()
         scene = bpy.context.scene
         body = scene.objects['Cube']
@@ -584,93 +529,65 @@ def run():
                 rect = card_control(key)
                 click((rect.x + rect.w / 2, rect.y + rect.h / 2))
 
-            check(workspace.minimal_ui and workspace.inspector is None and workspace.canvas_layout.inspector is None,
-                  'default workspace has no sidebar, search inspector, or universal option popup')
-            check(not {'SETTINGS', 'SEARCH', 'MORE_TOOLS', 'BUILD'} & set(workspace.canvas_layout.buttons),
-                  'default chrome contains only the tool dock and task transport')
+            check(workspace.minimal_ui and workspace.canvas_layout.inspector is None,
+                  'default workspace has pure canvas with zero sidebars')
+            check(not {'SETTINGS', 'SEARCH', 'MORE_TOOLS', 'BUILD', 'SIMULATE_OPTIONS', 'WORKSPACE_PANEL'} & set(workspace.canvas_layout.buttons),
+                  'default chrome contains reduced tool dock, close, garment, and keep options')
             check(workspace.tool == 'RECTANGLE', 'panel drawing is ready immediately')
-            def workspace_click(key):
-                card = workspace.workspace_card()
-                controls = workspace.workspace_header_controls(card[0])
-                controls += [(rect, row[0]) for rect, row in card[2]]
-                rect = next(rect for rect, action in controls if action == key)
-                click((rect.x + rect.w / 2, rect.y + rect.h / 2))
 
-            panel = workspace.workspace_card()
-            original_canvas = workspace.canvas_layout.canvas
-            check(panel is not None and workspace.workspace_panel_pinned,
-                  'compact Workspace side card starts visible and pinned')
-            check(panel[0].w <= 210 * workspace.canvas_layout.scale and len(panel[2]) == 4,
-                  'Workspace is a compact card with only relevant existing working preferences')
-            bounds = workspace.canvas_layout.panel
-            check(abs(panel[0].y + panel[0].h / 2 - (bounds.y + bounds.h / 2)) < 1e-6,
-                  'Workspace side panel is vertically centered on the design workspace')
+            dock_tools = [k for k in ('SELECT', 'DRAW', 'INTERNAL', 'SEW', 'PIN', 'UNDO', 'REDO', 'LIBRARY') if k in workspace.canvas_layout.buttons]
+            check(len(dock_tools) == 8, 'reduced left dock has exactly 8 tools')
+            check({'TOGGLE_SNAP', 'TOGGLE_GUIDE', 'TOGGLE_LENGTHS'}.issubset(set(workspace.canvas_layout.buttons)),
+                  'S, H and L toggles are on the left dock')
+
             snapping = workspace.snap
-            workspace_click('WORKSPACE_SNAP')
-            check(workspace.snap != snapping, 'Workspace snapping changes the actual drawing snap state')
-            workspace_click('WORKSPACE_SNAP')
+            button('TOGGLE_SNAP')
+            check(workspace.snap != snapping, 'dock Snap toggle toggles drawing snap state')
+            button('TOGGLE_SNAP')
+
             lengths = scene.dd_lengths_visible
-            workspace_click('WORKSPACE_LENGTHS')
-            check(scene.dd_lengths_visible != lengths, 'Workspace measurements change actual canvas labels')
-            workspace_click('WORKSPACE_LENGTHS')
-            workspace_click('WORKSPACE_GUIDE')
-            check(scene.dd_reference_visible and len(workspace.workspace_card()[2]) == 5,
-                  'body guide reveals its opacity choice only while visible, within five controls')
-            expanded_panel = workspace.workspace_card()[0]
-            check(abs(expanded_panel.y + expanded_panel.h / 2 - (bounds.y + bounds.h / 2)) < 1e-6,
-                  'Workspace stays vertically centered when contextual controls expand it')
-            opacity = next(rect for rect, row in workspace.workspace_card()[2] if row[0] == 'CHOICES')
-            click((opacity.x + opacity.w * 5 / 6, opacity.y + 16))
-            check(abs(scene.dd_reference_opacity - .5) < 1e-6,
-                  'named guide opacity changes the existing silhouette opacity')
-            workspace_click('WORKSPACE_GUIDE')
-            check(not scene.dd_reference_visible and len(workspace.workspace_card()[2]) == 4,
-                  'hidden body guide removes its irrelevant opacity control')
+            button('TOGGLE_LENGTHS')
+            check(scene.dd_lengths_visible != lengths, 'dock Lengths toggle toggles canvas length labels')
+            button('TOGGLE_LENGTHS')
+
+            guides = scene.dd_reference_visible
+            button('TOGGLE_GUIDE')
+            check(scene.dd_reference_visible != guides, 'dock Guide toggle toggles body reference visibility')
+            button('TOGGLE_GUIDE')
+
+            workspace.show_card('CANVAS_MENU')
+            card = workspace.minimal_card()
+            check(card is not None and card[1] == 'Garment & View',
+                  'right click on empty canvas opens Garment & View contextual menu')
+
+            check(scene.dd_fabric == 'COTTON' and workspace.session.document.preset == 'COTTON',
+                  'garment default fabric starts as Cotton')
+            workspace.minimal_action('INSP_GARMENT_FABRIC_LEATHER')
+            check(scene.dd_fabric == 'LEATHER' and workspace.session.document.preset == 'LEATHER',
+                  'changing default fabric updates garment-wide preset to Leather')
+
+            workspace.minimal_action('INSP_GARMENT_DENSITY_Coarse')
+            check(abs(scene.dd_spacing - DENSITY['Coarse']) < 1e-6,
+                  'garment density chip changes scene spacing')
+
+            workspace.minimal_action('INSP_QUALITY_High')
+            check(scene.dd_quality == QUALITY['High'],
+                  'simulation quality chip changes scene quality')
+
+            workspace.minimal_action('INSP_OPACITY_Strong')
+            check(abs(scene.dd_reference_opacity - GUIDE_OPACITY['Strong']) < 1e-6,
+                  'guide opacity chip changes silhouette opacity')
+
             original_view = (workspace.view.cx, workspace.view.cy, workspace.view.zoom)
             workspace.view.cx, workspace.view.cy, workspace.view.zoom = 2, 3, 20
-            workspace_click('WORKSPACE_FIT')
+            workspace.minimal_action('INSP_FIT')
             check(workspace.view.cx == 0 and workspace.view.cy == 0 and workspace.view.zoom > 20,
-                  'Workspace Fit design uses the actual existing canvas framing operation')
+                  'Fit design contextual action uses the canvas framing operation')
             workspace.view.cx, workspace.view.cy, workspace.view.zoom = original_view
-            workspace.show_card('SIMULATE')
-            workspace_click('WORKSPACE_SNAP')
-            check(workspace.card_kind == 'SIMULATE', 'Workspace changes do not replace the current task card')
-            workspace_click('WORKSPACE_SNAP')
-            workspace.card_kind = None
-            workspace_click('WORKSPACE_CLOSE')
-            check(workspace.workspace_card() is None and workspace.make_layout().canvas == original_canvas,
-                  'closing the side card leaves the existing canvas layout unchanged')
-            button('WORKSPACE_PANEL')
-            check(workspace.workspace_card() is not None, 'Workspace button reopens the side card')
-            workspace.choose_tool('SELECT')
-            canvas_point = (original_canvas.x + original_canvas.w / 2, original_canvas.y + 80)
-            click(canvas_point)
-            check(workspace.workspace_panel_open, 'pinned card stays open while working on the canvas')
-            workspace.handle_event(bpy.context, event('ESC', canvas_point))
-            check(not workspace._closed and workspace.workspace_card() is not None,
-                  'Escape does not close the minimal workspace or lose its pinned side panel')
-            workspace.choose_tool('POLYGON')
-            click(canvas_point)
-            check(workspace.draft and workspace.workspace_card() in workspace.visible_cards(),
-                  'pinned Workspace side panel remains rendered during polygon drafting')
-            workspace.handle_event(bpy.context, event('ESC', canvas_point))
-            check(not workspace.draft and not workspace._closed and workspace.workspace_card() is not None,
-                  'Escape cancels drafting without losing the workspace or side panel')
-            workspace.choose_tool('RECTANGLE')
-            workspace.handle_event(bpy.context, event('LEFTMOUSE', canvas_point))
-            check(workspace.gesture and workspace.workspace_card() in workspace.visible_cards(),
-                  'pinned side panel remains rendered during a rectangle gesture')
-            workspace.handle_event(bpy.context, event('ESC', canvas_point))
-            check(workspace.gesture is None and not workspace._closed,
-                  'visible pinned panel does not swallow gesture cancellation')
-            workspace.choose_tool('SELECT')
-            workspace_click('WORKSPACE_PIN')
-            click(canvas_point)
-            check(not workspace.workspace_panel_open, 'unpinned card dismisses on canvas input without trapping the artist')
-            button('WORKSPACE_PANEL')
-            workspace_click('WORKSPACE_PIN')
-            workspace_click('WORKSPACE_CLOSE')
+
+            canvas_point = (workspace.canvas_layout.canvas.x + workspace.canvas_layout.canvas.w / 2, workspace.canvas_layout.canvas.y + 80)
             check_interaction_regressions(workspace, event, canvas_point, check)
+
             workspace.choose_tool('RECTANGLE')
             for start, end in [((-.4, 0), (-.1, .4)), ((.1, 0), (.4, .4))]:
                 first = workspace.view.screen(start, workspace.canvas_layout.canvas)
@@ -679,18 +596,28 @@ def run():
                 workspace.handle_event(bpy.context, event('MOUSEMOVE', last))
                 workspace.handle_event(bpy.context, event('LEFTMOUSE', last, 'RELEASE'))
             check(len(workspace.session.document.patterns) == 2, 'two mouse drags create two panels')
-            check(workspace.minimal_card()[1] == workspace.session.document.patterns[-1].name,
-                  'selection automatically replaces garment information with a piece card')
-            card_click('FABRIC')
-            check([row[0].removeprefix('SET_PRESET_') for rect, row in workspace.minimal_card()[2]] == list(FABRICS),
-                  'Fabric opens exactly Cotton Linen Denim Silk Leather Knit, with no physical fields')
-            card_click('SET_PRESET_LEATHER')
-            check(workspace.session.document.find(workspace.session.selected).preset == 'LEATHER',
-                  'fabric preset applies directly to the selected piece')
-            workspace.card_kind = None
+            check(workspace.card_kind is None and len(workspace.visible_cards()) == 0,
+                  'selecting a piece never opens a canvas overlay')
+
+            pattern = workspace.session.document.patterns[-1]
+            check(pattern.preset == 'LEATHER' and pattern.fabric_override is False,
+                  'new piece inherits garment default fabric without override')
+
+            workspace.minimal_action('SET_PIECE_FABRIC_SILK')
+            check(pattern.preset == 'SILK' and pattern.fabric_override is True,
+                  'setting piece fabric creates a fabric override')
+
+            workspace.minimal_action('INSP_GARMENT_FABRIC_COTTON')
+            check(pattern.preset == 'SILK',
+                  'changing garment default fabric preserves the piece override')
+
+            workspace.minimal_action('SET_DENSITY_COARSE')
+            check(pattern.mesh_density == 'COARSE',
+                  'setting piece mesh density updates piece spacing')
+
             button('SELECT')
-            pattern = workspace.session.document.patterns[0]
-            original_point = pattern.points[0]
+            pattern0 = workspace.session.document.patterns[0]
+            original_point = pattern0.points[0]
             point = workspace.view.screen(original_point, workspace.canvas_layout.canvas)
             click(point, 'RIGHTMOUSE')
             check(workspace.card_kind == 'POINT', 'right clicking a point reveals only its local editing choices')
@@ -700,48 +627,89 @@ def run():
             dragged = (handle[0] + 24, handle[1])
             workspace.handle_event(bpy.context, event('MOUSEMOVE', dragged))
             workspace.handle_event(bpy.context, event('LEFTMOUSE', dragged, 'RELEASE'))
-            check(pattern.points[0][0] > original_point[0], 'dragging an exact design value applies the local point edit')
+            check(pattern0.points[0][0] > original_point[0], 'dragging an exact design value applies the local point edit')
             workspace.card_kind = None
             workspace.perform_action('UNDO')
             check(workspace.session.document.patterns[0].points[0] == original_point,
                   'a local numeric design edit is one undoable operation')
-            button('SIMULATE_OPTIONS')
-            card = workspace.minimal_card()
-            check(len(card[2]) == 2 and all(row[0] == 'CHOICES' for rect, row in card[2]),
-                  'Simulate popover contains only two named-choice controls')
-            density_rect = card[2][0][0]
-            click((density_rect.x + density_rect.w / 6, density_rect.y + 16))
-            quality_rect = workspace.minimal_card()[2][1][0]
-            click((quality_rect.x + quality_rect.w / 2, quality_rect.y + 16))
-            check(abs(scene.dd_spacing - DENSITY['Coarse']) < 1e-6 and scene.dd_quality == QUALITY['Standard'],
-                  'named density and quality choices map to their actual implementation values')
+
             button('KEEP_OPTIONS')
             check(len(workspace.minimal_card()[2]) == 2 and not any(row[0] == 'SLIDER' for rect, row in workspace.minimal_card()[2]),
                   'Keep uses Auto weld and named thickness, without a premature manual tolerance')
             thickness_rect = workspace.minimal_card()[2][1][0]
             click((thickness_rect.x + thickness_rect.w / 6, thickness_rect.y + 16))
             check(scene.dd_thickness == THICKNESS['None'], 'None thickness is a named finalize choice')
-            for kind in ('PIECE', 'SIMULATE', 'KEEP', 'GARMENT', 'BODY', 'LIBRARY', 'POINT', 'EDGE', 'EDIT', 'PLACEMENT', 'INTERNAL_EDIT', 'OFFSET', 'SEWING', 'RESULT'):
+
+            for kind in ('KEEP', 'GARMENT', 'BODY', 'LIBRARY', 'POINT', 'EDGE', 'EDIT', 'CUT_RECOVERY'):
                 workspace.show_card(kind)
                 card = workspace.minimal_card()
                 check(card is None or sum(row[0] != 'INFO' for rect, row in card[2]) <= 5,
                       kind + ' card stays within the five-control cap')
-                check(card is None or not any(row[1] in {'dd_spacing', 'dd_quality', 'dd_self_collision', 'dd_clearance', 'dd_library_refit', 'dd_frames'} for rect, row in card[2]),
-                      kind + ' card exposes no raw simulation parameters or automatic-policy toggles')
             workspace.card_kind = None
+
+            canvas_pos = (workspace.canvas_layout.canvas.x + 20, workspace.canvas_layout.canvas.y + 20)
+            save_evt = event('S', canvas_pos)
+            save_evt.ctrl = True
+            check(workspace.handle_event(bpy.context, save_evt) == {'PASS_THROUGH'},
+                  'Ctrl+S passes through to native Blender save')
+            undo_evt = event('Z', canvas_pos)
+            undo_evt.ctrl = True
+            check(workspace.handle_event(bpy.context, undo_evt) == {'RUNNING_MODAL'},
+                  'Ctrl+Z undo works properly')
+            redo_evt = event('Z', canvas_pos)
+            redo_evt.ctrl = True
+            redo_evt.shift = True
+            check(workspace.handle_event(bpy.context, redo_evt) == {'RUNNING_MODAL'},
+                  'Ctrl+Shift+Z redo works properly')
+
+            workspace.handle_event(bpy.context, event('P', canvas_point))
+            check(workspace.tool == 'POLYGON' and workspace.draw_shape == 'POLYGON', 'P activates polygon draw')
+            workspace.handle_event(bpy.context, event('R', canvas_point))
+            check(workspace.tool == 'RECTANGLE' and workspace.draw_shape == 'RECTANGLE', 'R activates rectangle draw')
+            workspace.handle_event(bpy.context, event('E', canvas_point))
+            check(workspace.tool == 'ELLIPSE' and workspace.draw_shape == 'ELLIPSE', 'E activates ellipse draw')
+            workspace.handle_event(bpy.context, event('I', canvas_point))
+            check(workspace.tool == 'INTERNAL' and workspace.internal_tool == 'INTERNAL', 'I activates internal tool')
+            workspace.handle_event(bpy.context, event('D', canvas_point))
+            check(workspace.tool == 'DART' and workspace.internal_tool == 'DART', 'D activates dart tool')
+            workspace.handle_event(bpy.context, event('K', canvas_point))
+            check(workspace.tool == 'PIN' and workspace.pin_tool == 'PIN', 'K activates pin tool')
+            workspace.handle_event(bpy.context, event('T', canvas_point))
+            check(workspace.tool == 'TACK' and workspace.pin_tool == 'TACK', 'T activates tack tool')
+            workspace.handle_event(bpy.context, event('V', canvas_point))
+            check(workspace.tool == 'SELECT', 'V activates select tool')
+
+            narrow_layout = Layout(700, 800, 1, full=True)
+            minimal_layout(narrow_layout)
+            check(narrow_layout.inspector is None and narrow_layout.canvas.w >= narrow_layout.panel.w - 16,
+                  'narrow layout maintains clean full canvas without sidebar')
+
+            from devil_designer.core import Document, Session
+            legacy_sess = Session(Document())
+            legacy_sess.add([(0, 0), (.4, 0), (.4, .4), (0, .4)])
+            legacy_sess.document.patterns[0].preset = 'LINEN'
+            raw = json.loads(legacy_sess.document.dumps())
+            raw.pop('preset', None)
+            raw['patterns'][0].pop('fabric_override', None)
+            loaded_doc = Document.loads(json.dumps(raw))
+            check(loaded_doc.preset == 'COTTON', 'legacy document defaults garment to Cotton')
+            check(loaded_doc.patterns[0].preset == 'LINEN' and loaded_doc.patterns[0].fabric_override is True,
+                  'legacy document marks non-default pattern preset as override')
             button('SEW')
             for point in ((-.25, 0), (.25, 0)):
                 click(workspace.view.screen(point, workspace.canvas_layout.canvas))
             check(len(workspace.session.document.seams) == 1, 'Sew pairs the panels directly on canvas')
             badge = workspace.seam_badges()[0][0]
             click((badge.x + badge.w / 2, badge.y + badge.h / 2))
-            check(workspace.card_kind == 'SEAM' and len(workspace.minimal_card()[2]) == 2,
-                  'selecting the seam badge opens only reverse and remove at that seam')
+            check(workspace.seam_selected == workspace.session.document.seams[0].id and workspace.card_kind is None,
+                  'selecting seam badge selects seam without auto-opening canvas card')
+            click((badge.x + badge.w / 2, badge.y + badge.h / 2), 'RIGHTMOUSE')
+            check(workspace.card_kind == 'SEAM' and any(row[1] == 'FLIP_SEAM' for rect, row in workspace.minimal_card()[2]),
+                  'right clicking seam badge opens seam menu with reverse and remove')
             before = workspace.session.document.seams[0].reverse
-            card_click('FLIP_SEAM')
-            check(workspace.session.document.seams[0].reverse != before, 'seam direction changes through its micro-card')
-            card_click('FLIP_SEAM')
-            workspace.card_kind = None
+            workspace.handle_event(bpy.context, event('B', canvas_point))
+            check(workspace.session.document.seams[0].reverse != before, 'seam direction changes')
+            workspace.handle_event(bpy.context, event('B', canvas_point))
             check(not garment.generated(scene, 'panel'), 'no separate Build or Arrange action was required')
             scene.dd_self_collision = False
             scene.dd_library_refit = False

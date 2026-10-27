@@ -2,10 +2,12 @@
 
 ## Scope
 
-This pass prioritizes preventing accidental garment edits, making failures
-actionable, and keeping the current contextual workflow predictable. It does
-not introduce another sidebar, cursor menu, or raw simulation controls. The
-protected garment, meshing, placement, and physics algorithms are unchanged.
+This pass eliminates the docked inspector in favor of 100% full-screen canvas
+and focused right-click contextual menus anchored at the cursor. Selecting anything
+never opens an overlay on the canvas. Right-clicking a piece, seam, point, edge, internal
+path, pin/tack, or empty canvas opens a small focused contextual menu that dismisses
+immediately upon selecting an action or pressing Escape/clicking outside. The protected
+garment, meshing, placement, and physics algorithms are unchanged.
 
 ## Findings addressed
 
@@ -28,8 +30,10 @@ Regression checks cover these cases in `tests/gui_fast_flow.py` and
 ## Artist acceptance pass
 
 1. Restart Blender to unload the previous extension modules, then open Devil
-   Designer with Ctrl+Alt+D. Try Create panel, undo it, then draw two panels and
-   use the contextual cards; Workspace should remain compact and optional.
+   Designer with Ctrl+Alt+D. Verify the pure full-width canvas with zero sidebars,
+   the reduced left tool dock (8 tools + S/H/L toggles), and that selecting pieces
+   never creates an overlay on the canvas. Right-click empty canvas to inspect Garment & View options,
+   and right-click pieces/seams/points to access contextual actions directly at your cursor.
 2. Shift-select two corners on one panel, then right-click a corner on the other.
    Merge must not reuse the first panel's selection. Repeat between the outer
    boundary and an internal path.

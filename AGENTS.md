@@ -43,13 +43,20 @@
 ---
 
 ## MINIMAL CONTEXTUAL UX CONTRACT
-- Only the approved compact, optional Workspace side card is allowed; do not restore a full-height sidebar, searchable all-settings inspector, or universal cursor menu.
-- Workspace exposes existing artist-facing preferences only: snapping, measurements, body-guide visibility/opacity, and Fit design. Keep the rest of the UI unchanged when extending this card.
-- Show only controls relevant to the current piece, seam, garment, or task button.
-- Keep popovers at approximately five controls; prefer named choices. The fabric preset list contains six named materials.
-- Fabric presets own physical parameters. Do not expose raw cloth parameters, self-collision, body-clearance, body-height refit, or auto-quality toggles.
-- Simulation choices live on Simulate. Finalization choices live on Keep mesh. Seam reverse/removal lives on the seam badge.
-- Weld is Auto; expose manual tolerance only after an actual unwelded-seam report.
+- Zero sidebars and zero docked inspectors: 100% full-screen canvas from the left dock to the right window edge.
+- Eliminates split-attention friction: the artist interacts directly where their cursor is positioned.
+- Pure canvas interaction: left-clicking or selecting any piece, seam badge, point, edge, or internal path highlights it cleanly without auto-opening popovers or card overlays.
+- Focused Right-Click Contextual Menus: right-clicking any entity opens a compact, contextual menu directly anchored at the cursor:
+  1. Piece right-click: piece dimensions, Fabric override submenu (Cotton, Linen, Denim, Silk, Leather, Knit), Mesh density override submenu (Coarse, Standard, Fine), Duplicate, Mirror, Unfold, Delete piece.
+  2. Seam badge right-click: length mismatch stats (cm & %), Reverse seam, Remove seam.
+  3. Point right-click: corner/curve toggle, exact numeric X/Y coordinate sliders, Merge selected points (when multiple points selected).
+  4. Edge right-click: exact length slider, Split edge, Unfold, Mirror.
+  5. Internal edge right-click: exact length slider, Split edge, Cut along path, Trace as piece (for closed paths).
+  6. Pin/Tack right-click: attached pattern name, Remove tack / Remove pin.
+  7. Empty canvas right-click: Body selector submenu, Garment default fabric chips, Garment mesh density chips, Simulation quality chips, Guide opacity chips, Fit design.
+- Quick auto-dismissal: executing any action in a contextual menu immediately completes the action and dismisses the menu back to pure canvas. Pressing Escape or clicking outside also instantly dismisses the menu.
+- Reduced left dock: 8 tools (Select, Draw, Internal, Sew, Pin, Undo, Redo, Library) with micro-toggles for Snapping [S], Body guide [H], and Lengths [L]. Shortcuts P, R, E, I, D, K, T, V, J, S, H, L remain fully functional.
+- Keep mesh retains its options menu (Auto weld and Thickness). Simulate directly starts drape.
 
 ## REQUIRED ARTIST ACCEPTANCE AND SHIPPING WORKFLOW
 - The required sequence is: implement -> automated verification -> ready for artist testing -> artist approval -> PR and merge -> verified session closure. Do not replace artist acceptance with automated tests or agent reviews.

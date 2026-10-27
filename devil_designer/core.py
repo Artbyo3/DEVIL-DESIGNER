@@ -120,6 +120,7 @@ class Pattern:
     wrap_radius: float = 0.0
     features: list = field(default_factory=list)
     mesh_density: str = 'AUTO'
+    fabric_override: bool = False
 
     @property
     def points(self): return [(v.x,v.y) for v in self.vertices]
@@ -197,17 +198,18 @@ def read_vertex(v):
 
 
 class Document:
-    def __init__(self,patterns=None,seams=None,anchors=None,uv_layout=None):
+    def __init__(self,patterns=None,seams=None,anchors=None,uv_layout=None,preset='COTTON'):
         self.patterns=patterns or []
         self.seams=seams or []
         self.anchors=anchors or []
         self.uv_layout=uv_layout
+        self.preset=preset
 
     def dumps(self):
-        return json.dumps(dict(version=3,patterns=[dict(id=p.id,name=p.name,
+        return json.dumps(dict(version=3,preset=getattr(self,'preset','COTTON'),patterns=[dict(id=p.id,name=p.name,
             vertices=[vertex_data(v) for v in p.vertices],paths=[dict(id=q.id,name=q.name,closed=q.closed,role=q.role,
             vertices=[vertex_data(v) for v in q.vertices]) for q in p.paths],preset=p.preset,wrap_radius=p.wrap_radius,
-            features=p.features,mesh_density=p.mesh_density) for p in self.patterns],seams=[dict(id=s.id,a=vars(s.a),b=vars(s.b),reverse=s.reverse,
+            features=p.features,mesh_density=p.mesh_density,fabric_override=getattr(p,'fabric_override',False)) for p in self.patterns],seams=[dict(id=s.id,a=vars(s.a),b=vars(s.b),reverse=s.reverse,
             chain_a=[vars(e) for e in s.side(0)],chain_b=[vars(e) for e in s.side(1)]) for s in self.seams],
             anchors=[vars(a) for a in self.anchors],uv_layout=self.uv_layout),separators=(',',':'),allow_nan=False)
 
@@ -217,14 +219,19 @@ class Document:
         try:
             data=json.loads(value)
             if data['version'] not in (1,2,3): raise ValueError('Unsupported pattern document version.')
+            doc_preset=data.get('preset','COTTON')
             patterns=[]
             for item in data['patterns']:
                 p=Pattern(item['name'],[read_vertex(v) for v in item['vertices']],item['id'])
                 p.paths=[Path(q['name'],[read_vertex(v) for v in q['vertices']],q['closed'],q['role'],q['id']) for q in item.get('paths',[])]
                 p.preset=item.get('preset','COTTON'); p.wrap_radius=float(item.get('wrap_radius',0)); p.features=item.get('features',[])
                 p.mesh_density=item.get('mesh_density','AUTO')
+                if 'fabric_override' in item:
+                    p.fabric_override=bool(item['fabric_override'])
+                else:
+                    p.fabric_override=bool(item.get('preset') is not None and item.get('preset')!=doc_preset)
                 patterns.append(p)
-            document=cls(patterns,uv_layout=data.get('uv_layout'))
+            document=cls(patterns,uv_layout=data.get('uv_layout'),preset=doc_preset)
             if data['version']>=2:
                 for item in data['seams']:
                     document.seams.append(Seam(EdgeRef(**item['a']),EdgeRef(**item['b']),item['reverse'],item['id'],
@@ -433,11 +440,31 @@ class Session(ConstructionMixin):
         if pattern is None:raise ValueError('Select a pattern to change mesh density.')
         return self.commit(lambda:setattr(pattern,'mesh_density',name))
 
+    def set_document_preset(self,name):
+        if name not in {'COTTON','LINEN','SILK','DENIM','KNIT','LEATHER'}: raise ValueError('Unknown cloth preset.')
+        def op():
+            self.document.preset=name
+            for p in self.document.patterns:
+                if not getattr(p,'fabric_override',False): p.preset=name
+        return self.commit(op)
+
+    def set_fabric_override(self,name):
+        p=self.document.find(self.selected)
+        if p is None: raise ValueError('Select a pattern to set fabric.')
+        if name in ('AUTO',None):
+            def op():
+                p.fabric_override=False; p.preset=getattr(self.document,'preset','COTTON')
+            return self.commit(op)
+        if name not in {'COTTON','LINEN','SILK','DENIM','KNIT','LEATHER'}: raise ValueError('Unknown cloth preset.')
+        def op():
+            p.fabric_override=True; p.preset=name
+        return self.commit(op)
+
     def add(self,points):
         validate_polygon(points)
         names={p.name for p in self.document.patterns}; index=1
         while f'Pattern {index:02d}' in names: index+=1
-        p=Pattern(f'Pattern {index:02d}',[Vertex(*point) for point in points])
+        p=Pattern(f'Pattern {index:02d}',[Vertex(*point) for point in points],preset=getattr(self.document,'preset','COTTON'))
         self.commit(lambda:self.document.patterns.append(p))
         self.selected,self.corner,self.path=p.id,None,'OUTER'
 
@@ -451,7 +478,7 @@ class Session(ConstructionMixin):
                Vertex(cx-rx,cy,incoming=(0,k*ry),outgoing=(0,-k*ry)),
                Vertex(cx,cy-ry,incoming=(-k*rx,0),outgoing=(k*rx,0))]
         if internal: return self.add_path(nodes,True)
-        p=Pattern('Ellipse',nodes)
+        p=Pattern('Ellipse',nodes,preset=getattr(self.document,'preset','COTTON'))
         self.commit(lambda:self.document.patterns.append(p)); self.selected,self.corner,self.path=p.id,None,'OUTER'
 
     def add_path(self,points,closed=False):
@@ -564,7 +591,7 @@ class Session(ConstructionMixin):
         p=self.document.find(self.selected)
         if p is None:raise ValueError('Select a pattern to offset.')
         if abs(distance)<1e-6:raise ValueError('Enter a nonzero outline offset.')
-        new=Pattern(p.name+' offset',[Vertex(*q) for q in curves.offset_polygon(p.outline(),distance)],preset=p.preset)
+        new=Pattern(p.name+' offset',[Vertex(*q) for q in curves.offset_polygon(p.outline(),distance)],preset=p.preset,fabric_override=getattr(p,'fabric_override',False))
         for hole in p.paths:
             if hole.role=='HOLE':new.paths.append(Path(hole.name,[Vertex(*q) for q in curves.offset_polygon(hole.outline(),-distance)],True,'HOLE'))
         self.commit(lambda:self.document.patterns.append(new));self.selected,self.path,self.corner=new.id,'OUTER',None

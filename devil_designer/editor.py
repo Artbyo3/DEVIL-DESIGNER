@@ -247,15 +247,9 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         fit_rect = canvas
         if self.minimal_ui and points:
             left = max(canvas.x, layout.rail.x + layout.rail.w + 16 * layout.scale)
-            right = canvas.x + canvas.w
-            if self.workspace_panel_open and self.workspace_panel_pinned:
-                workspace_card = self.workspace_card()
-                if workspace_card:
-                    workspace_right = min(right, workspace_card[0].x - 16 * layout.scale)
-                    minimum_width = (260 if canvas.w < 760 * layout.scale else 400) * layout.scale
-                    if workspace_right - left >= minimum_width:
-                        right = workspace_right
-            fit_rect = Rect(left, canvas.y, right - left, canvas.h)
+            right = canvas.x + canvas.w - 16 * layout.scale
+            if right > left:
+                fit_rect = Rect(left, canvas.y, right - left, canvas.h)
         self.view.fit(points, fit_rect)
         self.view.cx += (canvas.x + canvas.w / 2 - fit_rect.x - fit_rect.w / 2) / self.view.zoom
         self.view.cy += (canvas.y + canvas.h / 2 - fit_rect.y - fit_rect.h / 2) / self.view.zoom
@@ -376,7 +370,7 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                         'SEW': "Click an edge, then its partner. Select a seam: B reverses it, X removes it."}.get(name, "Ready.")
         section = 'SEW' if name == 'SEW' else 'AVATAR' if name in {'PLACE', 'PIN', 'TACK'} else 'DESIGN'
         self.inspector_tab = section
-        self.inspector_sections = [section]
+        self.sidebar_sections = [section]
         self.inspector_scroll = 0
         self.search_query = ''
         self.search_active = False
@@ -686,11 +680,6 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                 self.sync_selection()
                 self.message = "Selection cleared."
                 return {'RUNNING_MODAL'}
-            if self.workspace_panel_open and not self.workspace_panel_pinned:
-                self.workspace_panel_open = False
-                return {'RUNNING_MODAL'}
-            if self.workspace_panel_open and self.workspace_panel_pinned:
-                return {'RUNNING_MODAL'}
             self.cleanup()
             return {'FINISHED'}
         if press and event.type == 'LEFTMOUSE':
@@ -782,8 +771,19 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         if press and event.type == 'S' and not event.ctrl:
             self.snap = not self.snap
             return {'RUNNING_MODAL'}
-        if press and event.type in {'V', 'P', 'R', 'J'}:
-            self.choose_tool({'V': 'SELECT', 'P': 'POLYGON', 'R': 'RECTANGLE', 'J': 'SEW'}[event.type])
+        if press and event.type == 'L' and not event.ctrl:
+            self._scene.dd_lengths_visible = not self._scene.dd_lengths_visible
+            return {'RUNNING_MODAL'}
+        if press and event.type in {'V', 'P', 'R', 'E', 'I', 'D', 'J', 'K', 'T'}:
+            if event.type in {'P', 'R', 'E'}:
+                self.draw_shape = {'P': 'POLYGON', 'R': 'RECTANGLE', 'E': 'ELLIPSE'}[event.type]
+            elif event.type in {'I', 'D'}:
+                self.internal_tool = {'I': 'INTERNAL', 'D': 'DART'}[event.type]
+            elif event.type in {'K', 'T'}:
+                self.pin_tool = {'K': 'PIN', 'T': 'TACK'}[event.type]
+            tool_name = {'V': 'SELECT', 'P': 'POLYGON', 'R': 'RECTANGLE', 'E': 'ELLIPSE',
+                         'I': 'INTERNAL', 'D': 'DART', 'J': 'SEW', 'K': 'PIN', 'T': 'TACK'}[event.type]
+            self.choose_tool(tool_name)
             return {'RUNNING_MODAL'}
         if press and event.type in {'HOME', 'F'}:
             self.fit()

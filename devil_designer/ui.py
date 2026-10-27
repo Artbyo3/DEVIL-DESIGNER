@@ -29,7 +29,7 @@ PROPERTIES = ('dd_document','dd_history','dd_collection','dd_avatar','dd_spacing
               'dd_reference_opacity','dd_reference_x','dd_reference_y','dd_reference_placed',
               'dd_point_x','dd_point_y','dd_width','dd_height','dd_segment_length','dd_offset','dd_wrap_radius',
               'dd_sew_a0','dd_sew_a1','dd_sew_b0','dd_sew_b1','dd_free_sewing','dd_sew_reverse','dd_internal_mode',
-              'dd_lengths_visible','dd_library_name','dd_library_dir','dd_library_selected','dd_library_refit')
+              'dd_lengths_visible','dd_library_name','dd_library_dir','dd_library_selected','dd_library_refit','dd_fabric')
 
 
 def register():
@@ -59,6 +59,7 @@ def register():
     Scene.dd_library_dir=bpy.props.StringProperty(default='',subtype='DIR_PATH')
     Scene.dd_library_selected=bpy.props.IntProperty(default=0,min=0)
     Scene.dd_library_refit=bpy.props.BoolProperty(default=True)
+    Scene.dd_fabric = bpy.props.StringProperty(name='Garment fabric',default='COTTON')
     Scene.dd_document = bpy.props.StringProperty(name='Pattern document',default='')
     Scene.dd_collection = bpy.props.PointerProperty(type=bpy.types.Collection)
     Scene.dd_avatar = bpy.props.PointerProperty(type=bpy.types.Object,name='Avatar body',poll=avatar_poll)
