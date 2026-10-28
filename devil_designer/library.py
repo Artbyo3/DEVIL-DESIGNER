@@ -5,7 +5,7 @@ import math
 import bpy
 from mathutils import Matrix
 from .core import Document
-from . import garment
+from . import garment,live_panels
 
 
 def directory(scene,create=False):
@@ -30,6 +30,7 @@ def scale_document(doc,factor):
                 if v.incoming is not None:v.incoming=tuple(x*factor for x in v.incoming)
                 if v.outgoing is not None:v.outgoing=tuple(x*factor for x in v.outgoing)
         p.wrap_radius*=factor
+        if p.panel_origin:p.panel_origin['bounds']=[value*factor for value in p.panel_origin['bounds']]
     for a in doc.anchors:a.x*=factor;a.y*=factor
     if doc.uv_layout:
         doc.uv_layout['origin']=[x*factor for x in doc.uv_layout['origin']]
@@ -41,15 +42,16 @@ def save(context,name):
     scene=context.scene
     safe=re.sub(r'[^A-Za-z0-9_-]+','-',name.strip()).strip('-')[:80]
     if not safe:raise ValueError('Enter a garment name using letters or numbers.')
-    doc=garment.document(scene);doc.validate()
+    doc=live_panels.capture(context);doc.validate()
     if not doc.patterns:raise ValueError('Create a garment before saving it to the library.')
-    data=dict(format='devil-designer-garment',version=1,name=name.strip(),document=json.loads(doc.dumps()),panels=[])
+    data=dict(format='devil-designer-garment',version=2,name=name.strip(),document=json.loads(doc.dumps()),panels=[])
     if scene.dd_avatar:
         low,high=garment.bounds(scene.dd_avatar)
         data['body_height_m']=(high.z-low.z)*garment.metres_per_unit(scene)
         identities={pattern.id for pattern in doc.patterns}
         for panel in garment.generated(scene,'panel'):
             if panel.get('dd_pattern_id') not in identities:continue
+            if doc.find(panel['dd_pattern_id']).placement_mode!='LEGACY':continue
             point=panel.matrix_world.translation
             data['panels'].append(dict(pattern=panel['dd_pattern_id'],position=[(point[i]-low[i])/max(1e-6,high[i]-low[i]) for i in range(3)],
                 orientation=[list(row) for row in panel.matrix_world.to_3x3()]))
@@ -71,7 +73,7 @@ def load(context,index):
     if path.stat().st_size>10_000_000:raise ValueError('This garment file exceeds the 10 MB design limit.')
     try:
         data=json.loads(path.read_text(encoding='utf-8'))
-        if not isinstance(data,dict) or data.get('format')!='devil-designer-garment' or type(data.get('version')) is not int or data['version']!=1:raise ValueError('Unsupported garment library format.')
+        if not isinstance(data,dict) or data.get('format')!='devil-designer-garment' or type(data.get('version')) is not int or data['version'] not in (1,2):raise ValueError('Unsupported garment library format.')
         doc=Document.loads(json.dumps(data['document']))
         if not doc.patterns:raise ValueError('This garment design has no patterns.')
         name=data.get('name',path.stem)
@@ -118,6 +120,7 @@ def load(context,index):
         if avatar:
             for pose in poses:
                 if pose['pattern'] not in identities:continue
+                if doc.find(pose['pattern']).placement_mode!='LEGACY':continue
                 matrix=Matrix(pose['orientation']).to_4x4()
                 translation=tuple(low[axis]+(high[axis]-low[axis])*pose['position'][axis] for axis in range(3))
                 if any(not math.isfinite(value) or abs(value)>3.402823466e38 for value in translation):raise ValueError('Invalid stored garment placement.')

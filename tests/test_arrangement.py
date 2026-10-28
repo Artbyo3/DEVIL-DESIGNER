@@ -171,6 +171,7 @@ class BatchArrangementTests(unittest.TestCase):
             offset = index * .5
             session.add([(offset, 0), (offset + .3, 0), (offset + .3, .4), (offset, .4)])
             session.document.patterns[-1].name = name
+            session.document.patterns[-1].placement_mode = 'LEGACY'
         self.document = session.document
         self.avatar = Panel('avatar', '')
         self.scene = SimpleNamespace(dd_avatar=self.avatar, objects=[self.avatar],

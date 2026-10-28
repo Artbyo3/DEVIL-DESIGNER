@@ -33,6 +33,8 @@ class DD_OT_arrange(bpy.types.Operator):
         def action():
             if context.scene.dd_avatar is None and context.object and context.object.type=='MESH' and not context.object.get('dd_kind'):
                 context.scene.dd_avatar = context.object
+            if any(piece.placement_mode!='LEGACY' or piece.arrangement for piece in garment.document(context.scene).patterns):
+                raise ValueError('Select a piece and click an arrangement point. Front/back guessing is only for older designs.')
             garment.arrange(context)
             self.report({'INFO'},'Panels arranged. Adjust their placement in the 3D viewport before simulating.')
             return {'FINISHED'}
@@ -49,7 +51,10 @@ class DD_OT_simulate(bpy.types.Operator):
             obj.hide_set(False)
             obj.hide_render = False
             garment.start_playback(context)
-            self.report({'INFO'},'Simulation ready. Stop on a frame you want to keep.')
+            from .live_panels import intersection_warnings
+            warnings=intersection_warnings(context)
+            context.scene['dd_arrangement_message']=' '.join(warnings) or context.scene.get('dd_arrangement_message','')
+            self.report({'WARNING'} if warnings else {'INFO'},' '.join(warnings) or 'Simulation ready. Stop on a frame you want to keep.')
             return {'FINISHED'}
         return run(self,action)
 
@@ -126,6 +131,7 @@ class DD_OT_demo(bpy.types.Operator):
             s.add(back)
             s.document.patterns[-1].name = 'Bodice back'
             a,b = s.document.patterns
+            for pattern in s.document.patterns:pattern.placement_mode='LEGACY'
             for i,j in [(1,9),(9,1),(3,7),(7,3)]:
                 s.sew(s.document.edge(a.id,i),s.document.edge(b.id,j))
             scene.dd_document = s.document.dumps()

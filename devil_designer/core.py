@@ -163,6 +163,9 @@ class Pattern:
     features: list = field(default_factory=list)
     mesh_density: str = 'AUTO'
     fabric_override: bool = False
+    placement_mode: str = 'LAYOUT'
+    arrangement: dict = None
+    panel_origin: dict = None
 
     @property
     def points(self): return [(v.x,v.y) for v in self.vertices]
@@ -245,6 +248,23 @@ def read_vertex(v):
     return Vertex(float(v['x']),float(v['y']),v['id'],handles[0],handles[1],point_type=ptype)
 
 
+def arrangement_record(volume,point,flat=False):
+    return dict(version=1,volume=volume,point=point,flat=flat,translation=[0.0]*3,rotation=[0.0]*3)
+
+
+def validate_arrangement(record):
+    if not isinstance(record,dict) or set(record)!={'version','volume','point','flat','translation','rotation'}:
+        raise ValueError('Invalid arrangement record.')
+    if type(record['version']) is not int or record['version']!=1 or type(record['flat']) is not bool:
+        raise ValueError('Unsupported arrangement record.')
+    for key in ('volume','point'):
+        if not isinstance(record[key],str) or not record[key].strip():raise ValueError('Arrangement IDs must be nonempty.')
+    for key in ('translation','rotation'):
+        if not isinstance(record[key],(list,tuple)) or len(record[key])!=3 or any(
+                type(value) not in (int,float) or not math.isfinite(value) for value in record[key]):
+            raise ValueError('Arrangement deltas must contain three finite numbers.')
+
+
 class Document:
     def __init__(self,patterns=None,seams=None,anchors=None,uv_layout=None,preset='COTTON'):
         self.patterns=patterns or []
@@ -254,10 +274,10 @@ class Document:
         self.preset=preset
 
     def dumps(self):
-        return json.dumps(dict(version=3,preset=getattr(self,'preset','COTTON'),patterns=[dict(id=p.id,name=p.name,\
+        return json.dumps(dict(version=4,preset=getattr(self,'preset','COTTON'),patterns=[dict(id=p.id,name=p.name,\
             vertices=[vertex_data(v) for v in p.vertices],paths=[dict(id=q.id,name=q.name,closed=q.closed,role=q.role,\
             vertices=[vertex_data(v) for v in q.vertices]) for q in p.paths],preset=p.preset,wrap_radius=p.wrap_radius,\
-            features=p.features,mesh_density=p.mesh_density,fabric_override=getattr(p,'fabric_override',False)) for p in self.patterns],seams=[dict(id=s.id,a=vars(s.a),b=vars(s.b),reverse=s.reverse,\
+            features=p.features,mesh_density=p.mesh_density,fabric_override=getattr(p,'fabric_override',False),placement_mode=p.placement_mode,arrangement=p.arrangement,panel_origin=p.panel_origin) for p in self.patterns],seams=[dict(id=s.id,a=vars(s.a),b=vars(s.b),reverse=s.reverse,\
             chain_a=[vars(e) for e in s.side(0)],chain_b=[vars(e) for e in s.side(1)]) for s in self.seams],\
             anchors=[vars(a) for a in self.anchors],uv_layout=self.uv_layout),separators=(',',':'),allow_nan=False)
 
@@ -266,7 +286,7 @@ class Document:
         if not value: return cls()
         try:
             data=json.loads(value)
-            if data['version'] not in (1,2,3): raise ValueError('Unsupported pattern document version.')
+            if data['version'] not in (1,2,3,4): raise ValueError('Unsupported pattern document version.')
             doc_preset=data.get('preset','COTTON')
             patterns=[]
             for item in data['patterns']:
@@ -274,6 +294,9 @@ class Document:
                 p.paths=[Path(q['name'],[read_vertex(v) for v in q['vertices']],q['closed'],q['role'],q['id']) for q in item.get('paths',[])]
                 p.preset=item.get('preset','COTTON'); p.wrap_radius=float(item.get('wrap_radius',0)); p.features=item.get('features',[])
                 p.mesh_density=item.get('mesh_density','AUTO')
+                p.placement_mode=item.get('placement_mode','LAYOUT') if data['version']>=4 else 'LEGACY'
+                p.arrangement=item.get('arrangement') if data['version']>=4 else None
+                p.panel_origin=item.get('panel_origin') if data['version']>=4 else None
                 if 'fabric_override' in item:
                     p.fabric_override=bool(item['fabric_override'])
                 else:
@@ -369,6 +392,15 @@ class Document:
             if not isinstance(p.name,str) or not p.name.strip(): raise ValueError('Pattern names must contain text.')
             if p.preset not in {'COTTON','LINEN','SILK','DENIM','KNIT','LEATHER'}: raise ValueError('Unknown cloth preset.')
             if p.mesh_density not in ('AUTO','COARSE','STANDARD','FINE'): raise ValueError('Unknown mesh density.')
+            if p.placement_mode not in ('LAYOUT','LEGACY'):raise ValueError('Unknown panel placement mode.')
+            if p.arrangement is not None:validate_arrangement(p.arrangement)
+            if p.panel_origin is not None:
+                origin=p.panel_origin
+                if not isinstance(origin,dict) or set(origin)!={'source','bounds'} or not isinstance(origin['source'],str) or not origin['source']:
+                    raise ValueError('Invalid cut panel origin.')
+                if not isinstance(origin['bounds'],(list,tuple)) or len(origin['bounds'])!=4 or any(type(value) not in (int,float) or not math.isfinite(value) for value in origin['bounds']):
+                    raise ValueError('Cut panel bounds must contain four finite numbers.')
+                if origin['bounds'][0]>=origin['bounds'][2] or origin['bounds'][1]>=origin['bounds'][3]:raise ValueError('Cut panel bounds must have positive size.')
             if not math.isfinite(p.wrap_radius) or p.wrap_radius<0: raise ValueError('Invalid wrap radius.')
             for v in p.vertices: identity(v.id)
             outer=p.outline();validate_polygon(outer)

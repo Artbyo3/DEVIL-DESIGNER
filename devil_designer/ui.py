@@ -63,7 +63,8 @@ def register():
     Scene.dd_fabric = bpy.props.StringProperty(name='Garment fabric',default='COTTON')
     Scene.dd_document = bpy.props.StringProperty(name='Pattern document',default='')
     Scene.dd_collection = bpy.props.PointerProperty(type=bpy.types.Collection)
-    Scene.dd_avatar = bpy.props.PointerProperty(type=bpy.types.Object,name='Avatar body',poll=avatar_poll)
+    from . import live_panels,arrangement_controls
+    Scene.dd_avatar = bpy.props.PointerProperty(type=bpy.types.Object,name='Avatar body',poll=avatar_poll,update=live_panels.avatar_changed)
     Scene.dd_spacing = bpy.props.FloatProperty(name='Mesh spacing (m)',default=.02,min=.003,max=.2,precision=3)
     Scene.dd_clearance = bpy.props.FloatProperty(name='Body clearance (m)',default=.03,min=.005,max=.3,precision=3)
     Scene.dd_quality = bpy.props.IntProperty(name='Quality steps',default=10,min=5,max=40)
@@ -74,6 +75,8 @@ def register():
     Scene.dd_thickness = bpy.props.FloatProperty(name='Final thickness (m)',default=.001,min=0,max=.01,precision=4)
     for cls in classes:
         bpy.utils.register_class(cls)
+    live_panels.register()
+    arrangement_controls.register()
     bpy.app.handlers.load_pre.append(on_load)
     bpy.types.VIEW3D_MT_view.append(launch_menu)
     config=bpy.context.window_manager.keyconfigs.addon
@@ -84,6 +87,9 @@ def register():
 
 
 def unregister():
+    from . import live_panels,arrangement_controls
+    arrangement_controls.unregister()
+    live_panels.unregister()
     close_active()
     from . import tracing
     tracing.unregister()

@@ -131,7 +131,9 @@ def run():
                 target=view3d_utils.location_3d_to_region_2d(region,area.spaces.active.region_3d,Vector((0,-.13,1.2)))
             check(target is not None and not op.canvas_layout.panel.contains(*target),'avatar target is visible outside floating editor')
             click_at(tuple(target));check(len(op.session.document.anchors)==2 and op.pending_tack is None,'tack ray-picks the chosen avatar')
-            op.session.selected=square_a;action('PLACE');click_at(tuple(target))
+            op.session.selected=square_a
+            op.session.document.find(square_a).placement_mode='LEGACY';op.persist()
+            action('PLACE');click_at(tuple(target))
             panels=garment.generated(scene,'panel');check(any(o.get('dd_pattern_id')==square_a for o in panels),'click placement generates and places selected panel')
             op.session.selected=square_a;scene.dd_wrap_radius=.1;before_points=op.session.document.find(square_a).points;action('WRAP')
             panel=next(o for o in garment.generated(scene,'panel') if o['dd_pattern_id']==square_a)

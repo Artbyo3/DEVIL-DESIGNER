@@ -4,6 +4,111 @@ import math
 from . import curves
 
 class ConstructionMixin:
+    def knife_preview(self,points):
+        points=[(point.x,point.y) if hasattr(point,'x') else tuple(point) for point in points]
+        selected=set(self.selected_patterns)
+        if self.selected:selected.add(self.selected)
+        previews=[]
+        for pattern in self.document.patterns:
+            if selected and pattern.id not in selected:continue
+            hits=[];reason='';clipped=[]
+            try:
+                if len(points)<2:raise ValueError('Place at least two cut points.')
+                if any(not all(math.isfinite(value) for value in point) for point in points):
+                    raise ValueError('Cut points must have finite coordinates.')
+                for index,(start,end) in enumerate(zip(points,points[1:])):
+                    if math.dist(start,end)<1e-8:raise ValueError('Cut points must be distinct.')
+                    for edge in self.document.edges(pattern.id):
+                        control=self.document.edge_curve(edge)
+                        for fraction,point,parameter in _knife_edge_hits(control,start,end):
+                            position=index+fraction
+                            if not any(abs(position-other[0])<1e-7 and math.dist(point,other[1])<1e-7 for other in hits):
+                                table,cumulative=curves.arc_table(control)
+                                lower=max(index for index,(value,_) in enumerate(table) if value<=parameter)
+                                arc_fraction=(cumulative[lower]+curves.integral(control,table[lower][0],parameter))/cumulative[-1]
+                                hits.append((position,point,edge,arc_fraction))
+                hits.sort(key=lambda hit:hit[0])
+                if len(hits)!=2:
+                    raise ValueError(f'Cut must cross the outline exactly twice; found {len(hits)} intersections.')
+                first,last=hits
+                if math.dist(first[1],last[1])<1e-7:raise ValueError('Cut crossings must be distinct.')
+                clipped=[first[1]]+[point for index,point in enumerate(points) if first[0]+1e-7<index<last[0]-1e-7]+[last[1]]
+                for index,(start,end) in enumerate(zip(points,points[1:])):
+                    for other in range(index+2,len(points)-1):
+                        if _cut_intersection(start,end,points[other],points[other+1]) is not None:
+                            raise ValueError('The cut line must not cross or touch itself.')
+                    if index+2<len(points) and _cut_point_on_segment(points[index+2],start,end):
+                        raise ValueError('The cut line must not double back.')
+                    bounds=sorted({0.0,1.0,*[hit[0]-index for hit in hits if index<hit[0]<index+1]})
+                    for lower,upper in zip(bounds,bounds[1:]):
+                        position=index+(lower+upper)/2
+                        inside=pattern.contains(curves.mix(start,end,(lower+upper)/2))
+                        if inside!=(first[0]<position<last[0]):
+                            raise ValueError('Cut must cross into and out of the piece, not just touch its outline.')
+                for path in pattern.paths:
+                    if path.role!='HOLE':continue
+                    for edge in self.document.edges(pattern.id,path.id):
+                        if any(_knife_edge_hits(self.document.edge_curve(edge),start,end) for start,end in zip(clipped,clipped[1:])):
+                            raise ValueError('Knife cuts cannot cross holes. Use the existing internal path Cut instead.')
+            except ValueError as failure:
+                reason=str(failure)
+            previews.append(dict(pattern=pattern.id,points=clipped,hits=[hit[1] for hit in hits],
+                                 boundary=[(hit[2],hit[3]) for hit in hits],reason=reason))
+        return previews
+
+    def knife_cut(self,points,with_seam=True):
+        from .core import Path,Vertex,Seam,EdgeRef
+        previews=self.knife_preview(points)
+        selected=bool(self.selected_patterns or self.selected)
+        invalid=[preview for preview in previews if preview['reason'] and (selected or len(preview['hits'])>=2)]
+        if invalid:
+            pattern=self.document.find(invalid[0]['pattern'])
+            raise ValueError(pattern.name+': '+invalid[0]['reason'])
+        targets=[preview for preview in previews if not preview['reason']]
+        if not targets:raise ValueError('No piece is fully crossed. Cut must cross the outline exactly twice.')
+        staged=self._cut_trial();results=set()
+        if staged.document.uv_layout is None:
+            outline=[point for pattern in staged.document.patterns for point in pattern.outline()]
+            minimum=[min(point[axis] for point in outline) for axis in (0,1)]
+            extent=max(max(point[axis] for point in outline)-minimum[axis] for axis in (0,1))
+            staged.document.uv_layout=dict(origin=minimum,scale=max(extent,.001))
+        for preview in targets:
+            pattern=staged.document.find(preview['pattern']);name=pattern.name
+            boundaries={};cut_points=list(preview['points'])
+            for endpoint,(edge,fraction) in sorted(enumerate(preview['boundary']),key=lambda item:item[1][1],reverse=True):
+                current,upper=boundaries.get(edge,(edge,1.0))
+                start,end=staged.document.edge_vertices(current)
+                relative=fraction/upper
+                node=start if relative<1e-8 else end if relative>1-1e-8 else staged.document.split_edge(current,relative)
+                cut_points[0 if endpoint==0 else -1]=(node.x,node.y)
+                if node.id not in (start.id,end.id):boundaries[edge]=(EdgeRef(pattern.id,start.id,node.id),fraction)
+            path=Path('Knife cut',[Vertex(*point) for point in cut_points],False)
+            pattern.paths.append(path)
+            staged._selected=pattern.id;staged.path=path.id
+            staged.cut()
+            other=staged.document.patterns[-1]
+            pattern.name=name+' 1';other.name=name+' 2'
+            results.update((pattern.id,other.id))
+            if with_seam:
+                chains=[]
+                segments=list(zip(cut_points,cut_points[1:]))
+                for half in (pattern,other):
+                    chain=[]
+                    for edge in staged.document.edges(half.id):
+                        start,end=staged.document.edge_points(edge)
+                        if any((math.dist(start,a)<1e-6 and math.dist(end,b)<1e-6) or
+                               (math.dist(start,b)<1e-6 and math.dist(end,a)<1e-6) for a,b in segments):
+                            chain.append(edge)
+                    if len(chain)!=len(segments):raise ValueError('Unable to pair the new cut edges; no cut was applied.')
+                    first_index=next(index for index,edge in enumerate(chain) if not any(other_edge.end==edge.start for other_edge in chain))
+                    chain=chain[first_index:]+chain[:first_index]
+                    chains.append(chain)
+                staged.document.seams.append(Seam(chains[0][0],chains[1][0],True,chain_a=tuple(chains[0]),chain_b=tuple(chains[1])))
+        staged.document.validate()
+        changed=self.commit(lambda:setattr(self,'document',staged.document))
+        self.clear_selection();self.selected_patterns=results;self._selected=next(iter(results))
+        return changed
+
     def preview_cut(self):
         preview=dict(pattern=self.selected,path=self.path,
                      fingerprint=hashlib.sha256(self.document.dumps().encode()).hexdigest(),
@@ -48,7 +153,11 @@ class ConstructionMixin:
     def _cut_trial(self):
         staged=copy.copy(self)
         staged.document=copy.deepcopy(self.document)
+        staged.selected_patterns=set(self.selected_patterns)
+        staged.selected_points=set(self.selected_points)
+        staged.point_selection=list(self.point_selection)
         staged.undo_stack=[];staged.redo_stack=[]
+        staged._undo_selections=[];staged._redo_selections=[]
         return staged
 
     def _validate_cut_trial(self,staged):
@@ -207,6 +316,9 @@ class ConstructionMixin:
             return self.commit(lambda:setattr(path,'role','SLIT'))
         def apply():
             original_id=p.id
+            if p.panel_origin is None:
+                p.panel_origin=dict(source=p.id,bounds=[min(point[0] for point in p.points),min(point[1] for point in p.points),
+                                                       max(point[0] for point in p.points),max(point[1] for point in p.points)])
             ends=[]
             for point in endpoints:
                 edges=self.document.edges(p.id)
@@ -235,7 +347,9 @@ class ConstructionMixin:
                 if v in (a,b) or v in inside:
                     other=copy.deepcopy(originals.get(v.id,v));other.id=uid();mapping[v.id]=other.id;new_nodes.append(other)
                 else:new_nodes.append(v)
-            new=Pattern(p.name+' cut',new_nodes,preset=p.preset,wrap_radius=p.wrap_radius,mesh_density=p.mesh_density,fabric_override=getattr(p,'fabric_override',False))
+            new=Pattern(p.name+' cut',new_nodes,preset=p.preset,wrap_radius=p.wrap_radius,mesh_density=p.mesh_density,fabric_override=getattr(p,'fabric_override',False),
+                        placement_mode=p.placement_mode,arrangement=copy.deepcopy(p.arrangement),panel_origin=copy.deepcopy(p.panel_origin))
+            new.panel_origin['source']=p.id
             next(v for v in new.vertices if v.id==mapping[a.id]).outgoing=path.vertices[0].outgoing
             next(v for v in new.vertices if v.id==mapping[b.id]).incoming=path.vertices[-1].incoming
             cut_map={path.vertices[0].id:mapping[a.id],path.vertices[-1].id:mapping[b.id]}
@@ -287,6 +401,50 @@ class ConstructionMixin:
             self.document.seams.append(seam)
             p.features.append(dict(id=uid(),type='DART',seam=seam.id,apex=middle.id))
         result=self.commit(apply);self.selected,self.path,self.corner=p.id,'OUTER',None;return result
+
+
+def _knife_edge_hits(control,start,end):
+    direction=curves.sub(end,start);squared=sum(value*value for value in direction)
+    def distance(point):
+        offset=curves.sub(point,start)
+        return offset[0]*direction[1]-offset[1]*direction[0]
+    values=[distance(point) for point in control]
+    tolerance=1e-11*max(1,math.sqrt(squared))
+    if max(abs(value) for value in values)<tolerance:
+        projected=[sum(value*axis for value,axis in zip(curves.sub(point,start),direction))/squared for point in control]
+        if max(projected)>=0 and min(projected)<=1:
+            raise ValueError('Cut overlaps an outline edge. Move the line across the outline instead.')
+        return []
+    cubic=-values[0]+3*values[1]-3*values[2]+values[3]
+    quadratic=3*values[0]-6*values[1]+3*values[2]
+    linear=-3*values[0]+3*values[1]
+    boundaries=[0.0,1.0]
+    if abs(cubic)>1e-15:
+        discriminant=4*quadratic*quadratic-12*cubic*linear
+        if discriminant>=0:
+            boundaries.extend(root for root in ((-2*quadratic-math.sqrt(discriminant))/(6*cubic),
+                                                 (-2*quadratic+math.sqrt(discriminant))/(6*cubic)) if 0<root<1)
+    elif abs(quadratic)>1e-15:
+        root=-linear/(2*quadratic)
+        if 0<root<1:boundaries.append(root)
+    boundaries.sort();roots=[]
+    for lower,upper in zip(boundaries,boundaries[1:]):
+        lower_value=distance(curves.evaluate(control,lower));upper_value=distance(curves.evaluate(control,upper))
+        if abs(lower_value)<tolerance:roots.append(lower)
+        if abs(upper_value)<tolerance:roots.append(upper)
+        if lower_value*upper_value<0:
+            for iteration in range(48):
+                middle=(lower+upper)/2;value=distance(curves.evaluate(control,middle))
+                if lower_value*value<=0:upper=middle
+                else:lower=middle;lower_value=value
+            roots.append((lower+upper)/2)
+    hits=[]
+    for root in roots:
+        point=curves.evaluate(control,root)
+        fraction=sum(value*axis for value,axis in zip(curves.sub(point,start),direction))/squared
+        if -1e-8<=fraction<=1+1e-8 and not any(math.dist(point,other[1])<1e-8 for other in hits):
+            hits.append((max(0,min(1,fraction)),point,root))
+    return hits
 
 
 def _cut_point_on_segment(point,start,end):

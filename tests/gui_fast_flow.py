@@ -282,6 +282,55 @@ def check_interaction_regressions(workspace, event, point, check):
         workspace.handle_event(bpy.context, event('D', point))
         check(workspace.tool == 'DART', 'unmodified D still selects Dart')
 
+        knife_session=workspace.session
+        workspace.session=Session()
+        workspace.session.add([(0,0),(1,0),(1,1),(0,1)])
+        workspace.persist();workspace.fit()
+        workspace.show_card('INTERNAL_CHOOSER')
+        knife_rows=[row[0] for rect,row in workspace.minimal_card()[2]]
+        check(knife_rows.index('SET_INTERNAL_KNIFE')==knife_rows.index('SET_INTERNAL_DART')+1,
+              'Cut sits beside Dart in the existing Internal tool choices')
+        workspace.minimal_action('SET_INTERNAL_KNIFE')
+        check(workspace.tool=='KNIFE' and workspace.knife_sew and workspace.card_kind is None,
+              'Cut starts in Cut and Sew mode and dismisses the menu')
+        workspace.choose_tool('SELECT')
+        workspace.handle_event(bpy.context,event('N',point))
+        check(workspace.tool=='KNIFE','unused N shortcut selects Cut without changing the eight dock tools')
+        before=workspace.session.document.dumps();undo_count=len(workspace.session.undo_stack)
+        def knife_click(world_point):
+            screen_point=workspace.view.screen(world_point,workspace.canvas_layout.canvas)
+            workspace.handle_event(bpy.context,event('LEFTMOUSE',screen_point))
+            workspace.handle_event(bpy.context,event('LEFTMOUSE',screen_point,'RELEASE'))
+        knife_click((-.05,.5))
+        move=event('MOUSEMOVE',workspace.view.screen((.8,.7),workspace.canvas_layout.canvas));move.shift=True
+        workspace.handle_event(bpy.context,move)
+        check(abs(workspace.preview[-1][1]-.5)<1e-7,'Shift locks the knife live preview to the horizontal axis')
+        check(len(workspace.session.knife_preview(workspace.draft+workspace.preview)[0]['hits'])==1,
+              'live preview detects the outline entry before the line has fully crossed')
+        workspace.handle_event(bpy.context,event('ESC',point))
+        check(not workspace.draft and workspace.session.document.dumps()==before,
+              'Escape cancels the knife without editing the piece or history')
+        knife_click((-.05,.5));knife_click((1.05,.5))
+        workspace.handle_event(bpy.context,event('LEFTMOUSE',workspace.view.screen((1,.5),workspace.canvas_layout.canvas),'DOUBLE_CLICK'))
+        check(len(workspace.session.document.patterns)==2 and len(workspace.session.document.seams)==1 and not workspace.draft,
+              'double-click finishes Cut and Sew at an outline without inserting an unrelated point')
+        check(len(workspace.session.undo_stack)==undo_count+1,'the knife gesture commits exactly one history entry')
+        workspace.perform_action('UNDO');check(workspace.session.document.dumps()==before,'knife undo restores the original piece')
+        workspace.perform_action('REDO');check(len(workspace.session.document.seams)==1,'knife redo restores both pieces and their sewing')
+        workspace.perform_action('UNDO')
+        workspace.minimal_action('KNIFE_MODE_CUT')
+        knife_click((-.05,.5));knife_click((1.05,.5))
+        workspace.handle_event(bpy.context,event('RET',point))
+        check(len(workspace.session.document.patterns)==2 and not workspace.session.document.seams,
+              'Enter finishes Cut only without creating a seam')
+        workspace.perform_action('UNDO')
+        knife_click((-.05,.5));knife_click((.5,.5))
+        workspace.handle_event(bpy.context,event('RET',point))
+        check(workspace.session.document.dumps()==before and 'exactly twice' in workspace.message,
+              'an invalid knife cut is reported on the message line without editing the document')
+        workspace.cancel_gesture();workspace.knife_sew=True
+        workspace.session=knife_session;workspace.persist();workspace.choose_tool('SELECT')
+
         replacement = Session(Document())
         replacement.add([(-.3, 0), (-.1, 0), (-.1, .4), (-.3, .4)])
 
@@ -480,6 +529,66 @@ def check_interaction_regressions(workspace, event, point, check):
         workspace.choose_tool(original_tool)
         workspace._scene.dd_free_sewing = original_free_sewing
         workspace.view.cx, workspace.view.cy, workspace.view.zoom = original_view
+
+
+def check_arrangement_controls(workspace,event,check):
+    import math
+    from mathutils import Quaternion
+    from devil_designer import arrangement,arrangement_controls,garment,live_panels
+    region=bpy.context.region;view=bpy.context.region_data;scene=bpy.context.scene
+    saved=(workspace.full,workspace.window_rect,scene.dd_reference_visible,
+           view.view_location.copy(),view.view_rotation.copy(),view.view_distance,view.view_perspective)
+    try:
+        workspace.full=False;workspace.window_rect=(12,12,420,420)
+        workspace.session.selected=workspace.session.document.patterns[0].id
+        workspace.canvas_layout=workspace.make_layout()
+        scene.dd_reference_visible=True
+        view.view_location=scene.dd_avatar.matrix_world.translation
+        view.view_rotation=Quaternion((1,0,0),math.pi/2);view.view_distance=3;view.view_perspective='ORTHO'
+        bpy.context.view_layer.update()
+        points=arrangement_controls.projected_points(bpy.context)
+        check(bool(points),'avatar arrangement dots project into the uncovered 3D view')
+        target=next(point for point in points if point['volume']=='chest' and point['point']=='front')
+        screen=target['screen']
+        check(0<screen[0]<region.width and 0<screen[1]<region.height,'chest point is visible outside the drawing window')
+        workspace.handle_event(bpy.context,event('H',screen))
+        check(not arrangement_controls.projected_points(bpy.context),'H hides arrangement dots along with the body guide')
+        workspace.handle_event(bpy.context,event('H',screen))
+        workspace.handle_event(bpy.context,event('LEFTMOUSE',screen))
+        pattern=workspace.session.document.find(workspace.session.selected)
+        check(pattern.arrangement and pattern.arrangement['volume']=='chest','clicking a visible chest dot arranges the selected piece')
+        identity=pattern.id;chosen=pattern.arrangement['point']
+        workspace.perform_action('UNDO')
+        check(workspace.session.document.find(identity).arrangement is None,'Undo removes a point arrangement in one step')
+        workspace.perform_action('REDO')
+        check(workspace.session.document.find(identity).arrangement['point']==chosen,'Redo restores the recorded point arrangement')
+        bpy.ops.devil_designer.arrangement_edit(action='FLAT',volume='chest',point=chosen)
+        check(workspace.session.document.find(identity).arrangement['flat'],'point card Arrange flat keeps a tangent panel')
+        panel=next(panel for panel in garment.generated(scene,'panel') if panel['dd_pattern_id']==identity)
+        panel.location.x+=.02;bpy.context.view_layer.update();live_panels.capture(bpy.context)
+        delta=workspace.session.document.find(identity).arrangement['translation'][:]
+        check(sum(abs(value) for value in delta)>.019,'native 3D movement updates the active editor arrangement deltas')
+        bpy.ops.devil_designer.arrangement_edit(action='FLAT',volume='chest',point=chosen)
+        check(workspace.session.document.find(identity).arrangement['translation']==[0.0]*3,
+              'choosing the same point again clears previous 3D movement deltas')
+        bpy.ops.devil_designer.arrangement_edit(action='MOVE',volume='chest',point=chosen,angle=.25,height=.6)
+        setup=arrangement.ensure_volumes(bpy.context);volume=next(volume for volume in setup['volumes'] if volume['id']=='chest')
+        moved=next(point for point in volume['points'] if point['id']==chosen)
+        check(abs(moved['angle']-.25)<1e-6 and abs(moved['height']-.6)<1e-6,'point card moves a point around and up its volume')
+        count=len(volume['points'])
+        bpy.ops.devil_designer.arrangement_edit(action='ADD',volume='chest',point=chosen,angle=.75,height=.4)
+        volume=next(volume for volume in arrangement.ensure_volumes(bpy.context)['volumes'] if volume['id']=='chest')
+        added=volume['points'][-1]['id']
+        check(len(volume['points'])==count+1 and added.startswith('custom_'),'point card adds a stable avatar-owned point')
+        bpy.ops.devil_designer.arrangement_edit(action='DELETE',volume='chest',point=added)
+        volume=next(volume for volume in arrangement.ensure_volumes(bpy.context)['volumes'] if volume['id']=='chest')
+        check(len(volume['points'])==count,'point card deletes the chosen avatar point')
+        workspace.minimal_action('RESET_LAYOUT')
+        check(workspace.session.document.find(identity).arrangement is None,'piece card Reset to 2D layout clears the arrangement')
+    finally:
+        workspace.full,workspace.window_rect,scene.dd_reference_visible=saved[:3]
+        view.view_location,view.view_rotation,view.view_distance,view.view_perspective=saved[3:]
+        workspace.canvas_layout=workspace.make_layout()
 
 
 def run():
@@ -710,19 +819,21 @@ def run():
             workspace.handle_event(bpy.context, event('B', canvas_point))
             check(workspace.session.document.seams[0].reverse != before, 'seam direction changes')
             workspace.handle_event(bpy.context, event('B', canvas_point))
-            check(not garment.generated(scene, 'panel'), 'no separate Build or Arrange action was required')
+            check(len(garment.generated(scene, 'panel'))==2, 'committed pieces already have live panels without Build or Arrange')
             scene.dd_self_collision = False
             scene.dd_library_refit = False
             button('SIMULATE')
             check(bpy.context.screen.is_animation_playing and scene.dd_avatar == body,
-                  'Simulate detects the body, builds, arranges, and starts actual cloth playback')
+                  'Simulate detects the body and starts cloth from current live panels')
             check(scene.dd_self_collision and scene.dd_library_refit,
                   'self collision and library refit are automatic decisions, not controls')
             panels = garment.generated(scene, 'panel')
-            check(len(panels) == 2 and panels[0].location.y * panels[1].location.y < 0,
-                  'first-time front and back placement uses opposite sides of the body')
+            check(len(panels) == 2 and all(panel.location.y<0 for panel in panels),
+                  'unarranged panels simulate in front from their layout without a front/back guess')
             button('SIMULATE')
             check(not bpy.context.screen.is_animation_playing, 'the same transport button pauses playback')
+            check_arrangement_controls(workspace,event,check)
+            panels=garment.generated(scene,'panel')
             placement = [panel.matrix_world.copy() for panel in panels]
             button('SIMULATE')
             check(all(panel.matrix_world == matrix for panel, matrix in zip(panels, placement)),
