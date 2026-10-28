@@ -10,6 +10,7 @@ from .density import boundary_plan,effective_spacing
 from .core import area
 from .native_features import decorate_mesh,apply_presets,add_anchors
 from .live_panels import build_guard
+from . import layering
 
 OWNER = "Artbyo3/DEVIL-DESIGNER"
 _playback_window = None
@@ -275,6 +276,9 @@ def signature(scene,panels):
     avatar = scene.dd_avatar
     if avatar:
         data += [avatar.name,[v for row in avatar.matrix_world for v in row]]
+    selection=layering.wear_over_selection(scene)
+    if selection:
+        data.append(selection)
     return hashlib.sha256(json.dumps(data,sort_keys=True).encode()).hexdigest()
 
 
@@ -296,6 +300,7 @@ def compile_garment(context):
     scene = context.scene
     doc = document(scene)
     ensure_collision(scene)
+    layering.prepare_colliders(context)
     panels = generated(scene,'panel')
     if not panels or any(o.get('dd_document')!=doc.dumps() or o.get('dd_spacing')!=scene.dd_spacing
                          or o.get('dd_units')!=metres_per_unit(scene) for o in panels) or len(panels)!=len(doc.patterns):

@@ -118,6 +118,15 @@ preserve valid pair membership. Designs without pair records remain unchanged.
 - Prepare and simulate with Blender's native cloth.
 - Reset/rebuild without losing valid source relationships or arranged placements.
 - Finalize to editable garment meshes with the pattern UVs and piece identifiers.
+- Kept garments are collision layers for later simulations. A five-row scrollable
+  Wear over list in the Simulate arrow defaults all kept garments on. Add missing
+  Collision modifiers without changing existing ones. Filter only the current
+  simulation: always retain the body and every pre-existing scene collider except
+  unchecked kept garments. Preserve kept meshes on Reset and the original path
+  when no kept garments exist.
+- Triangle Keep output remains unchanged. Quad-grid conversion is deferred after
+  its seam-preservation prototype failed; a later prototype must lock welded seams
+  before any UI integration. No quad retry is part of the layering implementation.
 - A garment library that saves the editable design, not only a frozen final mesh.
 - Load a design onto another avatar and refit it: preserve outlines, internal
   features, sewing, material choices, UV layout, and garment-relative arrangement.

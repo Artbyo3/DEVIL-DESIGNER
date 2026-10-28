@@ -1,6 +1,7 @@
 import math
 import bpy
 from .canvas import Rect
+from . import layering
 
 
 DENSITY = {'Coarse': .04, 'Standard': .02, 'Fine': .01}
@@ -11,7 +12,7 @@ GUIDE_OPACITY = {'Light': .15, 'Medium': .30, 'Strong': .50}
 IMAGE_OPACITY = {'Light': .2, 'Medium': .35, 'Strong': .6}
 
 
-def minimal_layout(layout, pending=False, confirmation=False, playing=False):
+def minimal_layout(layout, pending=False, confirmation=False, playing=False, kept=False):
     scale = layout.scale
     panel = layout.panel
     layout.minimal = True
@@ -59,6 +60,9 @@ def minimal_layout(layout, pending=False, confirmation=False, playing=False):
         if key == 'KEEP':
             layout.buttons['KEEP_OPTIONS'] = (Rect(right + 112 * scale, bottom, 30 * scale, 40 * scale), 'Options')
             layout.buttons['KEEP'] = (Rect(right, bottom, 112 * scale, 40 * scale), label)
+        elif key == 'SIMULATE' and kept:
+            layout.buttons['SIMULATE_OPTIONS'] = (Rect(right + 112 * scale, bottom, 30 * scale, 40 * scale), 'Wear over')
+            layout.buttons['SIMULATE'] = (Rect(right, bottom, 112 * scale, 40 * scale), label)
         right -= 8 * scale
 
 
@@ -70,6 +74,7 @@ class MinimalCards:
         self.card_kind = None
         self.card_anchor = None
         self.card_page = 0
+        self.wear_over_offset = 0
         self.card_models = []
         self.library_items = []
         self.toast_message = ''
@@ -115,6 +120,7 @@ class MinimalCards:
         self.card_kind = kind
         self.card_anchor = anchor or self.pointer
         self.card_page = 0
+        self.wear_over_offset = 0
         self.search_active = False
         self.context_anchor = None
         self.settings_open = False
@@ -175,6 +181,16 @@ class MinimalCards:
                 pages = math.ceil(len(self.library_items) / 8)
                 rows.append(('PAGE_LIBRARY', f'More garments ({self.card_page + 1}/{pages})', 'Next'))
             rows.append(('LIBRARY_SAVE', 'Save current garment', ''))
+        elif kind == 'SIMULATE':
+            title = 'Wear over'
+            self.card_models = layering.kept_garments(scene)
+            if not self.card_models:
+                return None
+            self.wear_over_offset = max(0,min(self.wear_over_offset,len(self.card_models)-5))
+            rows = [('WEAR_OVER_' + str(index), obj.name, 'On' if obj.get('dd_wear_over',True) else 'Off')
+                    for index,obj in enumerate(self.card_models) if self.wear_over_offset <= index < self.wear_over_offset+5]
+            if len(self.card_models)>5:
+                rows.append(('SCROLL_WEAR_OVER',f'{self.wear_over_offset+1}-{min(self.wear_over_offset+5,len(self.card_models))} of {len(self.card_models)} garments','Next'))
         elif kind == 'KEEP':
             title = 'Keep mesh'
             rows = [('WELD_AUTO', 'Weld', 'Manual' if self.weld_manual else 'Auto'),
@@ -447,7 +463,15 @@ class MinimalCards:
 
     def minimal_action(self, key):
         scene = self._scene
-        if key in {'CLONE_LINKED','CLONE_BACK','TOGGLE_LINKED'}:
+        if key.startswith('WEAR_OVER_'):
+            obj=self.card_models[int(key.removeprefix('WEAR_OVER_'))]
+            if not obj.is_editable:
+                self.error_message=f'Make kept garment "{obj.name}" editable to change Wear over.'
+                return
+            obj['dd_wear_over']=not obj.get('dd_wear_over',True)
+        elif key=='SCROLL_WEAR_OVER':
+            self.wear_over_offset=self.wear_over_offset+5 if self.wear_over_offset+5<len(self.card_models) else 0
+        elif key in {'CLONE_LINKED','CLONE_BACK','TOGGLE_LINKED'}:
             from .linked_editing import clone_twin,toggle_link
             def apply():
                 if key=='TOGGLE_LINKED':return toggle_link(self.session)
@@ -663,6 +687,10 @@ class MinimalCards:
                                        'WHEELUPMOUSE', 'WHEELDOWNMOUSE'}
         if not pointer_event or not layout.panel.contains(*point):
             return None
+        if card and self.card_kind=='SIMULATE' and event.type in {'WHEELUPMOUSE','WHEELDOWNMOUSE'}:
+            delta=-1 if event.type=='WHEELUPMOUSE' else 1
+            self.wear_over_offset=max(0,min(max(0,len(self.card_models)-5),self.wear_over_offset+delta))
+            return {'RUNNING_MODAL'}
         if card and self.card_kind in {'BODY', 'LIBRARY'} and event.type in {'WHEELUPMOUSE', 'WHEELDOWNMOUSE'}:
             delta = -1 if event.type == 'WHEELUPMOUSE' else 1
             max_pages = math.ceil(len(self.card_models if self.card_kind == 'BODY' else self.library_items) / 8)
@@ -723,6 +751,8 @@ class MinimalCards:
                 self.perform_action(button)
             elif button == 'KEEP_OPTIONS':
                 self.show_card('KEEP', (btn_rect.x, btn_rect.y + 45 * scale))
+            elif button == 'SIMULATE_OPTIONS':
+                self.show_card('SIMULATE', (btn_rect.x, btn_rect.y + 45 * scale))
             else:
                 self.minimal_action(button)
             return {'FINISHED'} if self._closed else {'RUNNING_MODAL'}
@@ -764,7 +794,7 @@ class MinimalCards:
                     elif key != 'INFO':
                         action = row[1] if key == 'MENU' else key
                         self.minimal_action(action)
-                        if action not in {'BODY_CHANGE', 'PIECE_FABRIC_MENU', 'PIECE_DENSITY_MENU', 'EDIT_ACTIONS'}:
+                        if action not in {'BODY_CHANGE', 'PIECE_FABRIC_MENU', 'PIECE_DENSITY_MENU', 'EDIT_ACTIONS', 'SCROLL_WEAR_OVER'}:
                             self.card_kind = None
                     break
             return {'RUNNING_MODAL'}

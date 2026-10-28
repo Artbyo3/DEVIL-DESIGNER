@@ -7,7 +7,7 @@ from .interaction import OverlayControls
 from .minimal import MinimalCards, minimal_layout
 from .design_tools import DesignTools
 from .silhouette import BodyReference, torso_alignment, VIEWS
-from . import history
+from . import history,layering
 
 _active = None
 
@@ -204,7 +204,8 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                       pending=bool(self.draft), confirmation=bool(self.confirm_action),
                       playing=bpy.context.screen.is_animation_playing, advanced=self.advanced_tools)
         if self.minimal_ui:
-            minimal_layout(layout, bool(self.draft), bool(self.confirm_action), bpy.context.screen.is_animation_playing)
+            minimal_layout(layout, bool(self.draft), bool(self.confirm_action), bpy.context.screen.is_animation_playing,
+                           kept=bool(layering.kept_garments(self._scene)))
         return layout
 
     def update_reference(self, context, force=False, align=False):

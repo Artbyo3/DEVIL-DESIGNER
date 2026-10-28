@@ -309,7 +309,7 @@ presets are practical starting values, not measured textile calibration.
 gate. An unarranged panel intersecting the body produces a named status warning
 without blocking simulation. The locked cloth setup and sewing force math remain
 unchanged. Legacy **Build 3D** preserves manually placed legacy panels.
-Simulation quality and mesh density are adjusted directly on the **Simulate** options popover.
+Simulation quality and mesh density are adjusted on the empty-canvas right-click menu.
 Fabric presets live on the piece **Fabric** card. Body clearance, self collision, and automatic defaults
 are program decisions, not settings the artist must configure. The chosen body gets Collision if needed; an existing collision
 modifier is left unchanged.
@@ -324,6 +324,36 @@ Reset asks for confirmation before removing the simulation/cache and restoring a
 garments. Reset after body geometry/collision changes before simulating again.
 Simulation caches are not automatically baked to disk. A single piece can drape
 without sewing; a selected body is still required for this workflow.
+
+### Wear over kept garments
+
+When kept garments exist, the **Simulate** arrow opens **Wear over**. Every kept
+garment starts On. Up to five garments are shown; scroll or use Next to reach the
+rest. Clicking a garment toggles it and immediately dismisses the list. The choice
+is saved with that object in the blend file and is applied when Simulate next
+starts or resumes; a changed selection rebuilds the simulation rather than reusing
+its old cache. Linked garments need an editable override to change their choice.
+
+Enabled kept meshes get a Collision modifier only if one is missing. Existing
+Collision modifiers and their settings are never changed. Each new simulation gets
+its own collision filter containing the body and every other scene collider; only
+unchecked kept garments are excluded. Turning a garment Off does not disable or
+remove its Collision modifier. Other simulations keep their own filters. With no
+kept garments, the existing simulation path and collision settings stay unchanged.
+Reset still preserves all kept garments.
+
+Place the outer garment outside the kept layer before simulating, and use the
+existing **High** simulation-quality preset for layered work. The automated
+shirt/jacket fixture uses prearranged panels and shoulder pins on a headless torso,
+checks 121 frames at High quality against a 2 mm penetration tolerance, and samples
+vertices, edge midpoints and face centers away from open boundaries. This controlled
+test is not a penetration guarantee for arbitrary clothing or initial intersections;
+the Standard-quality fixture exceeded that tolerance. Cloth settings, sewing
+forces and placement algorithms are not changed to implement layering.
+
+Keep mesh remains the existing triangle output with Auto weld and Thickness.
+Quad-grid conversion is deferred: its prototype did not preserve welded seams.
+No quad conversion, reduction, decimation, rigging or weight transfer ships here.
 
 ## UVs for Substance
 
