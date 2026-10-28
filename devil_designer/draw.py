@@ -794,7 +794,7 @@ class Renderer:
             if key in {'SIMULATE', 'KEEP', 'FINISH_DRAFT', 'CANCEL_DRAFT', 'CONFIRM_ACTION', 'CANCEL_ACTION'}:
                 primary = key in {'SIMULATE', 'FINISH_DRAFT', 'CONFIRM_ACTION'}
                 surface = SURFACE_FLOATING if blocker else ACCENT_HOVER if hover else ACCENT
-                joined = Rect(rect.x, rect.y, rect.w + (30 * scale if key == 'KEEP' else 0), rect.h)
+                joined = Rect(rect.x, rect.y, rect.w + (30 * scale if key+'_OPTIONS' in layout.buttons else 0), rect.h)
                 self.round_rect(joined, surface if primary else ELEVATED if hover else SURFACE_FLOATING, radius=10)
                 self.round_rect_outline(joined, ACCENT_BORDER if primary else SURFACE_OUTLINE, radius=10)
                 ink = MUTED if blocker else TEXT_ON_ACCENT if primary else TEXT
@@ -819,7 +819,8 @@ class Renderer:
                 self.text(rect.x + rect.w / 2, rect.y + 6 * scale, char, 10, ACCENT if active else TEXT_SUB, True)
             elif key.endswith('_OPTIONS'):
                 self.lines([(rect.x, rect.y + 10 * scale), (rect.x, rect.y + rect.h - 10 * scale)], SURFACE_OUTLINE)
-                self.draw_icon('CHEVRON', rect.x + rect.w / 2, rect.y + rect.h / 2, 12, TEXT_SUB)
+                self.draw_icon('CHEVRON', rect.x + rect.w / 2, rect.y + rect.h / 2, 12,
+                               TEXT_ON_ACCENT if key=='SIMULATE_OPTIONS' else TEXT_SUB)
             elif key == 'GARMENT':
                 self.round_rect(rect, ELEVATED if hover else SURFACE_FLOATING, radius=8)
                 self.draw_icon('GARMENT', rect.x + 16 * scale, rect.y + rect.h / 2, 20, TEXT_SUB)

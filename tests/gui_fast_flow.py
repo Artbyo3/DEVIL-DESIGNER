@@ -895,6 +895,35 @@ def run():
             scene['dd_unwelded_seams'] = 0
             check(not any(row[0] == 'SLIDER' for rect, row in workspace.minimal_card()[2]),
                   'manual weld control disappears when no failed seam pairs remain')
+            kept=garment.generated(scene,'final')[0]
+            for index in range(6):
+                extra=kept.copy()
+                extra.name=f'Kept layer {index+1}'
+                scene.collection.objects.link(extra)
+            workspace.card_kind=None
+            button('SIMULATE_OPTIONS')
+            check(workspace.card_kind=='SIMULATE','Simulate arrow opens Wear over only after kept garments exist')
+            rows=[row for rect,row in workspace.minimal_card()[2] if row[0].startswith('WEAR_OVER_')]
+            check(len(rows)==5 and all(row[2]=='On' for row in rows),'Wear over shows at most five garments and defaults every garment on')
+            first_names=[row[1] for row in rows]
+            card=workspace.minimal_card()[0]
+            inside=(card.x+card.w/2,card.y+card.h/2)
+            zoom=workspace.view.zoom
+            workspace.handle_event(bpy.context,event('WHEELDOWNMOUSE',inside))
+            rows=[row for rect,row in workspace.minimal_card()[2] if row[0].startswith('WEAR_OVER_')]
+            check([row[1] for row in rows]!=first_names and workspace.view.zoom==zoom,'Wear over scrolls its five-row list without zooming the canvas')
+            target=workspace.card_models[int(rows[-1][0].removeprefix('WEAR_OVER_'))]
+            card_click(rows[-1][0])
+            check(target.get('dd_wear_over') is False and workspace.card_kind is None,'Wear over toggle persists and immediately dismisses to pure canvas')
+            button('SIMULATE_OPTIONS')
+            card_click('SCROLL_WEAR_OVER')
+            check(workspace.card_kind=='SIMULATE' and len([row for rect,row in workspace.minimal_card()[2] if row[0].startswith('WEAR_OVER_')])==5,
+                  'Wear over next control keeps navigation open and never shows more than five garments')
+            workspace.handle_event(bpy.context,event('ESC',inside))
+            check(workspace.card_kind is None,'Escape dismisses Wear over')
+            button('SIMULATE_OPTIONS')
+            click((workspace.canvas_layout.canvas.x+100,workspace.canvas_layout.canvas.y+100))
+            check(workspace.card_kind is None,'outside click dismisses Wear over without an inspector')
         report = {'passed': passed}
     except Exception:
         report = {'passed': passed, 'error': traceback.format_exc()}

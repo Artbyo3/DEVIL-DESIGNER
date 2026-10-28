@@ -1,5 +1,5 @@
 import bpy
-from . import garment
+from . import garment,layering
 from .core import Session
 
 
@@ -48,6 +48,7 @@ class DD_OT_simulate(bpy.types.Operator):
     def execute(self,context):
         def action():
             obj = garment.compile_garment(context)
+            layering.configure_collision_collection(context,obj)
             obj.hide_set(False)
             obj.hide_render = False
             garment.start_playback(context)
