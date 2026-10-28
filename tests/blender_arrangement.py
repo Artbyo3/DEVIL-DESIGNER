@@ -37,6 +37,7 @@ for mode, names in (
         offset = index * .5
         session.add([(offset, 0), (offset + .2, 0), (offset + .2, .3), (offset, .3)])
         session.document.patterns[-1].name = name
+        session.document.patterns[-1].placement_mode = 'LEGACY'
     scene.dd_document = session.document.dumps()
     plan = arrangement.layout_plan(((piece.id, piece.name) for piece in session.document.patterns),
                                    garment.bounds(avatar), mode)
@@ -76,6 +77,7 @@ history_session.add([(0, 0), (.4, 0), (.4, .6), (0, .6)])
 history_session.add([(.6, 0), (1, 0), (1, .6), (.6, .6)])
 history_session.document.patterns[0].name = 'Front panel'
 history_session.document.patterns[1].name = 'Back panel'
+for piece in history_session.document.patterns:piece.placement_mode='LEGACY'
 scene.dd_document = history_session.document.dumps()
 scene.dd_history = history.store(history_session)
 count = len(history_session.undo_stack)

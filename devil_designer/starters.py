@@ -1,4 +1,4 @@
-from .core import Session, EdgeRef
+from .core import Session, EdgeRef,arrangement_record
 
 
 def make_edge(doc, pattern_id, index, rev=False):
@@ -68,6 +68,8 @@ def create_tee_starter(measurements, fabric='COTTON'):
     s.sew_chains([make_edge(s.document, f_id, 5)], [make_edge(s.document, b_id, 8)], reverse=True)
     s.sew_chains([make_edge(s.document, f_id, 8, rev=True)], [make_edge(s.document, b_id, 5)], reverse=False)
 
+    for pattern,point in zip(s.document.patterns,('front','back')):
+        pattern.arrangement=arrangement_record('chest',point)
     return s.document
 
 
@@ -121,6 +123,8 @@ def create_tank_starter(measurements, fabric='COTTON'):
     s.sew_chains([make_edge(s.document, f_id, 3)], [make_edge(s.document, b_id, 6)], reverse=True)
     s.sew_chains([make_edge(s.document, f_id, 6, rev=True)], [make_edge(s.document, b_id, 3)], reverse=False)
 
+    for pattern,point in zip(s.document.patterns,('front','back')):
+        pattern.arrangement=arrangement_record('chest',point)
     return s.document
 
 
@@ -160,6 +164,8 @@ def create_skirt_starter(measurements, fabric='COTTON'):
     s.sew_chains([make_edge(s.document, f_id, 1)], [make_edge(s.document, b_id, 3)], reverse=True)
     s.sew_chains([make_edge(s.document, f_id, 3, rev=True)], [make_edge(s.document, b_id, 1)], reverse=False)
 
+    for pattern,point in zip(s.document.patterns,('front','back')):
+        pattern.arrangement=arrangement_record('waist',point)
     return s.document
 
 

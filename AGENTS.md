@@ -30,6 +30,7 @@
 
 ## ARCHITECTURE & IMPLEMENTATION PRINCIPLES
 1. **Garment & Simulation Math Integrity**:
+   - Initial built-panel position and orientation in garment.build_panels and arrangement.arrange are editable, and arrangement.py may implement bounding volumes and arrangement points; placement.py, tack_binding.py, cloth setup/loop/modifiers, meshing output, and sewing springs remain locked.
    - Strictly locked and protected: simulation algorithms and cloth loop/modifiers in `garment.py`, meshing output and Delaunay CDT math in `meshing.py`, sewing spring force formulations in `garment.py`, and 3D placement math in `placement.py` and `tack_binding.py`.
    - Now editable: the pattern-editing code in `core.py` and `construction.py` (specifically pattern selection state, multi-piece and point selection, point and handle movement and editing, segment splitting, and internal/boundary path cutting). Downstream simulation, meshing output, sewing springs, and placement math must remain untouched and verified by automated meshing regression tests.
 2. **UI & Rendering Architecture**:

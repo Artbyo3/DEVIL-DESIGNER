@@ -216,6 +216,12 @@ class Renderer:
             self.round_rect_outline(r, (*color[:3], 0.5), radius=2, width=1)
             pts = [(cx - 0.25 * s, cy - 0.2 * s), (cx, cy + 0.2 * s), (cx + 0.25 * s, cy)]
             self.lines(pts, color, 1.5, strip=True)
+        elif name == 'KNIFE':
+            self.lines([(cx - .38 * s, cy + .3 * s), (cx + .38 * s, cy + .3 * s),
+                        (cx + .38 * s, cy + .08 * s)], color, 1.3, strip=True)
+            self.lines([(cx - .38 * s, cy - .08 * s), (cx - .38 * s, cy - .3 * s),
+                        (cx + .38 * s, cy - .3 * s)], color, 1.3, strip=True)
+            self.lines([(cx - .48 * s, cy - .18 * s), (cx + .48 * s, cy + .18 * s)], color, 1.7)
         elif name in {'DART', 'dart'}:
             pts = [(cx - 0.35 * s, cy + 0.35 * s), (cx, cy - 0.40 * s), (cx + 0.35 * s, cy + 0.35 * s)]
             self.lines(pts, color, 1.4, strip=True)
@@ -526,6 +532,12 @@ class Renderer:
                             self.dot(h_end, 4, (0.98, 0.73, 0.32, 1))
                 self.dot(pts[0], 7, (*ACCENT[:3], 0.25))
                 self.dot(pts[0], 3.5, ACCENT)
+                if ed.tool == 'KNIFE':
+                    knife_points = raw_coords + ([ed.preview[-1]] if ed.preview and math.dist(raw_coords[-1], ed.preview[-1]) > 1e-8 else [])
+                    for result in ed.session.knife_preview(knife_points):
+                        color = (0.98, 0.45, 0.28, 1) if result['reason'] else ACCENT
+                        for crossing in result['hits']:
+                            self.dot(view.screen(crossing, c), 6 * s, color)
             elif ed.gesture and ed.gesture['mode'] in {'RECT', 'ELLIPSE'} and ed.preview:
                 pts = [view.screen(point, c) for point in ed.preview]
                 if ed.gesture['mode'] == 'ELLIPSE':
@@ -551,7 +563,7 @@ class Renderer:
             key_pill = Rect(hud_r.x + 5 * s, hud_r.y + 4 * s, 18 * s, 20 * s)
             self.round_rect(key_pill, (0.188, 0.231, 0.267, 1.0), radius=4)
             tool_key = {'SELECT': 'V', 'POLYGON': 'P', 'RECTANGLE': 'R', 'ELLIPSE': 'E',
-                        'INTERNAL': 'I', 'DART': 'D', 'SEW': 'J', 'PIN': 'K', 'TACK': 'T'}.get(ed.tool, 'V')
+                        'INTERNAL': 'I', 'DART': 'D', 'KNIFE': 'N', 'SEW': 'J', 'PIN': 'K', 'TACK': 'T'}.get(ed.tool, 'V')
             self.text(key_pill.x + key_pill.w / 2, key_pill.y + 5 * s, tool_key, 9, TEXT, True)
             self.text(hud_r.x + 28 * s, hud_r.y + 7 * s, guide_txt, 10, TEXT_SUB, max_width=hud_r.w - 34 * s)
 
@@ -766,12 +778,13 @@ class Renderer:
                  'SELECT': 'SELECT', 'SEW': 'SEW', 'UNDO': 'UNDO', 'REDO': 'REDO'}
         draw_shape = getattr(ed, 'draw_shape', 'RECTANGLE')
         icons['DRAW'] = 'POLYGON' if draw_shape == 'POLYGON' else 'ELLIPSE' if draw_shape == 'ELLIPSE' else 'RECTANGLE'
-        icons['INTERNAL'] = 'DART' if ed.tool == 'DART' else 'INTERNAL'
+        icons['INTERNAL'] = ed.tool if ed.tool in {'DART', 'KNIFE'} else 'INTERNAL'
         shortcuts = {'SELECT': 'V', 'DRAW': 'R', 'INTERNAL': 'I', 'SEW': 'J', 'PIN': 'K',
                      'UNDO': 'Ctrl Z', 'REDO': 'Ctrl Shift Z',
                      'CLOSE': 'Esc', 'INSPECTOR_TOGGLE': 'Inspector',
                      'GARMENT': 'Garment settings', 'HELP': '?',
                      'RESTORE_CANVAS': 'Expand'}
+        if ed.tool == 'KNIFE':shortcuts['INTERNAL'] = 'N'
         self.lines([(layout.rail.x + 6 * scale, layout.rail.y + 28 * scale),
                     (layout.rail.x + layout.rail.w - 6 * scale, layout.rail.y + 28 * scale)], BORDER_SUBTLE)
         tooltip = None
@@ -816,7 +829,7 @@ class Renderer:
             else:
                 is_active = (key == ed.tool or
                              (key == 'DRAW' and ed.tool in {'RECTANGLE', 'POLYGON', 'ELLIPSE'}) or
-                             (key == 'INTERNAL' and ed.tool in {'INTERNAL', 'DART'}) or
+                             (key == 'INTERNAL' and ed.tool in {'INTERNAL', 'DART', 'KNIFE'}) or
                              (key == 'PIN' and ed.tool in {'PIN', 'TACK'}))
                 if is_active or hover:
                     self.round_rect(rect, ACCENT_BG if is_active else ELEVATED, radius=10)

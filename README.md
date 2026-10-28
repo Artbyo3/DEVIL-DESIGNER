@@ -37,7 +37,7 @@ editor explicitly.
 The default workspace has three primary actions: **Panel > Sew > Simulate**.
 Panel drawing is ready on open: drag the canvas to create pieces, click Sew and
 pair edges, then click Simulate. There are no separate Build or Arrange clicks for
-a new standard two-panel front/back garment. The selected body is used automatically;
+a new garment: every closed piece already has its flat 3D panel, and arrangement is optional. The selected body is used automatically;
 if the body is ambiguous, one inline choice starts the requested simulation.
 
 An empty garment also offers **Create panel**, a one-click editable 40 x 45 cm
@@ -84,6 +84,7 @@ separate Blender Curve objects.
 | --- | --- |
 | Select / polygon / rectangle / ellipse | V / P / R / E |
 | Internal line / sewing / pin / tack / dart | I / J / K / T / D |
+| Cut / Cut & Sew knife | N, or Internal tool choices beside Dart |
 | Place selected panel in 3D | G inside the editor; Blender transforms outside it |
 | Finish polygon | Enter or click its first corner |
 | Finish open internal line / closed internal shape | Enter / click its first point |
@@ -102,6 +103,25 @@ separate Blender Curve objects.
 | Pan / zoom / fit | Middle mouse / wheel / F or Home |
 | Show body reference | Body H / H |
 | Cancel current gesture/draft/placement | Escape |
+
+The Internal tool choices include **Cut** without adding a ninth dock tool.
+Its default mode is **Cut & Sew**; choose **Cut only** there to separate pieces
+without sewing. Click two or more straight-line points, then press Enter or
+double-click to finish; Escape cancels. Shift locks the next segment horizontally
+or vertically, and the usual snapping and Ctrl inversion apply. Live dots mark
+outline intersections. The line can begin and end outside the piece: only the
+interior section is cut. Each target must cross the outline exactly twice;
+tangencies, overlapping outline edges, self-crossings and crossings through holes
+are refused without changing the design. Selected pieces are the targets; with
+no selection, every fully crossed piece is targeted. A cut that crosses an
+existing internal path is refused just like the existing boundary cut; split that
+path first. Internal curve cuts, slits and holes still use **Cut along path**.
+
+Both halves retain fabric, mesh density and their original UV positions, with no
+repack or overlapping interiors, and receive the original name plus ** 1** and
+** 2**. Outer-edge sewing uses the existing remapping and repair messages.
+Cut & Sew creates a removable seam along the matching new edge chains. The entire
+operation, including multiple pieces and new sewing, is one Undo step.
 
 Select a point or segment to edit it. Live lengths use numerical Bezier arc-length
 integration and update as handles move. Contextual cards expose exact coordinates
@@ -180,15 +200,41 @@ at physical scale. It includes armature/shape-key deformation and object/scene
 scale; limb gaps are preserved. Toggle guide visibility with **H** or the **Workspace**
 card, which also controls opacity. It cannot be selected as a pattern.
 
-Build 3D panels, then either move them with Blender G/R, use the **Arrange
-pieces** card for named Bodice, Sleeves, or Skirt starting layouts, or choose
-**Place on body** from the **Placement** card and click the
-body in the uncovered 3D viewport. Ray picking targets the chosen body only.
+Closing a piece immediately builds its flat panel in front of the body, with the
+same relative positions and physical scale as the 2D drawing. Committed outline
+edits and 2D moves rebuild the panels; deleting a piece removes its panel. The 2D
+body silhouette is only a drawing reference: moving it never places new panels.
 
-Set **Wrap radius** and click **Wrap / unwrap selected piece** to bend a piece
-around its vertical local axis. Use zero to restore flat geometry. This is useful
-for sleeves and waistbands; it does not scale the 2D outline or change its UVs.
-Use a radius appropriate to the piece width to avoid wrapping over itself.
+Select a piece, reveal the 3D view, and click a blue **arrangement point** to wrap
+it around that point's bounding volume. **H** shows or hides the guide, volume
+rings, and points. Avatar volumes cover neck, chest, waist, hip, upper arms,
+forearms, thighs, and calves. Right-click a point for **Arrange flat**, **Move
+point**, **Add point**, **Delete point**, or **Edit bounding volume**. Point angles
+and heights stay on their volume; volume bounds are fractions of body height.
+The body picker offers **Regenerate body volumes** to remeasure a changed mesh
+or recover invalid setup; this explicitly resets point and volume edits.
+
+Volume and point edits belong to the avatar in this scene, never to a garment.
+Moving or scaling the avatar updates its live panels and points. After arranging,
+Blender **G/R** adjustments are saved as relative translation/rotation deltas.
+Clicking a point again resets those deltas. **Reset to 2D layout** on the piece
+card clears its arrangement and restores its flat layout position. Ordinary
+**Reset drape** removes simulation/cache but keeps arrangements.
+
+Wrapping uses the cylinder radius at the selected point's height. Wider-than-one-
+circumference pieces form an outward spiral with separate successive turns.
+These are editable starting placements, not automatic fitting: anatomical section
+detection is heuristic, missing sections use fallback cylinders, and a tall piece
+can intersect a wider neighboring section on a tapered body. Inspect before draping.
+The Tee uses integrated sleeve outlines rather than separate sleeve panels;
+Tee/Tank fronts and backs use explicit chest points, and Skirt uses waist points.
+
+Design document versions 1–3 keep their legacy guide/name/order placement and
+named Bodice/Sleeves/Skirt layouts. Legacy ray placement and manual wrap radius
+remain available only for those pieces. Version 4 records point IDs and relative
+deltas, plus pattern-space source bounds when a cut must retain its parent's
+3D frame. Cutting an arranged or legacy piece preserves both halves' placement.
+Neither arranging nor cutting repacks UVs or rewrites the source outline's layout.
 
 K adds a static pin on fabric. T picks a fabric point, then a target on the avatar
 in 3D. Tacks use native Hook/pin groups and avatar-parented surface-following targets.
@@ -224,9 +270,10 @@ Linen, Leather, or Denim. Native structural, shear, and bending groups provide p
 stiffness. **Mass density is a shared, area-weighted native cloth value**; these
 presets are practical starting values, not measured textile calibration.
 
-**Build 3D** preserves existing panel transforms. Named arrangement layouts position
-multiple pieces around a Z-up, -Y-facing body; they are starting placements, not
-anatomical fitting or collision prevention. Adjust them before simulation.
+**Simulate** starts from current live panels, arranged or not, with no auto-placement
+gate. An unarranged panel intersecting the body produces a named status warning
+without blocking simulation. The locked cloth setup and sewing force math remain
+unchanged. Legacy **Build 3D** preserves manually placed legacy panels.
 Simulation quality and mesh density are adjusted directly on the **Simulate** options popover.
 Fabric presets live on the piece **Fabric** card. Body clearance, self collision, and automatic defaults
 are program decisions, not settings the artist must configure. The chosen body gets Collision if needed; an existing collision
@@ -259,7 +306,7 @@ VRChat/Unity setup remain separate finishing tasks.
 ## Local garment library and refitting
 
 In Library, choose **Save garment** to store the Bezier source, internal features,
-sewing, anchors, presets, wrap state, UV layout, and body-relative panel placements.
+sewing, anchors, presets, UV layout, and volume/point IDs with relative G/R deltas.
 It never bundles the avatar mesh or its name. Files live in Blender's user datafiles
 folder under `devil_designer/garments`.
 
@@ -267,7 +314,10 @@ Choose another body in the body picker card, open **Library**, and click **Load*
 the desired garment. The body and library pickers display up to 8 items per view with
 mouse-wheel scrolling and instant page navigation. With **Scale by body height**
 enabled, source dimensions scale uniformly by height while preserving UV coordinates.
-Placement and tacks remap to the new body bounds. Loading over an existing garment
+The new avatar generates its own volumes and matching point IDs resolve there.
+A missing volume or point falls back to the flat 2D-layout position with a status
+message. Legacy files retain bounds-relative placements. Tacks remap to the new
+body bounds. Loading over an existing garment
 automatically saves a backup snapshot (`scene['dd_backup_document']`) and can be
 undone immediately with Ctrl+Z; Go back or Escape cancels before loading.
 

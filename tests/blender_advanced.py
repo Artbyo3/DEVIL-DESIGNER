@@ -27,6 +27,7 @@ s.add_path([(.15,.2),(.45,.25)]);s.cut()
 s.add_anchor((.3,.15));s.add_anchor((.3,.6),'TACK',(.5,0,.75))
 s.add([(1,0),(1.5,0),(1.5,.7),(1,.7)]);second=s.document.find(s.selected)
 first.preset='DENIM';second.preset='SILK';second.wrap_radius=.2
+for pattern in s.document.patterns:pattern.placement_mode='LEGACY'
 s.sew_chains(s.document.edges(first.id)[:2],[s.document.edge(second.id,3)])
 check(s.document.seam_stats(s.document.seams[0])[3]>1,'length mismatch is retained as intentional sewing')
 scene.dd_document=s.document.dumps()
@@ -106,7 +107,7 @@ invalid_designs=[]
 for value in (None,[],True,1,'garment'):
     invalid_designs.append(('root '+repr(value),value))
 for key,values in (
-    ('version',(True,'1',2)),
+    ('version',(True,'1',3)),
     ('name',(None,{},12)),
     ('body_height_m',(None,'1',True,-1,float('nan'),float('inf'))),
     ('settings',(None,[],1,'settings')),
@@ -228,6 +229,7 @@ finally:
 stale_session=Session()
 stale_session.add([(0,0),(.3,0),(.3,.3),(0,.3)])
 stale_session.add([(.4,0),(.7,0),(.7,.3),(.4,.3)])
+for pattern in stale_session.document.patterns:pattern.placement_mode='LEGACY'
 scene.dd_document=stale_session.document.dumps()
 stale_panels=garment.build_panels(bpy.context)
 check(len(stale_panels)==2,'stale library roundtrip starts with two built panels')

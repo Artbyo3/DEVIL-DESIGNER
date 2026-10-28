@@ -9,6 +9,7 @@ from .meshing import fabric_mesh
 from .density import boundary_plan,effective_spacing
 from .core import area
 from .native_features import decorate_mesh,apply_presets,add_anchors
+from .live_panels import build_guard
 
 OWNER = "Artbyo3/DEVIL-DESIGNER"
 _playback_window = None
@@ -116,8 +117,10 @@ def material(index):
     return m
 
 
+@build_guard
 def build_panels(context):
     scene = context.scene
+    scene['dd_arrangement_message']=''
     doc = document(scene)
     if not doc.patterns:
         raise ValueError("Draw at least one closed pattern first.")
@@ -138,11 +141,13 @@ def build_panels(context):
             coords,faces,boundaries = fabric_mesh(doc,p,effective_spacing(p,scene.dd_spacing),counts)
             cx = (min(v[0] for v in p.points)+max(v[0] for v in p.points))/2
             cy = (min(v[1] for v in p.points)+max(v[1] for v in p.points))/2
+            if p.panel_origin and (p.placement_mode=='LEGACY' or p.arrangement):
+                left,bottom,right,top=p.panel_origin['bounds'];cx=(left+right)/2;cy=(bottom+top)/2
             mesh = bpy.data.meshes.new('DD '+p.name)
             prepared.append((p,mesh,boundaries,(cx,cy),None))
             def position(x,y):
                 x,y=x-cx,y-cy
-                if p.wrap_radius>0:
+                if p.wrap_radius>0 and p.placement_mode=='LEGACY' and p.arrangement is None:
                     angle=x/p.wrap_radius
                     return (math.sin(angle)*p.wrap_radius/unit,y/unit,(1-math.cos(angle))*p.wrap_radius/unit)
                 return (x/unit,y/unit,0)
@@ -174,12 +179,14 @@ def build_panels(context):
         placed = getattr(scene, 'dd_reference_placed', False)
     coll = collection(scene)
     result = []
+    source_matrices={identity:obj.matrix_world.copy() for identity,obj in old.items()}
     for index,(p,mesh,boundaries,center,metadata) in enumerate(prepared):
         obj = old.pop(p.id,None)
+        created=obj is None
         if obj is None:
             obj = bpy.data.objects.new(p.name,mesh)
             coll.objects.link(obj)
-            if has_avatar:
+            if has_avatar and p.placement_mode=='LEGACY' and p.arrangement is None:
                 is_back = 'back' in p.name.casefold() or (index == 1 and len(prepared) == 2)
                 side = 1 if is_back else -1
                 pan_x = center_3d.x if is_back else (center_3d.x + (center[0] - ref_x) / unit)
@@ -195,6 +202,14 @@ def build_panels(context):
             obj.data = mesh
             if previous.users==0:
                 bpy.data.meshes.remove(previous)
+        if p.placement_mode!='LEGACY' or p.arrangement:
+            from .live_panels import position_panel
+            warning=position_panel(context,p,obj,center)
+            if warning:scene['dd_arrangement_message']=(scene['dd_arrangement_message']+' '+warning).strip()
+        elif created and p.panel_origin and p.panel_origin['source']!=p.id and p.panel_origin['source'] in source_matrices:
+            obj.matrix_world=source_matrices[p.panel_origin['source']]
+        context.view_layer.update()
+        source_matrices[p.id]=obj.matrix_world.copy()
         tag(obj,'panel')
         obj['dd_pattern_id'] = p.id
         obj['dd_edge_samples']=json.dumps(metadata['samples'],separators=(',',':'))
@@ -212,6 +227,9 @@ def build_panels(context):
         obj.color = material(index).diffuse_color
         result.append(obj)
     remove_objects(list(old.values()))
+    from .live_panels import avatar_signature
+    frame=avatar_signature(context)
+    for obj in result:obj['dd_avatar_frame']=frame
     return result
 
 

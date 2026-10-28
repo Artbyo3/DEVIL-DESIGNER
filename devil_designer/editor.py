@@ -285,10 +285,16 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                 self.perform_action('SIMULATE')
 
     def persist(self):
+        from . import live_panels
         value = self.session.document.dumps()
         self._scene.dd_document = value
         self._scene.dd_history = history.store(self.session)
         self._stored = value
+        live_panels.sync(bpy.context)
+        if self._scene.dd_document!=value:
+            self.session.document.uv_layout=Document.loads(self._scene.dd_document).uv_layout
+            self._stored=self._scene.dd_document
+            self._scene.dd_history=history.store(self.session)
         self.refresh_controls()
 
     def reconcile_generated_document(self):
@@ -302,6 +308,7 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
             self.persist()
             self.error_message = None
             self.message = message if changed is not False else "Nothing to change."
+            if self._scene.get('dd_arrangement_message'):self.message+=' '+self._scene['dd_arrangement_message']
             if self.session.last_repairs:
                 self.message += f" {self.session.last_repairs} affected sewing pair(s) removed; re-pair edited edges."
             return True
@@ -367,6 +374,7 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                         'PIN': 'Click fabric to pin it. Click an existing pin to select it.',
                         'TACK': 'Click fabric, then click the avatar in 3D to attach a tack.',
                         'DART': 'Click two base positions on one edge, then the dart apex.',
+                        'KNIFE': 'Click cut points. Enter or double-click finishes; Esc cancels. Shift locks the segment. Internal options: Cut or Cut & Sew.',
                         'PLACE': 'Click to place the selected garment panel in 3D.',
                         'SEW': "Click an edge, then its partner. Select a seam: B reverses it, X removes it."}.get(name, "Ready.")
         section = 'SEW' if name == 'SEW' else 'AVATAR' if name in {'PLACE', 'PIN', 'TACK'} else 'DESIGN'
@@ -385,7 +393,7 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         x, y = self.view.world(self.pointer, self.canvas_layout.canvas)
         if self.snap != event.ctrl:
             x, y = round(x / .01) * .01, round(y / .01) * .01
-        if anchor is not None and event.shift and self.tool == 'POLYGON':
+        if anchor is not None and event.shift and self.tool in {'POLYGON', 'KNIFE'}:
             if abs(x - anchor[0]) > abs(y - anchor[1]):
                 y = anchor[1]
             else:
@@ -440,7 +448,7 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                 self.message = 'Choose the body once. Simulation will start automatically.'
                 return False
             self.choose_body(body, context)
-        if len(self.session.document.patterns) == 2 and not garment.generated(self._scene, 'panel'):
+        if len(self.session.document.patterns) == 2 and all(pattern.placement_mode=='LEGACY' for pattern in self.session.document.patterns) and not garment.generated(self._scene, 'panel'):
             result = bpy.ops.devil_designer.arrange('EXEC_DEFAULT')
             self.reconcile_generated_document()
             return 'FINISHED' in result
@@ -485,6 +493,8 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                                 'STOP': 'Simulation paused. Keep mesh saves the current shape.',
                                 'RESET': 'Restored the positioned panels. Edit or arrange, then simulate again.',
                                 'KEEP': 'Draped mesh kept. Check the Blender report for any open seam pairs.'}[button]
+                if button in {'BUILD','SIMULATE'} and self._scene.get('dd_arrangement_message'):
+                    self.message+=' '+self._scene['dd_arrangement_message']
                 return True
             self.message = 'Action could not finish. Check the Blender report and try again.'
         except (RuntimeError, ValueError) as exc:
@@ -494,6 +504,11 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
     def finish_polygon(self, closed=True):
         self.gesture = None
         points = list(self.draft)
+        if self.tool == 'KNIFE':
+            mode = 'Cut & Sew' if self.knife_sew else 'Cut'
+            if self.run_edit(lambda: self.session.knife_cut(points, self.knife_sew), mode + ' complete.'):
+                self.draft, self.preview = [], None
+            return
         if self.tool == 'INTERNAL' or self._scene.dd_internal_mode:
             action = lambda: self.session.add_path(points, closed)
         else:
@@ -546,7 +561,14 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         self.pointer = (event.mouse_x - self._region.x, event.mouse_y - self._region.y)
         panel = self.canvas_layout.panel.contains(*self.pointer)
         canvas = self.canvas_layout.canvas.contains(*self.pointer)
-        if event.type == 'LEFTMOUSE' and event.value == 'DOUBLE_CLICK' and canvas:
+        if not panel and not self.pending_tack and not self.pending_place:
+            from .arrangement_controls import point_event
+            try:arrangement_result=point_event(context,event)
+            except ValueError as failure:
+                self.message=str(failure)
+                return {'RUNNING_MODAL'}
+            if arrangement_result is not None:return arrangement_result
+        if event.type == 'LEFTMOUSE' and event.value == 'DOUBLE_CLICK' and canvas and self.tool != 'KNIFE':
             edge = self.design_hit_edge()
             if edge:
                 self.cancel_gesture()
@@ -933,7 +955,7 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                     return {'RUNNING_MODAL'}
                 if button == 'HELP':
                     self.show_card('HELP')
-                    self.message = "Shortcuts: V select, P polygon, R rect, E ellipse, I internal, D dart, J sew, K pin, T tack, F fit, S snap, Ctrl+Z undo, Ctrl+Shift+Z redo."
+                    self.message = "Shortcuts: V select, P polygon, R rect, E ellipse, I internal, D dart, N cut, J sew, K pin, T tack, F fit, S snap, Ctrl+Z undo, Ctrl+Shift+Z redo."
                     return {'RUNNING_MODAL'}
                 return {'RUNNING_MODAL'}
         if press and not self.numeric:
@@ -984,19 +1006,22 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         if press and event.type == 'L' and not event.ctrl:
             self._scene.dd_lengths_visible = not self._scene.dd_lengths_visible
             return {'RUNNING_MODAL'}
-        if press and event.type in {'V', 'P', 'R', 'E', 'I', 'D', 'J', 'K', 'T'}:
+        if press and not event.ctrl and not event.alt and event.type in {'V', 'P', 'R', 'E', 'I', 'D', 'J', 'K', 'T', 'N'}:
             if event.type in {'P', 'R', 'E'}:
                 self.draw_shape = {'P': 'POLYGON', 'R': 'RECTANGLE', 'E': 'ELLIPSE'}[event.type]
-            elif event.type in {'I', 'D'}:
-                self.internal_tool = {'I': 'INTERNAL', 'D': 'DART'}[event.type]
+            elif event.type in {'I', 'D', 'N'}:
+                self.internal_tool = {'I': 'INTERNAL', 'D': 'DART', 'N': 'KNIFE'}[event.type]
             elif event.type in {'K', 'T'}:
                 self.pin_tool = {'K': 'PIN', 'T': 'TACK'}[event.type]
             tool_name = {'V': 'SELECT', 'P': 'POLYGON', 'R': 'RECTANGLE', 'E': 'ELLIPSE',
-                         'I': 'INTERNAL', 'D': 'DART', 'J': 'SEW', 'K': 'PIN', 'T': 'TACK'}[event.type]
+                         'I': 'INTERNAL', 'D': 'DART', 'J': 'SEW', 'K': 'PIN', 'T': 'TACK', 'N': 'KNIFE'}[event.type]
             self.choose_tool(tool_name)
             return {'RUNNING_MODAL'}
         if press and event.type in {'HOME', 'F'}:
             self.fit()
+            return {'RUNNING_MODAL'}
+        if self.tool == 'KNIFE' and canvas and event.type == 'LEFTMOUSE' and event.value == 'DOUBLE_CLICK':
+            self.finish_polygon(False)
             return {'RUNNING_MODAL'}
         if self.draft:
             if press and event.type in {'RET', 'NUMPAD_ENTER'}:
@@ -1055,6 +1080,12 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                     return {'RUNNING_MODAL'}
             if self.tool == 'SEW':
                 self.sew_click()
+            elif self.tool == 'KNIFE':
+                anchor = self.draft[-1] if self.draft else None
+                point = self.world_pointer(event, anchor)
+                if anchor is None or math.dist(point, anchor) > 1e-6:
+                    self.draft.append(point)
+                    self.preview = [point]
             elif self.tool in {'POLYGON', 'INTERNAL'}:
                 if self.tool == 'INTERNAL' and not self.draft and self.session.selected is None:
                     owner, _ = self.hit()

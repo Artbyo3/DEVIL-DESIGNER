@@ -19,7 +19,7 @@ class SeamTests(unittest.TestCase):
         d = Document.loads(json.dumps(old))
         self.assertEqual(d.patterns[0].id,self.s.document.patterns[0].id)
         self.assertEqual(d.seams,[])
-        self.assertEqual(json.loads(d.dumps())['version'],3)
+        self.assertEqual(json.loads(d.dumps())['version'],4)
 
     def test_sewing_round_trip_and_direction(self):
         self.s.sew(self.a,self.b)

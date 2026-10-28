@@ -117,8 +117,7 @@ class DesignTools:
         def operation():
             if action in {'STARTER_TEE', 'STARTER_TANK', 'STARTER_SKIRT'}:
                 from .starters import STARTER_GENERATORS
-                from . import arrangement, garment
-                label, generator, mode = STARTER_GENERATORS[action]
+                label,generator=STARTER_GENERATORS[action][:2]
                 measurements = None
                 if hasattr(self, 'reference') and getattr(self.reference, 'measurements', None):
                     measurements = self.reference.measurements
@@ -138,13 +137,6 @@ class DesignTools:
                 self.session.point_selection = []
                 self.persist()
                 if scene.dd_avatar:
-                    try:
-                        arrangement.arrange(bpy.context, mode)
-                    except Exception:
-                        try:
-                            garment.arrange(bpy.context)
-                        except Exception:
-                            pass
                     self.reveal_3d()
                 self.update_reference(bpy.context, align=False)
                 self.fit()
@@ -244,9 +236,13 @@ class DesignTools:
             elif action=='TRACE':self.session.trace()
             elif action=='PLACE':
                 if not p:raise ValueError('Select the pattern you want to place.')
+                if p.placement_mode!='LEGACY':
+                    self.reveal_3d();self.message='Click an arrangement point to place this piece. Right-click a point for Arrange flat.';return
                 self.pending_place=p.id;self.message='Click the avatar in the 3D view to place this pattern. Escape cancels.';return
             elif action=='WRAP':
                 if not p:raise ValueError('Select a pattern to wrap.')
+                if p.placement_mode!='LEGACY':
+                    self.reveal_3d();self.message='Click an arrangement point to wrap this piece around its bounding volume.';return
                 self.session.commit(lambda:setattr(p,'wrap_radius',scene.dd_wrap_radius))
                 self.persist();bpy.ops.devil_designer.build_panels('EXEC_DEFAULT')
             elif action=='REMOVE_ANCHOR':
@@ -287,6 +283,7 @@ class DesignTools:
             else:return
             self.persist();self.sync_selection();self.refresh_controls()
             self.message=self.sewing_message(self.session.document.seams[-1]) if action=='CHAIN_SEW' else 'Done: '+action.replace('_',' ').lower()+'.'
+            if scene.get('dd_arrangement_message'):self.message+=' '+scene['dd_arrangement_message']
             if self.session.last_repairs:self.message+=f' {self.session.last_repairs} affected sewing pair(s) removed; re-pair edited edges.'
         try:
             operation()

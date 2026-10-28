@@ -78,6 +78,7 @@ class MinimalCards:
         self._scene.dd_fabric = getattr(self.session.document, 'preset', 'COTTON')
         self.draw_shape = 'RECTANGLE'
         self.internal_tool = 'INTERNAL'
+        self.knife_sew = True
         self.pin_tool = 'PIN'
 
     def named_choice(self, value, choices):
@@ -166,6 +167,7 @@ class MinimalCards:
                 rows.append(('PAGE_BODY', f'More bodies ({self.card_page + 1}/{pages})', 'Next'))
             if not rows:
                 rows = [('INFO', 'No body in scene', 'Add in Blender')]
+            if scene.dd_avatar is not None:rows.append(('REGENERATE_VOLUMES','Regenerate body volumes','Resets point edits'))
         elif kind == 'LIBRARY':
             title = 'Garment library'
             rows = [('LOAD_' + str(index), item.stem.replace('.garment', ''), 'Load') for index, item in enumerate(self.library_items) if self.card_page * 8 <= index < (self.card_page + 1) * 8]
@@ -188,6 +190,9 @@ class MinimalCards:
             title = 'Internal'
             rows = [('SET_INTERNAL_PATH', 'Internal path', 'I'),
                     ('SET_INTERNAL_DART', 'Dart', 'D'),
+                    ('SET_INTERNAL_KNIFE', 'Cut', 'N'),
+                    ('KNIFE_MODE_SEW', 'Cut & Sew' + (' (active)' if self.knife_sew else ''), ''),
+                    ('KNIFE_MODE_CUT', 'Cut only' + (' (active)' if not self.knife_sew else ''), ''),
                     ('CUT', 'Cut along path', '')]
         elif kind == 'PIN_CHOOSER':
             title = 'Pin or tack'
@@ -221,6 +226,7 @@ class MinimalCards:
             rows.append(('PAIR_ACTIONS', 'FLIP_H', 'FLIP_V', 'Flip H', 'Flip V'))
             rows.append(('PAIR_ACTIONS', 'ROTATE_CW', 'ROTATE_CCW', 'Rotate 90°', 'Rotate -90°'))
             rows.append(('PAIR_ACTIONS', 'UNFOLD', 'DELETE_PIECE', 'Unfold', 'Delete'))
+            rows.append(('RESET_LAYOUT', 'Reset to 2D layout', ''))
         elif kind == 'CANVAS_MENU':
             title = 'Garment & View'
             rows.append(('MENU', 'BODY_CHANGE', 'Body', scene.dd_avatar.name if scene.dd_avatar else 'None'))
@@ -368,6 +374,8 @@ class MinimalCards:
         return Rect(rect.x + rect.w - 28 * scale, rect.y + rect.h - 28 * scale, 22 * scale, 22 * scale)
 
     def tool_hint(self):
+        if self.tool == 'KNIFE':
+            return ('Cut & Sew' if self.knife_sew else 'Cut') + ' / Click points / Enter or double-click finishes / Shift locks axis / Esc cancels'
         if self.draft:
             return 'Click to add points / Enter to finish / Esc to cancel'
         if self.tool == 'SEW':
@@ -426,7 +434,15 @@ class MinimalCards:
 
     def minimal_action(self, key):
         scene = self._scene
-        if key.startswith('INSP_GARMENT_FABRIC_'):
+        if key == 'RESET_LAYOUT':
+            from .live_panels import reset_piece
+            self.run_edit(lambda:reset_piece(self.session,self.session.selected),'Piece reset to its 2D layout position.')
+            self.card_kind=None
+        elif key=='REGENERATE_VOLUMES':
+            result=bpy.ops.devil_designer.arrangement_edit(action='REGENERATE')
+            self.message='Body volumes regenerated; point edits reset.' if 'FINISHED' in result else 'Could not regenerate body volumes.'
+            self.card_kind=None
+        elif key.startswith('INSP_GARMENT_FABRIC_'):
             name = key.removeprefix('INSP_GARMENT_FABRIC_')
             self.run_edit(lambda: self.session.set_document_preset(name), f'Default fabric set to {name.title()}.')
             scene.dd_fabric = name
@@ -473,9 +489,14 @@ class MinimalCards:
             self.draw_shape = tool_name
             self.choose_tool(tool_name)
             self.card_kind = None
+        elif key.startswith('KNIFE_MODE_'):
+            self.knife_sew = key == 'KNIFE_MODE_SEW'
+            self.internal_tool = 'KNIFE'
+            self.choose_tool('KNIFE')
+            self.card_kind = None
         elif key.startswith('SET_INTERNAL_'):
             sub = key.removeprefix('SET_INTERNAL_')
-            tool_name = 'INTERNAL' if sub == 'PATH' else 'DART'
+            tool_name = {'PATH': 'INTERNAL', 'DART': 'DART', 'KNIFE': 'KNIFE'}[sub]
             self.internal_tool = tool_name
             self.choose_tool(tool_name)
             self.card_kind = None
@@ -661,7 +682,7 @@ class MinimalCards:
                 else:
                     self.choose_tool(getattr(self, 'draw_shape', 'RECTANGLE'))
             elif button == 'INTERNAL':
-                if event.type == 'RIGHTMOUSE' or self.tool in {'INTERNAL', 'DART'}:
+                if event.type == 'RIGHTMOUSE' or self.tool in {'INTERNAL', 'DART', 'KNIFE'}:
                     self.show_card('INTERNAL_CHOOSER', (btn_rect.x + btn_rect.w + 10 * scale, btn_rect.y + btn_rect.h / 2))
                 else:
                     self.choose_tool(getattr(self, 'internal_tool', 'INTERNAL'))

@@ -64,8 +64,18 @@ not replace the source patterns with their triangulated approximation.
 
 ### Placement and constraints
 
-- Click-to-place panels on the chosen avatar.
-- Wrap/bend helpers for sleeves and waistbands.
+- Every committed closed piece has a live flat 3D panel mirroring its 2D layout;
+  outline edits and moves update it, and deletion removes it. The body silhouette
+  is a drawing reference only, not a placement projection.
+- Avatar-owned body-relative bounding volumes and editable arrangement points
+  provide optional click-to-wrap or tangent-flat placement. Points toggle with H.
+- Store stable volume/point IDs and relative G/R deltas in document version 4;
+  avatar setup is scene data, never bundled with a garment. Cuts retain their
+  parent's pattern-space origin so both halves preserve their current placement.
+- Simulate from current panels in any state. Unarranged intersections warn but
+  do not gate simulation. Reset to layout clears a record; Reset drape retains it.
+- Library loads resolve the same IDs on the new body's own volumes. Missing IDs
+  fall back visibly to layout. Versions 1–3 retain legacy placement and named layouts.
 - Pins and tacks, with clear attachment targets and release/edit controls.
 - Keep placement and bend state separate from the flat source pattern. Arranging
   a piece must not rewrite its 2D outline or its UV layout.
@@ -121,19 +131,19 @@ The README documents the UI and practical limits.
 
 | Requirement | Implementation |
 | --- | --- |
-| Bezier paths, polygon/rectangle/ellipse, corner conversion | Version 3 source document and dedicated editor tools |
+| Bezier paths, polygon/rectangle/ellipse, corner conversion | Version 4 source document, versions 1–3 migration, dedicated editor tools |
 | Numeric cm editing and live lengths | Custom fields, exact segment scaling, integrated Bezier arc lengths |
 | Point split/delete/merge, offsets, symmetry and Unfold | Transactional operations with undo, IDs and sewing repair feedback |
 | Internal paths, holes, slits, princess cuts, trace and darts | Selectable paths, constrained meshing, separate slit lips and auto-closing dart sewing |
 | Segment/free/partial/M:N sewing | Arc-length ranges/chains, four-click free sewing, reverse/remove and nonblocking mismatch warnings |
-| Click placement, wrapping, pins/tacks | Avatar-only ray picks, source-preserving bend geometry, native constraints |
+| Click placement, wrapping, pins/tacks | Avatar arrangement points and cylinders, live layout panels, native constraints; legacy ray/bend fallback |
 | Density, UV layout, face sets and groups | Constrained triangulation with shared persistent UV transform and piece metadata |
 | Per-pattern presets | Native stiffness groups; mass density remains an explicit shared weighted value |
 | Simulation/finalize | Native cloth, reset, evaluated output, matched seam welds, UV/group retention |
 | Garment library/refits | Portable editable designs, body-relative placement, optional height-based refit |
 | Per-piece mesh density | Named overrides, independent interiors, seam-compatible component boundaries |
 | Reference-image tracing | Persistent image placement/opacity and two-point measured scale calibration |
-| Multi-piece arrangement | Named Bodice, Sleeves, and Skirt bounds-based starting layouts |
+| Multi-piece arrangement | Stable avatar-owned volumes/points, relative G/R deltas, optional arrangement, legacy named layouts |
 | Persistent undo | Validated document-matched undo/redo stacks saved with the blend file |
 | Pose-stable tacks | Triangle weights and native evaluated-vertex parenting, with topology checks |
 | Crossing-cut recovery | Transactional preview, split-and-retry, and actionable unsupported-case refusal |
@@ -144,7 +154,10 @@ require manual repair. Slits expose their
 path mapping; use a cut into separate pieces for independently selectable lips.
 Tacks follow their bound skin triangle through deformation; topology changes
 require reattachment. Measured image scale cannot correct distorted photographs.
-Named layouts are non-anatomical placements, not automatic fitting. Cross-avatar
+Bounding-volume generation is heuristic and wrapping uses the radius at the point's
+height, not a fitted surface along the entire panel. Tall pieces may intersect wider
+neighboring body sections; inspect the starting fit. Regeneration resets avatar edits.
+Legacy named layouts are non-anatomical placements, not automatic fitting. Cross-avatar
 loading provides an editable starting fit,
 not automatic tailoring to all body proportions. These limits are visible in the
 usage documentation and do not imply Marvelous Designer feature/performance parity.

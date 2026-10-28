@@ -241,7 +241,7 @@ class OverlayControls:
                 self.confirm_action = action
                 self.confirm_message = self.message = prompt
                 return False
-        tools = {'SELECT', 'POLYGON', 'RECTANGLE', 'ELLIPSE', 'INTERNAL', 'DART',
+        tools = {'SELECT', 'POLYGON', 'RECTANGLE', 'ELLIPSE', 'INTERNAL', 'DART', 'KNIFE',
                  'SEW', 'FREE_SEW', 'PLACE', 'PIN', 'TACK'}
         if action in tools:
             return self.choose_tool(action)
