@@ -2,7 +2,7 @@ import copy
 import math
 import bpy
 from . import curves
-from .core import EdgeRef
+from .core import EdgeRef, update_auto_handles
 from .construction import chain_range,path_range
 from .presets import PRESETS
 
@@ -19,15 +19,33 @@ class DesignTools:
     def design_hit(self):
         self.hit_path='OUTER';self.hit_segment=None;self.hit_handle=None
         c=self.canvas_layout.canvas;s=self.canvas_layout.scale
-        selected=self.session.document.find(self.session.selected)
-        if selected and self.session.corner is not None:
+        candidates=[]
+        if self.session.selected and self.session.corner is not None:
+            candidates.append((self.session.selected,self.session.path,self.session.corner))
+        for pid,path_id,idx in self.session.selected_points:
+            if (pid,path_id,idx) not in candidates:candidates.append((pid,path_id,idx))
+        if self.session.segment:
+            seg=self.session.segment
+            p_seg=self.session.document.find(seg.pattern)
+            if p_seg:
+                try:
+                    nodes=p_seg.path(seg.path).vertices
+                    for vid in (seg.start,seg.end):
+                        idx=next((i for i,nd in enumerate(nodes) if nd.id==vid),None)
+                        if idx is not None and (seg.pattern,seg.path,idx) not in candidates:
+                            candidates.append((seg.pattern,seg.path,idx))
+                except (ValueError,KeyError):pass
+        for pid,path_id,idx in candidates:
+            p_cand=self.session.document.find(pid)
+            if not p_cand:continue
             try:
-                v=selected.path(self.session.path).vertices[self.session.corner]
+                v=p_cand.path(path_id).vertices[idx]
+                if getattr(v,'point_type','CORNER')=='AUTO':continue
                 for name in ('incoming','outgoing'):
                     vector=getattr(v,name)
                     if vector and math.dist(self.view.screen(curves.add((v.x,v.y),vector),c),self.pointer)<8*s:
-                        self.hit_path=self.session.path;self.hit_handle=name
-                        return selected,self.session.corner
+                        self.hit_path=path_id;self.hit_handle=name
+                        return p_cand,idx
             except (ValueError,IndexError):pass
         for p in reversed(self.session.document.patterns):
             for path,nodes,_,_ in p.loops():
@@ -165,7 +183,13 @@ class DesignTools:
                 elif p and self.session.corner is not None:
                     points=p.path(self.session.path).points;points[self.session.corner]=point;self.session.move(points)
                 else:raise ValueError('Select a point or a drawing tool for numeric entry.')
-            elif action=='CURVE':self.session.curve_point()
+            elif action=='CURVE':
+                new_t=self.session.curve_point()
+                self.message=f"Point type: {new_t.title()}."
+            elif action.startswith('POINT_TYPE_'):
+                ptype=action.removeprefix('POINT_TYPE_').upper()
+                self.session.set_point_type(ptype)
+                self.message=f"Point type: {ptype.title()}."
             elif action=='SPLIT':
                 if not self.session.segment:raise ValueError('Select a segment to split.')
                 self.session.split_segment(self.session.segment);self.session.segment=None
@@ -390,6 +414,17 @@ class DesignTools:
                 self.session.dart(edge,a,b,point);self.persist();self.dart_base=[];self.message='Dart created with automatic closing sewing.'
 
     def preview_pattern(self,pattern):
+        if self.gesture and self.gesture.get('mode')=='EDGE_BEND':
+            edge=self.gesture.get('edge')
+            if edge and pattern.id==edge.pattern:
+                result=copy.deepcopy(pattern)
+                nodes=result.path(edge.path).vertices
+                a=next((v for v in nodes if v.id==edge.start),None)
+                b=next((v for v in nodes if v.id==edge.end),None)
+                if a and b:
+                    a.outgoing=self.gesture.get('new_outgoing')
+                    b.incoming=self.gesture.get('new_incoming')
+                return result
         if self.gesture and self.gesture.get('mode')=='MOVE':
             dx,dy=self.gesture.get('delta',(0,0))
             is_piece=pattern.id in self.session.selected_patterns or (not self.session.selected_patterns and pattern.id==self.session.selected and self.session.corner is None and not self.session.selected_points)
@@ -423,13 +458,34 @@ class DesignTools:
                     pdx,pdy=curves.sub(self.preview[0],old[0])
                     for path in result.paths:
                         for v in path.vertices:v.x+=pdx;v.y+=pdy
-            if self.handle_preview and pattern.id==self.session.selected:
-                index,name,value=self.handle_preview;setattr(result.path(self.session.path).vertices[index],name,value)
+            for _,loop_nodes,closed,_ in result.loops():
+                update_auto_handles(loop_nodes,closed)
+            if self.handle_preview:
+                if len(self.handle_preview)==7:
+                    h_idx,h_name,h_val,o_name,o_val,pid,path_id=self.handle_preview
+                else:
+                    h_idx,h_name,h_val=self.handle_preview;o_name,o_val,pid,path_id=None,None,self.session.selected,'OUTER'
+                if pattern.id==pid:
+                    target_nodes=result.path(path_id).vertices
+                    if 0<=h_idx<len(target_nodes):
+                        setattr(target_nodes[h_idx],h_name,h_val)
+                        if o_name and o_val is not None:
+                            setattr(target_nodes[h_idx],o_name,o_val)
             return result
-        if pattern.id!=self.session.selected:return pattern
-        if not self.preview and not self.handle_preview:return pattern
-        result=copy.deepcopy(pattern)
-        nodes=result.path(self.session.path).vertices
         if self.handle_preview:
-            index,name,value=self.handle_preview;setattr(nodes[index],name,value)
+            if len(self.handle_preview)==7:
+                h_idx,h_name,h_val,o_name,o_val,pid,path_id=self.handle_preview
+            else:
+                h_idx,h_name,h_val=self.handle_preview;o_name,o_val,pid,path_id=None,None,self.session.selected,'OUTER'
+            if pattern.id==pid:
+                result=copy.deepcopy(pattern)
+                target_nodes=result.path(path_id).vertices
+                if 0<=h_idx<len(target_nodes):
+                    setattr(target_nodes[h_idx],h_name,h_val)
+                    if o_name and o_val is not None:
+                        setattr(target_nodes[h_idx],o_name,o_val)
+                return result
+        if pattern.id!=self.session.selected:return pattern
+        if not self.preview:return pattern
+        result=copy.deepcopy(pattern)
         return result

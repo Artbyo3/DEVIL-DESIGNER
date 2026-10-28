@@ -67,7 +67,40 @@ BASELINE = {
             'sha256': '4b2c06e9564c43edbba7c2420ca55d2786983462b5d20dd76a091c9cc74c6e22',
         },
     },
+    'legacy': {
+        'Legacy panel': {
+            'n_verts': 437,
+            'n_faces': 770,
+            'n_uvs': 2310,
+            'sha256': '34d40d375a4ec934906b470997d2f7a65b23f8f59b074c7a275b031a19cbe882',
+        },
+    },
 }
+
+LEGACY_DESIGN_JSON = json.dumps({
+    'version': 3,
+    'preset': 'COTTON',
+    'patterns': [{
+        'id': 'legacy_01',
+        'name': 'Legacy panel',
+        'vertices': [
+            {'x': 0.0, 'y': 0.0, 'id': 'v0', 'incoming': None, 'outgoing': None},
+            {'x': 0.3, 'y': 0.0, 'id': 'v1', 'incoming': None, 'outgoing': None},
+            {'x': 0.3, 'y': 0.4, 'id': 'v2', 'incoming': (-0.05, 0.0), 'outgoing': (0.05, 0.0)},
+            {'x': 0.15, 'y': 0.45, 'id': 'v3', 'incoming': (0.05, 0.0), 'outgoing': (-0.05, 0.0)},
+            {'x': 0.0, 'y': 0.4, 'id': 'v4', 'incoming': None, 'outgoing': None},
+        ],
+        'paths': [],
+        'preset': 'COTTON',
+        'wrap_radius': 0.0,
+        'features': [],
+        'mesh_density': 'AUTO',
+        'fabric_override': False,
+    }],
+    'seams': [],
+    'anchors': [],
+    'uv_layout': {'origin': [0.0, 0.0], 'scale': 0.45},
+})
 
 
 def get_saved_designs():
@@ -80,17 +113,28 @@ def get_saved_designs():
     s.add_ellipse((0, 0), (0.4, 0.4))
     s.document.patterns[0].name = 'Ellipse'
     designs['ellipse'] = s.document
-    return {name: Document.loads(doc.dumps()) for name, doc in designs.items()}
+    result = {name: Document.loads(doc.dumps()) for name, doc in designs.items()}
+    result['legacy'] = Document.loads(LEGACY_DESIGN_JSON)
+    return result
 
 
 class MeshingRegressionTests(unittest.TestCase):
     def test_saved_designs_structure(self):
         designs = get_saved_designs()
-        self.assertEqual(set(designs.keys()), {'tee', 'tank', 'skirt', 'ellipse'})
+        self.assertEqual(set(designs.keys()), {'tee', 'tank', 'skirt', 'ellipse', 'legacy'})
         for name, doc in designs.items():
             self.assertTrue(doc.patterns)
             for p in doc.patterns:
                 self.assertIn(p.name, BASELINE[name])
+
+    def test_legacy_points_migration_preserves_point_types(self):
+        doc = Document.loads(LEGACY_DESIGN_JSON)
+        p = doc.patterns[0]
+        self.assertEqual(p.vertices[0].point_type, 'CORNER')
+        self.assertEqual(p.vertices[1].point_type, 'CORNER')
+        self.assertEqual(p.vertices[2].point_type, 'SMOOTH')
+        self.assertEqual(p.vertices[3].point_type, 'SMOOTH')
+        self.assertEqual(p.vertices[4].point_type, 'CORNER')
 
     @unittest.skipUnless(bpy is not None, 'Requires Blender')
     def test_meshing_output_matches_baseline(self):

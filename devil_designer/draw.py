@@ -5,7 +5,7 @@ import gpu
 from gpu_extras.batch import batch_for_shader
 from mathutils import Matrix
 from .canvas import Rect, grid_step
-from .core import area, triangulate, contains
+from .core import area, triangulate, contains, Vertex
 from . import curves
 from .controls import CONTROL_SETTINGS as SETTINGS
 from .icons import icon_spans
@@ -391,9 +391,11 @@ class Renderer:
                     for i, v in enumerate(nodes):
                         point = view.screen((v.x, v.y), c)
                         chosen = (source.id, path, i) in ed.session.selected_points or (active and (ed.session.corner == i or i in ed.session.point_selection))
+                        edge_endpoint = bool(ed.session.segment and ed.session.segment.pattern == source.id and ed.session.segment.path == path and v.id in (ed.session.segment.start, ed.session.segment.end))
+                        show_handles = (chosen or edge_endpoint) and getattr(v, 'point_type', 'CORNER') != 'AUTO'
                         if selected or chosen or not ed.minimal_ui:
                             self.dot(point, 5.5 if chosen else 3.8, ACCENT if chosen else (*color, 1))
-                        if chosen:
+                        if show_handles:
                             for name in ('incoming', 'outgoing'):
                                 handle = getattr(v, name)
                                 if handle is not None:
@@ -488,15 +490,40 @@ class Renderer:
                 self.triangle_cache.clear()
 
             if ed.draft:
-                pts = [view.screen(point, c) for point in ed.draft]
-                self.lines(pts, ACCENT, 2.2, True)
+                raw_coords = [(v.x, v.y) if hasattr(v, 'x') else v for v in ed.draft]
+                pts = [view.screen(pt, c) for pt in raw_coords]
+                for i in range(len(ed.draft) - 1):
+                    v0 = ed.draft[i]
+                    v1 = ed.draft[i + 1]
+                    if getattr(v0, 'outgoing', None) is not None or getattr(v1, 'incoming', None) is not None:
+                        ctrl = curves.controls(v0, v1)
+                        seg_pts = [view.screen(pt, c) for _, pt in curves.table(ctrl)]
+                        self.lines(seg_pts, ACCENT, 2.2, True)
+                    else:
+                        self.lines([pts[i], pts[i + 1]], ACCENT, 2.2, True)
                 if ed.preview:
-                    end = view.screen(ed.preview[-1], c)
-                    self.lines([pts[-1], end], (*ACCENT[:3], 0.6), 1.4)
-                    length = math.dist(ed.draft[-1], ed.preview[-1]) * 100
-                    self.text(end[0] + 10 * s, end[1] + 10 * s, f"{length:.1f} cm", 10, ACCENT)
-                for point in pts:
+                    end_pt = ed.preview[-1]
+                    end_scr = view.screen(end_pt, c)
+                    last_v = ed.draft[-1]
+                    if getattr(last_v, 'outgoing', None) is not None:
+                        dummy = Vertex(end_pt[0], end_pt[1])
+                        ctrl = curves.controls(last_v, dummy)
+                        prev_pts = [view.screen(pt, c) for _, pt in curves.table(ctrl)]
+                        self.lines(prev_pts, (*ACCENT[:3], 0.6), 1.4)
+                        length = curves.length(ctrl) * 100
+                    else:
+                        self.lines([pts[-1], end_scr], (*ACCENT[:3], 0.6), 1.4)
+                        length = math.dist(raw_coords[-1], end_pt) * 100
+                    self.text(end_scr[0] + 10 * s, end_scr[1] + 10 * s, f"{length:.1f} cm", 10, ACCENT)
+                for i, v in enumerate(ed.draft):
+                    point = pts[i]
                     self.dot(point, 4, ACCENT)
+                    for name in ('incoming', 'outgoing'):
+                        handle = getattr(v, name, None)
+                        if handle is not None:
+                            h_end = view.screen(curves.add(raw_coords[i], handle), c)
+                            self.lines([point, h_end], (0.65, 0.75, 0.8, 0.75), 1.2)
+                            self.dot(h_end, 4, (0.98, 0.73, 0.32, 1))
                 self.dot(pts[0], 7, (*ACCENT[:3], 0.25))
                 self.dot(pts[0], 3.5, ACCENT)
             elif ed.gesture and ed.gesture['mode'] in {'RECT', 'ELLIPSE'} and ed.preview:

@@ -1,6 +1,7 @@
 import math
 import bpy
-from .core import Document, Session
+from .core import Document, Session, Vertex
+from . import curves
 from .canvas import Layout, View, Rect
 from .interaction import OverlayControls
 from .minimal import MinimalCards, minimal_layout
@@ -491,6 +492,7 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         return False
 
     def finish_polygon(self, closed=True):
+        self.gesture = None
         points = list(self.draft)
         if self.tool == 'INTERNAL' or self._scene.dd_internal_mode:
             action = lambda: self.session.add_path(points, closed)
@@ -544,6 +546,27 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         self.pointer = (event.mouse_x - self._region.x, event.mouse_y - self._region.y)
         panel = self.canvas_layout.panel.contains(*self.pointer)
         canvas = self.canvas_layout.canvas.contains(*self.pointer)
+        if event.type == 'LEFTMOUSE' and event.value == 'DOUBLE_CLICK' and canvas:
+            edge = self.design_hit_edge()
+            if edge:
+                self.cancel_gesture()
+                click_pt = self.world_pointer(event)
+                control = self.session.document.edge_curve(edge)
+                frac, _ = curves.closest_fraction(control, click_pt)
+                frac = max(0.01, min(0.99, frac))
+                new_v = [None]
+                def apply_split():
+                    v = self.session.document.split_edge(edge, frac)
+                    new_v[0] = v
+                if self.run_edit(lambda: self.session.commit(apply_split), "Point added on edge."):
+                    if new_v[0]:
+                        p = self.session.document.find(edge.pattern)
+                        nodes = p.path(edge.path).vertices
+                        idx = nodes.index(new_v[0])
+                        self.session.select_point(edge.pattern, edge.path, idx, toggle=False)
+                        self.sync_selection()
+                        self.message = f"Point added ({new_v[0].point_type.title()})."
+                return {'RUNNING_MODAL'}
         press = event.value == 'PRESS'
         if event.type == 'TIMER':
             self._timer_ticks = getattr(self, '_timer_ticks', 0) + 1
@@ -627,6 +650,9 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                 return result
         if event.ctrl and event.type == 'S':
             return {'PASS_THROUGH'}
+        if self.gesture and self.gesture.get('mode') == 'DRAFT_POINT':
+            if event.type not in {'MOUSEMOVE', 'LEFTMOUSE'} or (event.type == 'LEFTMOUSE' and press):
+                self.gesture = None
         if self.gesture:
             mode = self.gesture['mode']
             if event.type in {'ESC', 'RIGHTMOUSE'} and press:
@@ -642,10 +668,84 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                     a = self.gesture['start']
                     b = self.world_pointer(event)
                     self.preview = [a, (b[0], a[1]), b, (a[0], b[1])]
+                elif mode == 'DRAFT_POINT':
+                    cur_world = self.view.world(self.pointer, self.canvas_layout.canvas)
+                    v = self.gesture['vertex']
+                    anchor = (v.x, v.y)
+                    raw_dx = cur_world[0] - anchor[0]
+                    raw_dy = cur_world[1] - anchor[1]
+                    if math.hypot(raw_dx, raw_dy) > 4 * self.canvas_layout.scale / self.view.zoom:
+                        self.gesture['moved'] = True
+                    if self.gesture.get('moved'):
+                        if event.ctrl:
+                            dx = round((anchor[0] + raw_dx) / 0.01) * 0.01 - anchor[0]
+                            dy = round((anchor[1] + raw_dy) / 0.01) * 0.01 - anchor[1]
+                        else:
+                            dx, dy = raw_dx, raw_dy
+                        if event.shift:
+                            dist = math.hypot(dx, dy)
+                            if dist > 1e-9:
+                                ang = math.atan2(dy, dx)
+                                step = math.radians(15)
+                                ang = round(ang / step) * step
+                                dx = dist * math.cos(ang)
+                                dy = dist * math.sin(ang)
+                        v.outgoing = (dx, dy)
+                        v.incoming = (-dx, -dy)
+                        v.point_type = 'SMOOTH'
+                elif mode == 'EDGE_BEND':
+                    world_now = self.view.world(self.pointer, self.canvas_layout.canvas)
+                    if math.dist(self.gesture['start'], world_now) > 2 * self.canvas_layout.scale / self.view.zoom:
+                        self.gesture['moved'] = True
+                    delta = (world_now[0] - self.gesture['p_orig'][0], world_now[1] - self.gesture['p_orig'][1])
+                    t0 = self.gesture['t0']
+                    w1 = 3 * ((1 - t0) ** 2) * t0
+                    w2 = 3 * (1 - t0) * (t0 ** 2)
+                    d1 = 1 - t0
+                    d2 = t0
+                    denom = w1 * d1 + w2 * d2
+                    k = 1.0 / denom if abs(denom) > 1e-12 else 1.0
+                    dp1 = (k * d1 * delta[0], k * d1 * delta[1])
+                    dp2 = (k * d2 * delta[0], k * d2 * delta[1])
+                    c1 = (self.gesture['orig_c1'][0] + dp1[0], self.gesture['orig_c1'][1] + dp1[1])
+                    c2 = (self.gesture['orig_c2'][0] + dp2[0], self.gesture['orig_c2'][1] + dp2[1])
+                    anchor_a = self.gesture['anchor_a']
+                    anchor_b = self.gesture['anchor_b']
+                    self.gesture['new_outgoing'] = (c1[0] - anchor_a[0], c1[1] - anchor_a[1])
+                    self.gesture['new_incoming'] = (c2[0] - anchor_b[0], c2[1] - anchor_b[1])
                 elif mode == 'HANDLE':
                     target = self.view.world(self.pointer, self.canvas_layout.canvas)
-                    self.handle_preview = (self.session.corner, self.gesture['handle'],
-                        (target[0] - self.gesture['anchor'][0], target[1] - self.gesture['anchor'][1]))
+                    anchor = self.gesture['anchor']
+                    raw_dx = target[0] - anchor[0]
+                    raw_dy = target[1] - anchor[1]
+                    if event.ctrl:
+                        dx = round((anchor[0] + raw_dx) / 0.01) * 0.01 - anchor[0]
+                        dy = round((anchor[1] + raw_dy) / 0.01) * 0.01 - anchor[1]
+                    else:
+                        dx, dy = raw_dx, raw_dy
+                    if event.shift:
+                        dist = math.hypot(dx, dy)
+                        if dist > 1e-9:
+                            ang = math.atan2(dy, dx)
+                            step = math.radians(15)
+                            ang = round(ang / step) * step
+                            dx = dist * math.cos(ang)
+                            dy = dist * math.sin(ang)
+                    pat = self.session.document.find(self.gesture['pattern_id'])
+                    v = pat.path(self.gesture['path_id']).vertices[self.gesture['corner']]
+                    ptype = getattr(v, 'point_type', 'CORNER')
+                    h_name = self.gesture['handle']
+                    o_name = 'incoming' if h_name == 'outgoing' else 'outgoing'
+                    o_val = None
+                    if ptype == 'SMOOTH':
+                        o_h = getattr(v, o_name)
+                        cur_len = math.hypot(dx, dy)
+                        if cur_len > 1e-9:
+                            u = (dx / cur_len, dy / cur_len)
+                            o_len = math.hypot(*o_h) if o_h is not None else cur_len
+                            o_val = (-u[0] * o_len, -u[1] * o_len)
+                    self.handle_preview = (self.gesture['corner'], h_name, (dx, dy), o_name, o_val,
+                                           self.gesture['pattern_id'], self.gesture['path_id'])
                 elif mode == 'MOVE':
                     ref = self.gesture.get('ref_pos', self.gesture['start'])
                     world_now = self.view.world(self.pointer, self.canvas_layout.canvas)
@@ -678,6 +778,33 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                 elif mode == 'RECT' and self.preview:
                     action = (lambda: self.session.add_path(self.preview, True)) if self._scene.dd_internal_mode else (lambda: self.session.add(self.preview))
                     self.run_edit(action, 'Rectangle created.')
+                elif mode == 'DRAFT_POINT':
+                    v = self.gesture['vertex']
+                    if not self.gesture.get('moved'):
+                        v.point_type = 'CORNER'
+                        v.incoming = None
+                        v.outgoing = None
+                    self.gesture = None
+                    self.preview = [self.world_pointer(event, (v.x, v.y))]
+                    return {'RUNNING_MODAL'}
+                elif mode == 'EDGE_BEND':
+                    if self.gesture.get('moved'):
+                        edge = self.gesture['edge']
+                        new_out = self.gesture['new_outgoing']
+                        new_in = self.gesture['new_incoming']
+                        def apply_bend():
+                            a, b = self.session.document.edge_vertices(edge)
+                            a.outgoing = new_out
+                            b.incoming = new_in
+                            if getattr(a, 'point_type', 'CORNER') == 'AUTO':
+                                a.point_type = 'CORNER'
+                            elif getattr(a, 'point_type', 'CORNER') == 'SMOOTH' and a.incoming is not None:
+                                a.point_type = 'CORNER'
+                            if getattr(b, 'point_type', 'CORNER') == 'AUTO':
+                                b.point_type = 'CORNER'
+                            elif getattr(b, 'point_type', 'CORNER') == 'SMOOTH' and b.outgoing is not None:
+                                b.point_type = 'CORNER'
+                        self.run_edit(lambda: self.session.commit(apply_bend), "Edge bent.")
                 elif mode == 'HANDLE' and self.handle_preview:
                     self.run_edit(lambda: self.session.set_handle(*self.handle_preview), 'Bezier handle updated.')
                 elif mode == 'MOVE':
@@ -876,11 +1003,14 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                 self.finish_polygon(self.tool != 'INTERNAL')
             elif press and event.type == 'BACK_SPACE':
                 self.draft.pop()
+                self.gesture = None
             elif press and event.type == 'RIGHTMOUSE':
                 self.cancel_gesture()
                 self.message = "Draft cancelled."
             elif event.type == 'MOUSEMOVE':
-                self.preview = [self.world_pointer(event, self.draft[-1])]
+                if not self.gesture or self.gesture.get('mode') != 'DRAFT_POINT':
+                    prev_pt = (self.draft[-1].x, self.draft[-1].y) if hasattr(self.draft[-1], 'x') else self.draft[-1]
+                    self.preview = [self.world_pointer(event, prev_pt)]
         if self.seam_selected and press and event.type == 'B':
             self.run_edit(lambda: self.session.reverse_seam(self.seam_selected), 'Seam direction reversed.')
             return {'RUNNING_MODAL'}
@@ -931,13 +1061,17 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                     if owner:
                         self.session.selected = owner.id
                         self.session.path = 'OUTER'
-                if len(self.draft) >= 3 and math.dist(self.pointer, self.view.screen(self.draft[0], self.canvas_layout.canvas)) < 12 * self.canvas_layout.scale:
+                first_pt = (self.draft[0].x, self.draft[0].y) if (self.draft and hasattr(self.draft[0], 'x')) else (self.draft[0] if self.draft else None)
+                if len(self.draft) >= 3 and first_pt and math.dist(self.pointer, self.view.screen(first_pt, self.canvas_layout.canvas)) < 12 * self.canvas_layout.scale:
                     self.finish_polygon(True)
                 else:
-                    point = self.world_pointer(event, self.draft[-1] if self.draft else None)
-                    if not self.draft or math.dist(point, self.draft[-1]) > 1e-6:
-                        self.draft.append(point)
+                    prev_pt = (self.draft[-1].x, self.draft[-1].y) if (self.draft and hasattr(self.draft[-1], 'x')) else (self.draft[-1] if self.draft else None)
+                    point = self.world_pointer(event, prev_pt)
+                    if not self.draft or math.dist(point, prev_pt) > 1e-6:
+                        v = Vertex(point[0], point[1], point_type='CORNER')
+                        self.draft.append(v)
                         self.preview = [point]
+                        self.gesture = dict(mode='DRAFT_POINT', vertex=v, start=point, moved=False)
             elif self.tool in {'RECTANGLE', 'ELLIPSE'}:
                 self.gesture = {'mode': 'RECT' if self.tool == 'RECTANGLE' else 'ELLIPSE', 'start': self.world_pointer(event)}
             elif self.tool == 'PLACE':
@@ -970,7 +1104,8 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                     v = p.path(self.hit_path).vertices[corner]
                     self.session.path = self.hit_path
                     self.session.corner = corner
-                    self.gesture = dict(mode='HANDLE', handle=self.hit_handle, anchor=(v.x, v.y))
+                    self.gesture = dict(mode='HANDLE', handle=self.hit_handle, anchor=(v.x, v.y),
+                                        corner=corner, pattern_id=p.id, path_id=self.hit_path)
                     self.sync_selection()
                     return {'RUNNING_MODAL'}
                 cursor_world = self.view.world(self.pointer, self.canvas_layout.canvas)
@@ -995,6 +1130,23 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                 else:
                     self.session.path = self.hit_path
                     self.session.segment = self.hit_segment
+                    if self.hit_segment and not event.shift:
+                        edge = self.hit_segment
+                        a, b = self.session.document.edge_vertices(edge)
+                        ctrl = self.session.document.edge_curve(edge)
+                        click_w = self.view.world(self.pointer, self.canvas_layout.canvas)
+                        t_frac, _ = curves.closest_fraction(ctrl, click_w)
+                        t0 = max(0.15, min(0.85, curves.parameter(ctrl, t_frac)))
+                        p_orig = curves.evaluate(ctrl, t0)
+                        self.gesture = dict(
+                            mode='EDGE_BEND', edge=edge, start=click_w, t0=t0, p_orig=p_orig,
+                            orig_c1=ctrl[1], orig_c2=ctrl[2], anchor_a=(a.x, a.y), anchor_b=(b.x, b.y),
+                            moved=False, new_outgoing=a.outgoing, new_incoming=b.incoming
+                        )
+                        self.session.corner = None
+                        self.session.point_selection = []
+                        self.sync_selection()
+                        return {'RUNNING_MODAL'}
                     if event.shift:
                         self.session.select_piece(p.id, toggle=True)
                         self.sync_selection()
