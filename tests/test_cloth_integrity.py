@@ -20,5 +20,11 @@ class ClothIntegrityTests(unittest.TestCase):
                 hook='    ensure_collision(scene)\n    layering.prepare_colliders(context)\n'
                 self.assertEqual(segment.count(hook),1)
                 segment=segment.replace(hook,'    ensure_collision(scene)\n',1)
+                shrink_hook='    if any(seam.shrink for seam in doc.seams):\n        seam_shrink.apply(doc,obj,cloth,maps,plan)\n'
+                self.assertEqual(segment.count(shrink_hook),1)
+                segment=segment.replace(shrink_hook,'',1)
+                scoped='(.001 if any(seam.shrink for seam in doc.seams) else .003)/metres_per_unit(scene)'
+                self.assertEqual(segment.count(scoped),1)
+                segment=segment.replace(scoped,'.003/metres_per_unit(scene)',1)
             actual[node.name]=hashlib.sha256(segment.encode()).hexdigest()
         self.assertEqual(actual,expected)

@@ -813,9 +813,9 @@ class Renderer:
                 self.round_rect(rect, ELEVATED if hover else FIELD_BG, radius=7)
                 self.text(rect.x + rect.w / 2, rect.y + 8 * scale, label, 10, TEXT_SUB, True)
             elif key.startswith('TOGGLE_'):
-                active = ed.snap if key == 'TOGGLE_SNAP' else ed._scene.dd_reference_visible if key == 'TOGGLE_GUIDE' else ed._scene.dd_lengths_visible
+                active = ed.snap if key == 'TOGGLE_SNAP' else ed._scene.dd_reference_visible if key == 'TOGGLE_GUIDE' else ed.fit_overlay.enabled if key == 'TOGGLE_FIT_MAP' else ed._scene.dd_lengths_visible
                 self.round_rect(rect, ACCENT_BG if active else (ELEVATED if hover else FIELD_BG), radius=5)
-                char = 'S' if key == 'TOGGLE_SNAP' else 'H' if key == 'TOGGLE_GUIDE' else 'L'
+                char = 'S' if key == 'TOGGLE_SNAP' else 'H' if key == 'TOGGLE_GUIDE' else 'F' if key == 'TOGGLE_FIT_MAP' else 'L'
                 self.text(rect.x + rect.w / 2, rect.y + 6 * scale, char, 10, ACCENT if active else TEXT_SUB, True)
             elif key.endswith('_OPTIONS'):
                 self.lines([(rect.x, rect.y + 10 * scale), (rect.x, rect.y + rect.h - 10 * scale)], SURFACE_OUTLINE)
@@ -851,7 +851,9 @@ class Renderer:
                 elif key == 'GARMENT':
                     position = (rect.x + 20 * scale, rect.y - 18 * scale)
                 tip_label = ('Snap: On' if ed.snap else 'Snap: Off') if key == 'TOGGLE_SNAP' else                             ('Body guide: On' if ed._scene.dd_reference_visible else 'Body guide: Off') if key == 'TOGGLE_GUIDE' else                             ('Lengths: On' if ed._scene.dd_lengths_visible else 'Lengths: Off') if key == 'TOGGLE_LENGTHS' else blocker or label
-                tip_shortcut = 'S' if key == 'TOGGLE_SNAP' else 'H' if key == 'TOGGLE_GUIDE' else 'L' if key == 'TOGGLE_LENGTHS' else shortcuts.get(key, 'Right-click for options' if key in {'DRAW', 'INTERNAL', 'PIN', 'SEW'} else '')
+                if key == 'TOGGLE_FIT_MAP':
+                    tip_label = 'Fit map: On' if ed.fit_overlay.enabled else 'Fit map: Off'
+                tip_shortcut = 'S' if key == 'TOGGLE_SNAP' else 'H' if key == 'TOGGLE_GUIDE' else 'L' if key == 'TOGGLE_LENGTHS' else 'F' if key == 'TOGGLE_FIT_MAP' else shortcuts.get(key, 'Right-click for options' if key in {'DRAW', 'INTERNAL', 'PIN', 'SEW'} else '')
                 tooltip = (tip_label, tip_shortcut, position)
         for rect, identity, label in ed.seam_badges():
             self.round_rect(rect, ACCENT_BG, radius=10)

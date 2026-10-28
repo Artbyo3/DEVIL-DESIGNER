@@ -21,7 +21,7 @@ def minimal_layout(layout, pending=False, confirmation=False, playing=False, kep
     layout.header = Rect(panel.x, panel.y + panel.h - 32 * scale, panel.w, 32 * scale)
     layout.footer = Rect(panel.x, panel.y, panel.w, 0)
     dock_height = min(540 * scale, panel.h - 112 * scale)
-    dock_width = (60 if dock_height >= 460 * scale else 48) * scale
+    dock_width = 72 * scale
     layout.rail = Rect(panel.x + 14 * scale, panel.y + (panel.h - dock_height) / 2, dock_width, dock_height)
     layout.buttons = {}
     tools = [('SELECT', 'Select'), ('DRAW', 'Draw'), ('INTERNAL', 'Internal'), ('SEW', 'Sew'),
@@ -33,11 +33,12 @@ def minimal_layout(layout, pending=False, confirmation=False, playing=False, kep
         layout.buttons[key] = (Rect(layout.rail.x + 4 * scale,
             layout.rail.y + dock_height - (index + 1) * row_height + 2 * scale,
             dock_width - 8 * scale, row_height - 4 * scale), label)
-    chip_w = (dock_width - 12 * scale) / 3
+    chip_w = (dock_width - 14 * scale) / 4
     chip_y = layout.rail.y + 4 * scale
     layout.buttons['TOGGLE_SNAP'] = (Rect(layout.rail.x + 4 * scale, chip_y, chip_w, indicator_h), 'Snap')
     layout.buttons['TOGGLE_GUIDE'] = (Rect(layout.rail.x + 4 * scale + chip_w + 2 * scale, chip_y, chip_w, indicator_h), 'Guide')
     layout.buttons['TOGGLE_LENGTHS'] = (Rect(layout.rail.x + 4 * scale + (chip_w + 2 * scale) * 2, chip_y, chip_w, indicator_h), 'Lengths')
+    layout.buttons['TOGGLE_FIT_MAP'] = (Rect(layout.rail.x + 4 * scale + (chip_w + 2 * scale) * 3, chip_y, chip_w, indicator_h), 'Fit map')
     right = panel.x + panel.w - 14 * scale
     layout.buttons['CLOSE'] = (Rect(right - 24 * scale, panel.y + panel.h - 30 * scale, 24 * scale, 24 * scale), 'Close')
     right -= 28 * scale
@@ -308,6 +309,9 @@ class MinimalCards:
             if seam:
                 _, _, diff, pct = doc.seam_stats(seam)
                 rows.append(('INFO', 'Mismatch', f'{diff * 100:.1f} cm ({pct:.1f}%)'))
+                rows.append(('CHOICES', 'Shrink', ('SEAM_SHRINK', ('0%', '10%', '20%', '30%'), f'{seam.shrink}%')))
+                rows.append(('INFO', 'Nonzero: 1 mm self-collision', ''))
+                rows.append(('INFO', 'Other folds may change', ''))
             rows.append(('PAIR_ACTIONS', 'FLIP_SEAM', 'REMOVE_SEAM', 'Reverse', 'Remove'))
         elif kind == 'REFERENCE_IMAGE':
             title = 'Reference image'
@@ -616,6 +620,10 @@ class MinimalCards:
         elif key in {'FLIP_H', 'FLIP_V', 'ROTATE_CW', 'ROTATE_CCW'}:
             self.perform_action(key)
             self.card_kind = None
+        elif key.startswith('SEAM_SHRINK_'):
+            shrink = int(key.removeprefix('SEAM_SHRINK_').removesuffix('%'))
+            self.run_edit(lambda: self.session.set_seam_shrink(self.seam_selected, shrink), f'Seam Shrink set to {shrink}%.')
+            self.card_kind = None
         elif key == 'FLIP_SEAM':
             if self.seam_selected:
                 self.run_edit(lambda: self.session.reverse_seam(self.seam_selected), 'Seam direction reversed.')
@@ -715,6 +723,8 @@ class MinimalCards:
                 self._scene.dd_reference_visible = not self._scene.dd_reference_visible
             elif button in {'TOGGLE_LENGTHS', 'LENGTHS'}:
                 self._scene.dd_lengths_visible = not self._scene.dd_lengths_visible
+            elif button == 'TOGGLE_FIT_MAP':
+                self.fit_overlay.toggle()
             elif button in {'UNDO', 'REDO'}:
                 self.perform_action(button)
             elif button == 'SEW':
