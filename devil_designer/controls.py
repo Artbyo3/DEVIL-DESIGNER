@@ -150,6 +150,8 @@ class Inspector:
                     ('obj_h', pat_name, pat_meta, pat_swatch),
                     ('preset_chips', 'PRESET_CHIP', ''),
                     ('pair_buttons', 'DUPLICATE', 'MIRROR_SEW', 'Duplicate', 'Mirror Sew'),
+                    ('pair_buttons', 'FLIP_H', 'FLIP_V', 'Flip H', 'Flip V'),
+                    ('pair_buttons', 'ROTATE_CW', 'ROTATE_CCW', 'Rotate 90°', 'Rotate -90°'),
                 ]
             rows += [
                 ('info', 'PATTERN_INFO', ''),

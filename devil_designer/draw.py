@@ -368,7 +368,7 @@ class Renderer:
 
             for index, source in enumerate(ed.session.document.patterns):
                 pat = ed.preview_pattern(source)
-                selected = ed.session.selected == pat.id
+                selected = (pat.id in ed.session.selected_patterns) if ed.session.selected_patterns else (ed.session.selected == pat.id)
                 world = pat.outline()
                 outline = [view.screen(point, c) for point in world]
                 holes = [path.outline() for path in pat.paths if path.role == 'HOLE']
@@ -390,8 +390,8 @@ class Renderer:
 
                     for i, v in enumerate(nodes):
                         point = view.screen((v.x, v.y), c)
-                        chosen = active and (ed.session.corner == i or i in ed.session.point_selection)
-                        if selected or not ed.minimal_ui:
+                        chosen = (source.id, path, i) in ed.session.selected_points or (active and (ed.session.corner == i or i in ed.session.point_selection))
+                        if selected or chosen or not ed.minimal_ui:
                             self.dot(point, 5.5 if chosen else 3.8, ACCENT if chosen else (*color, 1))
                         if chosen:
                             for name in ('incoming', 'outgoing'):
@@ -441,6 +441,16 @@ class Renderer:
                             (point[0] - 3 * s, point[1] + 3 * s), (point[0] + 3 * s, point[1] - 3 * s)], BG)
 
             self.seams(ed)
+
+            if ed.gesture and ed.gesture.get('mode') == 'BOX_SELECT':
+                p0 = ed.gesture['start']
+                p1 = ed.pointer
+                rx, ry = min(p0[0], p1[0]), min(p0[1], p1[1])
+                rw, rh = abs(p1[0] - p0[0]), abs(p1[1] - p0[1])
+                if rw > 1 and rh > 1:
+                    box_rect = Rect(rx, ry, rw, rh)
+                    self.round_rect(box_rect, (*ACCENT[:3], 0.12), radius=3)
+                    self.round_rect_outline(box_rect, (*ACCENT[:3], 0.55), radius=3, width=1.0)
 
             if ed.tool == 'SEW' and ed.pending_edge:
                 doc = ed.session.document
@@ -507,7 +517,7 @@ class Renderer:
                 self.minimal_workspace(ed)
                 return
 
-            guide_txt = f"{ed.tool.title()}: {ed.message}" if ed.tool != 'SELECT' else "Drag a point to reshape · Shift to constrain"
+            guide_txt = ed.tool_hint() if ed.tool == 'SELECT' else f"{ed.tool.title()}: {ed.message}"
             hud_r = Rect(c.x + 16 * s, c.y + 14 * s, min(360 * s, c.w - 32 * s), 28 * s)
             self.round_rect(hud_r, (0.098, 0.129, 0.153, 0.92), radius=6)
             self.round_rect_outline(hud_r, BORDER_SUBTLE, radius=6, width=1)
@@ -909,7 +919,7 @@ class Renderer:
                         self.draw_icon('CHECK', control.x + control.w - 18 * scale, control.y + control.h / 2, 16, ACCENT)
                     elif value:
                         self.text(control.x + control.w * .60, control.y + 15 * scale, str(value), 11, TEXT_SUB, max_width=control.w * .38)
-                    elif key not in {'INFO', 'CUT', 'TRACE', 'SPLIT', 'CURVE', 'MERGE', 'DELETE', 'REMOVE_SEAM', 'REMOVE_ANCHOR', 'RESET', 'DELETE_PIECE', 'INSP_FIT', 'DUPLICATE', 'MIRROR_SEW', 'UNFOLD'}:
+                    elif key not in {'INFO', 'CUT', 'TRACE', 'SPLIT', 'CURVE', 'MERGE', 'DELETE', 'REMOVE_SEAM', 'REMOVE_ANCHOR', 'RESET', 'DELETE_PIECE', 'INSP_FIT', 'DUPLICATE', 'MIRROR_SEW', 'UNFOLD', 'FLIP_H', 'FLIP_V', 'ROTATE_CW', 'ROTATE_CCW'}:
                         self.draw_icon('DISCLOSURE', control.x + control.w - 16 * scale, control.y + control.h / 2, 14, MUTED)
         if ed.confirm_action or ed.pending_edge or ed.chain_stage or ed.pending_place or ed.pending_tack or ed.dart_base:
             panel = layout.panel

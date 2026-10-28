@@ -175,9 +175,25 @@ class DesignTools:
             elif action=='MERGE':self.session.merge_points(self.session.point_selection)
             elif action=='OFFSET':self.session.offset(scene.dd_offset)
             elif action == 'DUPLICATE':
-                if not p:raise ValueError('Select a pattern to duplicate.')
+                if not p and not self.session.selected_patterns:raise ValueError('Select a pattern to duplicate.')
                 self.session.duplicate()
                 self.message = 'Pattern duplicated (Shift D).'
+            elif action == 'FLIP_H':
+                if not p and not self.session.selected_patterns and not self.session.selected_points and self.session.corner is None:raise ValueError('Select a piece or points to flip.')
+                self.session.flip_horizontal()
+                self.message = 'Pattern flipped horizontally.'
+            elif action == 'FLIP_V':
+                if not p and not self.session.selected_patterns and not self.session.selected_points and self.session.corner is None:raise ValueError('Select a piece or points to flip.')
+                self.session.flip_vertical()
+                self.message = 'Pattern flipped vertically.'
+            elif action in {'ROTATE_CW','ROTATE_90'}:
+                if not p and not self.session.selected_patterns and not self.session.selected_points and self.session.corner is None:raise ValueError('Select a piece or points to rotate.')
+                self.session.rotate_90(clockwise=True)
+                self.message = 'Pattern rotated 90 degrees clockwise.'
+            elif action == 'ROTATE_CCW':
+                if not p and not self.session.selected_patterns and not self.session.selected_points and self.session.corner is None:raise ValueError('Select a piece or points to rotate.')
+                self.session.rotate_90(clockwise=False)
+                self.message = 'Pattern rotated 90 degrees counter-clockwise.'
             elif action.startswith('SET_PRESET_'):
                 p_val = action.replace('SET_PRESET_', '')
                 if not p:raise ValueError('Select a pattern to change fabric.')
@@ -328,6 +344,14 @@ class DesignTools:
         if not self.numeric and press:
             if event.type == 'D' and event.shift and not event.ctrl and not event.alt:
                 self.perform_action('DUPLICATE');return {'RUNNING_MODAL'}
+            if event.type == 'H' and event.shift and not event.ctrl and not event.alt:
+                self.perform_action('FLIP_H');return {'RUNNING_MODAL'}
+            if event.type == 'V' and event.shift and not event.ctrl and not event.alt:
+                self.perform_action('FLIP_V');return {'RUNNING_MODAL'}
+            if event.type == 'R' and event.shift and not event.ctrl and not event.alt:
+                self.perform_action('ROTATE_CW');return {'RUNNING_MODAL'}
+            if event.type in {'LEFT_BRACKET','RIGHT_BRACKET'}:
+                self.perform_action('ROTATE_CW' if event.type=='RIGHT_BRACKET' else 'ROTATE_CCW');return {'RUNNING_MODAL'}
             if event.type in {'E','I','K','T','D','G'} and not event.ctrl and not event.alt:
                 if event.type == 'E':
                     self.draw_shape = 'ELLIPSE'
@@ -366,17 +390,46 @@ class DesignTools:
                 self.session.dart(edge,a,b,point);self.persist();self.dart_base=[];self.message='Dart created with automatic closing sewing.'
 
     def preview_pattern(self,pattern):
+        if self.gesture and self.gesture.get('mode')=='MOVE':
+            dx,dy=self.gesture.get('delta',(0,0))
+            is_piece=pattern.id in self.session.selected_patterns or (not self.session.selected_patterns and pattern.id==self.session.selected and self.session.corner is None and not self.session.selected_points)
+            pts_on_pat={idx for (pid,path_id,idx) in self.session.selected_points if pid==pattern.id}
+            if not is_piece and not pts_on_pat and pattern.id==self.session.selected and self.session.corner is not None:
+                pts_on_pat.add(self.session.corner)
+            if not is_piece and not pts_on_pat and (pattern.id!=self.session.selected or not self.handle_preview):
+                return pattern
+            result=copy.deepcopy(pattern)
+            if abs(dx)>1e-9 or abs(dy)>1e-9:
+                if is_piece:
+                    for _,nodes,_,_ in result.loops():
+                        for v in nodes:v.x+=dx;v.y+=dy
+                else:
+                    for pid,path_id,idx in self.session.selected_points:
+                        if pid==pattern.id:
+                            try:
+                                nodes=result.path(path_id).vertices
+                                if 0<=idx<len(nodes):nodes[idx].x+=dx;nodes[idx].y+=dy
+                            except (ValueError,KeyError,IndexError):pass
+                    if not self.session.selected_points and pattern.id==self.session.selected and self.session.corner is not None:
+                        try:
+                            nodes=result.path(self.session.path).vertices
+                            if 0<=self.session.corner<len(nodes):nodes[self.session.corner].x+=dx;nodes[self.session.corner].y+=dy
+                        except (ValueError,KeyError,IndexError):pass
+            elif self.preview and pattern.id==self.session.selected:
+                nodes=result.path(self.session.path).vertices
+                old=[(v.x,v.y) for v in nodes]
+                for v,point in zip(nodes,self.preview):v.x,v.y=point
+                if self.session.path=='OUTER' and self.session.corner is None:
+                    pdx,pdy=curves.sub(self.preview[0],old[0])
+                    for path in result.paths:
+                        for v in path.vertices:v.x+=pdx;v.y+=pdy
+            if self.handle_preview and pattern.id==self.session.selected:
+                index,name,value=self.handle_preview;setattr(result.path(self.session.path).vertices[index],name,value)
+            return result
         if pattern.id!=self.session.selected:return pattern
         if not self.preview and not self.handle_preview:return pattern
         result=copy.deepcopy(pattern)
         nodes=result.path(self.session.path).vertices
-        if self.gesture and self.gesture['mode']=='MOVE' and self.preview:
-            old=[(v.x,v.y) for v in nodes]
-            for v,point in zip(nodes,self.preview):v.x,v.y=point
-            if self.session.path=='OUTER' and self.session.corner is None:
-                dx,dy=curves.sub(self.preview[0],old[0])
-                for path in result.paths:
-                    for v in path.vertices:v.x+=dx;v.y+=dy
         if self.handle_preview:
             index,name,value=self.handle_preview;setattr(nodes[index],name,value)
         return result

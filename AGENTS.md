@@ -21,7 +21,8 @@
 ---
 
 ## ARTIST-FACING ANSWERS AND FEATURE REVIEWS
-- Lead with the recommendation and the artist benefit, not implementation details. Use plain, concise language by default.\n- For feature reviews, use "Add [feature] because [practical artist benefit]", "Do not add [feature] because [reason]", or "Prototype [feature] first because [uncertainty]". Explain whether the feature removes a real obstacle when making fitted VRChat clothing in Blender.
+- Lead with the recommendation and the artist benefit, not implementation details. Use plain, concise language by default.
+- For feature reviews, use "Add [feature] because [practical artist benefit]", "Do not add [feature] because [reason]", or "Prototype [feature] first because [uncertainty]". Explain whether the feature removes a real obstacle when making fitted VRChat clothing in Blender.
 - Include technical details only when they are necessary to understand the recommendation, a meaningful limitation, or a decision the artist needs to make. Do not default to source paths, function names, plumbing, or implementation walkthroughs.
 - Keep build priorities distinct from deferred conveniences and rejected features. Do not turn a review request into authorization to implement features.
 - Still verify claims against the source and report uncertainty honestly; concise answers must not hide important risks or imply an untested feature works.
@@ -29,7 +30,8 @@
 
 ## ARCHITECTURE & IMPLEMENTATION PRINCIPLES
 1. **Garment & Simulation Math Integrity**:
-   - Zero modifications to garment algorithms, physics equations, or simulation math in `core.py`, `garment.py`, `meshing.py`, `placement.py`.
+   - Strictly locked and protected: simulation algorithms and cloth loop/modifiers in `garment.py`, meshing output and Delaunay CDT math in `meshing.py`, sewing spring force formulations in `garment.py`, and 3D placement math in `placement.py` and `tack_binding.py`.
+   - Now editable: the pattern-editing code in `core.py` and `construction.py` (specifically pattern selection state, multi-piece and point selection, point and handle movement and editing, segment splitting, and internal/boundary path cutting). Downstream simulation, meshing output, sewing springs, and placement math must remain untouched and verified by automated meshing regression tests.
 2. **UI & Rendering Architecture**:
    - Blender native GPU rendering (`gpu.shader.from_builtin('UNIFORM_COLOR')`, `POLYLINE_UNIFORM_COLOR`).
    - Shared computed bounds for rendering and hit detection.
@@ -82,14 +84,14 @@
 
 ## DEVELOPER WORKFLOW SHORTCUTS
 Run the unified developer runner from the repository root:
-- `.\dev.cmd --quick`: Fast headless unit tests (includes dead code, unused import, and rule checks)
-- `.\dev.cmd --test`: Complete verification across all 9 test suites
-- `.\dev.cmd --build`: Packages extension ZIP in `dist/`, validates it with Blender, and syncs to user addons
-- `.\dev.cmd --shots`: Clean, unobstructed in-engine stage screenshots (~14s)
-- `.\dev.cmd --inspect`: Slices and validates UI contrast and layout bounds
-- `.\dev.cmd --all`: Full end-to-end test, build, screenshot, and inspect pass
-- `.\dev.cmd --keep-scratch`: Combine with a task to retain artifacts for manual review
-- `.\dev.cmd --clean`: Delete only the disposable scratch workspace after review
+- `.\\dev.cmd --quick`: Fast headless unit tests (includes dead code, unused import, and rule checks)
+- `.\\dev.cmd --test`: Complete verification across all 9 test suites
+- `.\\dev.cmd --build`: Packages extension ZIP in `dist/`, validates it with Blender, and syncs to user addons
+- `.\\dev.cmd --shots`: Clean, unobstructed in-engine stage screenshots (~14s)
+- `.\\dev.cmd --inspect`: Slices and validates UI contrast and layout bounds
+- `.\\dev.cmd --all`: Full end-to-end test, build, screenshot, and inspect pass
+- `.\\dev.cmd --keep-scratch`: Combine with a task to retain artifacts for manual review
+- `.\\dev.cmd --clean`: Delete only the disposable scratch workspace after review
 
 All test suites must pass 100% with no regressions on every change.
 
