@@ -23,6 +23,7 @@ def entries(scene):
 
 
 def scale_document(doc,factor):
+    for pair in doc.linked_pairs:pair['transform']=[value*factor for value in pair['transform']]
     for p in doc.patterns:
         for _,nodes,_,_ in p.loops():
             for v in nodes:

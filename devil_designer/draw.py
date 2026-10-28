@@ -959,7 +959,7 @@ class Renderer:
                         self.draw_icon('CHECK', control.x + control.w - 18 * scale, control.y + control.h / 2, 16, ACCENT)
                     elif value:
                         self.text(control.x + control.w * .60, control.y + 15 * scale, str(value), 11, TEXT_SUB, max_width=control.w * .38)
-                    elif key not in {'INFO', 'CUT', 'TRACE', 'SPLIT', 'CURVE', 'MERGE', 'DELETE', 'REMOVE_SEAM', 'REMOVE_ANCHOR', 'RESET', 'DELETE_PIECE', 'INSP_FIT', 'DUPLICATE', 'MIRROR_SEW', 'UNFOLD', 'FLIP_H', 'FLIP_V', 'ROTATE_CW', 'ROTATE_CCW'}:
+                    elif key not in {'INFO', 'CUT', 'TRACE', 'SPLIT', 'CURVE', 'MERGE', 'DELETE', 'REMOVE_SEAM', 'REMOVE_ANCHOR', 'RESET', 'DELETE_PIECE', 'INSP_FIT', 'DUPLICATE', 'MIRROR_SEW', 'UNFOLD', 'FLIP_H', 'FLIP_V', 'ROTATE_CW', 'ROTATE_CCW', 'CLONE_LINKED', 'CLONE_BACK', 'TOGGLE_LINKED'}:
                         self.draw_icon('DISCLOSURE', control.x + control.w - 16 * scale, control.y + control.h / 2, 14, MUTED)
         if ed.confirm_action or ed.pending_edge or ed.chain_stage or ed.pending_place or ed.pending_tack or ed.dart_base:
             panel = layout.panel

@@ -134,6 +134,41 @@ more points. Self-intersecting or collapsed results are rejected. **Unfold** joi
 the mirrored halves along the selected straight edge. **Mirror with seam** creates
 a separate reflected piece and a sewing pair; self-sewing darts are copied as well.
 
+## Linked editing
+
+Right-click a piece and choose **Clone as linked twin** to create a mirrored,
+linked copy named after it. The twin sits to the right of the existing pattern
+islands without overlapping them. Creating the entire twin is one Undo step.
+Nothing creates twins automatically, and cloning or linking never adds, copies,
+or removes sewing.
+
+A piece arranged at a front point also offers **Clone as Back**. This places the
+linked copy at the back point of that same body volume, with fresh arrangement
+deltas. Ordinary linked clones start unarranged; an unarranged Back clone also
+starts in the flat layout. Arrangement and moving whole pieces remain independent.
+
+Point moves, handles, corner/curve changes, added/split/merged/deleted points,
+exact coordinates and exact edge lengths mirror in either direction. Internal
+paths mirror too. Drag previews show both outlines; each completed edit is one
+undoable change. Topology edits still use the existing sewing repair rules.
+
+Use **Linked twin Off** in the piece menu to stop sharing edits without changing
+either outline. **Linked twin On** reapplies the selected piece onto its existing
+twin. To link two existing pieces, select both and right-click the selection,
+then choose **Linked twin**; the active piece supplies the replacement outline.
+Relinking refuses a replacement that would invalidate existing sewing rather
+than silently removing it. Unsew the affected edges explicitly before retrying.
+Each piece has at most one linked twin. Switching a pair off remembers it for
+single-piece relinking; explicitly linking to a different selected piece or
+creating a new linked clone instead replaces that inactive pairing.
+
+Deleting either member removes the pairing; Undo restores it. Duplicating one
+member creates an independent copy while leaving the original pair intact.
+Duplicating both members creates a separate pair. **Mirror with seam** retains
+its existing explicit sewing behavior and does not add a member to the pair.
+Links and their On/Off state survive library save/load, body-height refits,
+save/reopen, and undo/redo. Older designs have no links and retain their behavior.
+
 ## Internal shapes, cuts, trace, and darts
 
 Select the target piece before using I, or click inside it to select an owner.

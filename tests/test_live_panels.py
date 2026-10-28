@@ -56,6 +56,43 @@ class LivePanelTests(unittest.TestCase):
         self.scene.dd_document=Document().dumps();live_panels.sync(bpy.context)
         self.assertFalse(garment.generated(self.scene,'panel'))
 
+    def test_linked_back_clone_live_panels_library_refit_and_reopen(self):
+        from mathutils import Vector
+        from devil_designer import garment,live_panels,arrangement,library
+        from devil_designer.linked_editing import clone_twin
+        live_panels.arrange_piece(bpy.context,self.session.selected,'chest','front')
+        session=Session(garment.document(self.scene));source=session.document.patterns[0].id;session.selected=source
+        clone=clone_twin(session,True);self.scene.dd_document=session.document.dumps()
+        panels={panel['dd_pattern_id']:panel for panel in self.panels()}
+        self.assertEqual(len(panels),2);self.assertFalse(garment.document(self.scene).seams)
+        for identity,point in ((source,'front'),(clone.id,'back')):
+            resolved=arrangement.resolve_point(bpy.context,'chest',point)
+            self.assertLess((panels[identity].matrix_world.translation-Vector(resolved['point'])).length,1e-5)
+            self.assertGreater((panels[identity].matrix_world.to_3x3() @ Vector((0,0,1))).dot(Vector(resolved['normal'])),.999)
+        session.selected=source;session.corner=1;session.move_selection(.01,.01)
+        self.scene.dd_document=session.document.dumps();self.assertEqual(len(self.panels()),2)
+        self.scene.dd_library_dir=str(Path(__file__).resolve().parents[1]/'scratch'/'linked-library')
+        self.scene.dd_library_refit=True
+        saved=library.save(bpy.context,'Linked back')
+        expected=garment.document(self.scene).linked_pairs
+        self.assertEqual(json.loads(saved.read_text(encoding='utf-8'))['document']['linked_pairs'],expected)
+        self.body.scale.z=1.5;bpy.context.view_layer.update()
+        loaded=library.load(bpy.context,self.scene.dd_library_selected)
+        self.assertEqual(loaded.linked_pairs[0]['mapping'],expected[0]['mapping'])
+        self.assertAlmostEqual(loaded.linked_pairs[0]['transform'][0],expected[0]['transform'][0]*1.5)
+        edited=Session(loaded);edited.selected=source;edited.corner=1;edited.move_selection(.01,.01)
+        first,second=edited.document.patterns
+        self.assertAlmostEqual(first.vertices[1].x+second.vertices[1].x,edited.document.linked_pairs[0]['transform'][0])
+        self.scene.dd_document=edited.document.dumps();self.panels()
+        expected=self.scene.dd_document
+        output=Path(__file__).resolve().parents[1]/'scratch'/'linked-roundtrip.blend'
+        bpy.ops.wm.save_as_mainfile(filepath=str(output));bpy.ops.wm.open_mainfile(filepath=str(output))
+        self.scene=bpy.context.scene
+        self.assertEqual(self.scene.dd_document,expected)
+        self.assertEqual(len(self.panels()),2);self.assertFalse(garment.document(self.scene).seams)
+        garment.compile_garment(bpy.context)
+        self.assertEqual(len(garment.document(self.scene).patterns),2);self.assertFalse(garment.document(self.scene).seams)
+
     def test_arranged_front_back_are_outward_and_keep_outline_and_uv(self):
         from mathutils import Vector
         from devil_designer import garment,live_panels,arrangement

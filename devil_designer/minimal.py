@@ -223,6 +223,12 @@ class MinimalCards:
             density_label = {'AUTO': 'Garment default', 'COARSE': 'Coarse', 'STANDARD': 'Standard', 'FINE': 'Fine'}.get(pattern.mesh_density, pattern.mesh_density.title())
             rows.append(('MENU', 'PIECE_DENSITY_MENU', 'Mesh density', density_label))
             rows.append(('PAIR_ACTIONS', 'DUPLICATE', 'MIRROR_SEW', 'Duplicate', 'Mirror'))
+            rows.append(('CLONE_LINKED', 'Clone as linked twin', ''))
+            if pattern.arrangement and pattern.arrangement['point']=='front':
+                rows.append(('CLONE_BACK', 'Clone as Back', ''))
+            from .linked_editing import pair_for
+            linked=pair_for(doc,pattern.id)
+            rows.append(('TOGGLE_LINKED', 'Linked twin', 'On' if linked and linked['enabled'] else 'Off'))
             rows.append(('PAIR_ACTIONS', 'FLIP_H', 'FLIP_V', 'Flip H', 'Flip V'))
             rows.append(('PAIR_ACTIONS', 'ROTATE_CW', 'ROTATE_CCW', 'Rotate 90°', 'Rotate -90°'))
             rows.append(('PAIR_ACTIONS', 'UNFOLD', 'DELETE_PIECE', 'Unfold', 'Delete'))
@@ -319,6 +325,10 @@ class MinimalCards:
                         ('MENU', 'PIECE_FABRIC_MENU', 'Fabric', ''),
                         ('MENU', 'PIECE_DENSITY_MENU', 'Mesh density', ''),
                         ('DELETE', 'Delete', 'Del')]
+                if pieces==2:
+                    from .linked_editing import pair_for
+                    linked=pair_for(doc,self.session.selected)
+                    rows.append(('TOGGLE_LINKED', 'Linked twin', 'On' if linked and linked['enabled'] else 'Off'))
             else:
                 title = f'{points} points'
                 first_pt = next(iter(self.session.selected_points), None)
@@ -352,6 +362,9 @@ class MinimalCards:
         scale = self.canvas_layout.scale
         width = min(220 * scale, self.canvas_layout.panel.w - 24 * scale)
         row_heights = [64 if row[0] == 'CHOICES_FABRIC' else 48 if row[0] == 'CHOICES' else 32 for row in rows]
+        if kind=='PIECE':
+            row_height=min(32,(self.canvas_layout.panel.h/scale-130)/max(1,len(rows)))
+            row_heights=[max(24,row_height) for row in rows]
         height = (38 + sum(row_heights)) * scale
         bounds = self.canvas_layout.panel
         anchor_pt = self.card_anchor or (bounds.x + 80 * scale, bounds.y + bounds.h - 100 * scale)
@@ -434,7 +447,19 @@ class MinimalCards:
 
     def minimal_action(self, key):
         scene = self._scene
-        if key == 'RESET_LAYOUT':
+        if key in {'CLONE_LINKED','CLONE_BACK','TOGGLE_LINKED'}:
+            from .linked_editing import clone_twin,toggle_link
+            def apply():
+                if key=='TOGGLE_LINKED':return toggle_link(self.session)
+                if key=='CLONE_BACK':
+                    pattern=self.session.document.find(self.session.selected)
+                    if pattern and pattern.arrangement:
+                        from .arrangement import resolve_point
+                        resolve_point(bpy.context,pattern.arrangement['volume'],'back')
+                return clone_twin(self.session,key=='CLONE_BACK')
+            self.run_edit(apply,'Linked editing updated. Sewing unchanged.')
+            self.card_kind=None
+        elif key == 'RESET_LAYOUT':
             from .live_panels import reset_piece
             self.run_edit(lambda:reset_piece(self.session,self.session.selected),'Piece reset to its 2D layout position.')
             self.card_kind=None

@@ -57,6 +57,37 @@ def check_interaction_regressions(workspace, event, point, check):
         check(not workspace.session.document.patterns, 'one Undo removes the complete starter panel')
         workspace.perform_action('REDO')
         check(len(workspace.session.document.patterns) == 1, 'Redo restores the editable starter panel')
+        workspace.show_card('PIECE')
+        controls={row[0] for rect,row in workspace.minimal_card()[2]}
+        check({'CLONE_LINKED','TOGGLE_LINKED'}<=controls and 'CLONE_BACK' not in controls,
+              'piece menu offers explicit linked clone and toggle without an unarranged Back action')
+        workspace.minimal_action('CLONE_LINKED')
+        check(len(workspace.session.document.patterns)==2 and len(workspace.session.document.linked_pairs)==1 and
+              not workspace.session.document.seams and workspace.card_kind is None,
+              'contextual linked clone creates two live panels without sewing and dismisses immediately')
+        before_preview=workspace.session.document.dumps()
+        original,twin=workspace.session.document.patterns
+        workspace.session.corner=1;workspace.session.selected_patterns.clear()
+        workspace.gesture=dict(mode='MOVE',delta=(.02,.01))
+        first_preview=workspace.preview_pattern(original);twin_preview=workspace.preview_pattern(twin)
+        check(abs(first_preview.vertices[1].x-original.vertices[1].x+.02)<1e-8 and
+              abs(twin_preview.vertices[1].x-twin.vertices[1].x-.02)<1e-8 and
+              workspace.session.document.dumps()==before_preview,
+              'linked point drag previews both outlines without mutating the document')
+        workspace.gesture=None
+        workspace.handle_preview=(1,'outgoing',(.01,.02),None,None,twin.id,'OUTER')
+        first_preview=workspace.preview_pattern(original);twin_preview=workspace.preview_pattern(twin)
+        check(first_preview.vertices[1].outgoing==(-.01,.02) and twin_preview.vertices[1].outgoing==(.01,.02) and
+              workspace.session.document.dumps()==before_preview,
+              'linked handle preview mirrors both ways without changing undo or source geometry')
+        workspace.handle_preview=None;workspace.session.corner=None;workspace.session.selected_patterns={twin.id}
+        workspace.minimal_action('TOGGLE_LINKED')
+        check(not workspace.session.document.linked_pairs[0]['enabled'],'contextual Linked twin Off unlinks the pair')
+        workspace.minimal_action('TOGGLE_LINKED')
+        check(workspace.session.document.linked_pairs[0]['enabled'],'contextual Linked twin On relinks the pair')
+        workspace.perform_action('UNDO');workspace.perform_action('UNDO');workspace.perform_action('UNDO')
+        check(len(workspace.session.document.patterns)==1 and not workspace.session.document.linked_pairs,
+              'one clone undo removes the complete linked twin after undoing the two toggles')
         workspace.session = Session(Document())
         workspace.session.add([(0, 0), (.3, 0), (.3, .4), (0, .4)])
         workspace.persist()
