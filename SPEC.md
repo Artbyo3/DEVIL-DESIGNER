@@ -39,6 +39,25 @@ not replace the source patterns with their triangulated approximation.
   changes their topology, remap references where possible and explain any repairs
   required. Undo restores both geometry and its relationships.
 
+### Linked editing
+
+Linked editing uses explicit pair records in the design document, with an On/Off
+state, a mirrored pattern-space transform, and stable point/path correspondence.
+Clone as linked twin is one transaction and places a nonoverlapping mirrored
+island. Clone as Back uses the same volume's back point only when explicitly
+requested from a front-arranged piece. No drawing, placement, or simulation step
+automatically clones or sews a piece.
+
+Outline and internal-path edits mirror bidirectionally within the same undo
+transaction. Whole-piece layout movement and 3D arrangement remain independent.
+Remove Linked Editing changes only the enabled state; Apply Linked Editing
+replaces the other outline from the active member. Two selected unpaired pieces
+can be linked explicitly. Linking refuses invalidation of existing sewing; it
+never creates, copies, or removes seams. Point topology edits retain the existing
+sewing remapping and repair contract. Deletion, paired/independent duplication,
+explicit Mirror with seam, document/library persistence, refits and history must
+preserve valid pair membership. Designs without pair records remain unchanged.
+
 ### Internal lines, cuts, and darts
 
 - Internal lines and closed internal shapes, distinct from the outer boundary.

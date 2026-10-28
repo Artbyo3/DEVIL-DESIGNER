@@ -266,12 +266,13 @@ def validate_arrangement(record):
 
 
 class Document:
-    def __init__(self,patterns=None,seams=None,anchors=None,uv_layout=None,preset='COTTON'):
+    def __init__(self,patterns=None,seams=None,anchors=None,uv_layout=None,preset='COTTON',linked_pairs=None):
         self.patterns=patterns or []
         self.seams=seams or []
         self.anchors=anchors or []
         self.uv_layout=uv_layout
         self.preset=preset
+        self.linked_pairs=linked_pairs or []
 
     def dumps(self):
         return json.dumps(dict(version=4,preset=getattr(self,'preset','COTTON'),patterns=[dict(id=p.id,name=p.name,\
@@ -279,7 +280,7 @@ class Document:
             vertices=[vertex_data(v) for v in q.vertices]) for q in p.paths],preset=p.preset,wrap_radius=p.wrap_radius,\
             features=p.features,mesh_density=p.mesh_density,fabric_override=getattr(p,'fabric_override',False),placement_mode=p.placement_mode,arrangement=p.arrangement,panel_origin=p.panel_origin) for p in self.patterns],seams=[dict(id=s.id,a=vars(s.a),b=vars(s.b),reverse=s.reverse,\
             chain_a=[vars(e) for e in s.side(0)],chain_b=[vars(e) for e in s.side(1)]) for s in self.seams],\
-            anchors=[vars(a) for a in self.anchors],uv_layout=self.uv_layout),separators=(',',':'),allow_nan=False)
+            anchors=[vars(a) for a in self.anchors],uv_layout=self.uv_layout,**({'linked_pairs':self.linked_pairs} if self.linked_pairs else {})),separators=(',',':'),allow_nan=False)
 
     @classmethod
     def loads(cls,value):
@@ -303,6 +304,7 @@ class Document:
                     p.fabric_override=bool(item.get('preset') is not None and item.get('preset')!=doc_preset)
                 patterns.append(p)
             document=cls(patterns,uv_layout=data.get('uv_layout'),preset=doc_preset)
+            document.linked_pairs=data.get('linked_pairs',[])
             if data['version']>=2:
                 for item in data['seams']:
                     document.seams.append(Seam(EdgeRef(**item['a']),EdgeRef(**item['b']),item['reverse'],item['id'],
@@ -383,6 +385,8 @@ class Document:
                     used.setdefault(key,[]).append((lo,hi))
 
     def validate(self):
+        from .linked_editing import validate_pairs
+        validate_pairs(self)
         ids=set()
         def identity(value):
             if not isinstance(value,str) or not value or value in ids: raise ValueError('Pattern, path, point, and feature IDs must be unique.')
@@ -486,6 +490,8 @@ class Document:
         for seam in self.seams:
             sides=[[new for old in seam.side(i) for new in remap(old)] for i in (0,1)]
             seam.chain_a,seam.chain_b=tuple(sides[0]),tuple(sides[1]); seam.a,seam.b=sides[0][0],sides[1][0]
+        from .linked_editing import split_partner
+        split_partner(self,edge,fraction,v)
         return v
 
 
@@ -667,12 +673,14 @@ class Session(ConstructionMixin):
 
 
     def commit(self,operation):
+        from .linked_editing import synchronize
         before=self.document.dumps()
         before_sel=self.get_selection_state()
         old_seams={s.id for s in self.document.seams}
         self.last_repairs=0
         try:
             operation()
+            synchronize(self.document,Document.loads(before),self.selected)
             self.document.prune_seams()
             self.document.validate()
             self.last_repairs=len(old_seams-{s.id for s in self.document.seams})
@@ -970,6 +978,8 @@ class Session(ConstructionMixin):
             for orig,new in clones:
                 self.document.patterns.append(new)
                 clone_relationships(self.document,orig,new)
+            from .linked_editing import duplicate_pairs
+            duplicate_pairs(self.document,pattern_map,id_map)
             dup_ids={orig.id for orig,_ in clones}
             if len(dup_ids)>1:
                 for seam in list(self.document.seams):

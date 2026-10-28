@@ -411,6 +411,17 @@ class DesignTools:
                 self.session.dart(edge,a,b,point);self.persist();self.dart_base=[];self.message='Dart created with automatic closing sewing.'
 
     def preview_pattern(self,pattern):
+        from .linked_editing import pair_for,synchronize
+        pair=pair_for(self.session.document,pattern.id)
+        if not pair or not pair['enabled'] or not (self.gesture or self.handle_preview):
+            return self._unlinked_preview(pattern)
+        staged=copy.copy(self.session.document)
+        staged.linked_pairs=copy.deepcopy(self.session.document.linked_pairs)
+        staged.patterns=[copy.deepcopy(self._unlinked_preview(piece)) if piece.id in pair['members'] else piece for piece in self.session.document.patterns]
+        synchronize(staged,self.session.document,self.session.selected)
+        return staged.find(pattern.id)
+
+    def _unlinked_preview(self,pattern):
         if self.gesture and self.gesture.get('mode')=='EDGE_BEND':
             edge=self.gesture.get('edge')
             if edge and pattern.id==edge.pattern:
