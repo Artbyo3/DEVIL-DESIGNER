@@ -3,13 +3,13 @@
 A movable 2D clothing-pattern editor with Bezier drafting, internal construction,
 sewing, avatar placement, native Blender cloth, and a reusable local garment library.
 
-By **Artbyo3**. **0.7.0**, tested in **Blender 5.2.3 LTS**.
+By **Artbyo3**. **0.8.0**, tested in **Blender 5.2.3 LTS**.
 Requires Blender 5.2+.
 
 ## Install and open
 
 Run `python tools/build.py` to create the installable archive, then install
-`dist/devil_designer-0.7.0.zip` through **Edit > Preferences > Add-ons >
+`dist/devil_designer-0.8.0.zip` through **Edit > Preferences > Add-ons >
 menu > Install from Disk**. Disable the previous version and restart Blender to
 unload its old Python modules. Enable Devil Designer if necessary.
 
@@ -350,7 +350,7 @@ the actual modal editor and leave isolated factory previews.
 
     python tools/build.py
     python tools/check_public.py
-    blender --background --factory-startup --command extension validate dist/devil_designer-0.7.0.zip
+    blender --background --factory-startup --command extension validate dist/devil_designer-0.8.0.zip
 
 The publication audit checks source, archives, and reachable Git history. GitHub's
 public noreply identity is permitted as a merge committer only. The already-published
