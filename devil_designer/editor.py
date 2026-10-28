@@ -646,12 +646,31 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                     target = self.view.world(self.pointer, self.canvas_layout.canvas)
                     self.handle_preview = (self.session.corner, self.gesture['handle'],
                         (target[0] - self.gesture['anchor'][0], target[1] - self.gesture['anchor'][1]))
-                else:
-                    target = self.world_pointer(event)
-                    source = self.gesture['start']
-                    dx, dy = target[0] - source[0], target[1] - source[1]
-                    self.preview = [(x + dx, y + dy) if self.session.corner is None or i == self.session.corner
-                                    else (x, y) for i, (x, y) in enumerate(self.gesture['points'])]
+                elif mode == 'MOVE':
+                    ref = self.gesture.get('ref_pos', self.gesture['start'])
+                    world_now = self.view.world(self.pointer, self.canvas_layout.canvas)
+                    world_start = self.gesture['start']
+                    raw_x = ref[0] + (world_now[0] - world_start[0])
+                    raw_y = ref[1] + (world_now[1] - world_start[1])
+                    if self.snap != event.ctrl:
+                        snapped_x = round(raw_x / 0.01) * 0.01
+                        snapped_y = round(raw_y / 0.01) * 0.01
+                    else:
+                        snapped_x = raw_x
+                        snapped_y = raw_y
+                    dx = snapped_x - ref[0]
+                    dy = snapped_y - ref[1]
+                    if event.shift:
+                        if abs(dx) >= abs(dy):
+                            dy = 0.0
+                        else:
+                            dx = 0.0
+                    self.gesture['delta'] = (dx, dy)
+                    if abs(dx) > 1e-6 or abs(dy) > 1e-6:
+                        self.gesture['moved'] = True
+                    if 'points' in self.gesture:
+                        self.preview = [(x + dx, y + dy) if self.session.corner is None or i == self.session.corner
+                                        else (x, y) for i, (x, y) in enumerate(self.gesture['points'])]
                 return {'RUNNING_MODAL'}
             if event.value == 'RELEASE' and event.type == ('MIDDLEMOUSE' if mode == 'PAN' else 'LEFTMOUSE'):
                 if mode == 'ELLIPSE' and self.preview:
@@ -661,8 +680,38 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                     self.run_edit(action, 'Rectangle created.')
                 elif mode == 'HANDLE' and self.handle_preview:
                     self.run_edit(lambda: self.session.set_handle(*self.handle_preview), 'Bezier handle updated.')
-                elif mode == 'MOVE' and self.preview:
-                    self.run_edit(lambda: self.session.move(self.preview), "Pattern updated.")
+                elif mode == 'MOVE':
+                    if self.gesture.get('moved'):
+                        dx, dy = self.gesture.get('delta', (0.0, 0.0))
+                        if abs(dx) > 1e-6 or abs(dy) > 1e-6:
+                            self.run_edit(lambda: self.session.move_selection(dx, dy), "Pattern updated.")
+                    elif self.preview:
+                        self.run_edit(lambda: self.session.move(self.preview), "Pattern updated.")
+                    else:
+                        pending = self.gesture.get('pending_single_select')
+                        if pending and not event.shift:
+                            if pending[0] == 'POINT':
+                                self.session.select_point(pending[1], pending[2], pending[3], toggle=False)
+                            elif pending[0] == 'PIECE':
+                                self.session.select_piece(pending[1], toggle=False)
+                            self.sync_selection()
+                elif mode == 'BOX_SELECT':
+                    if math.dist(self.gesture['start'], self.pointer) < 4 * self.canvas_layout.scale:
+                        if not self.gesture.get('shift'):
+                            self.session.clear_selection()
+                            self.sync_selection()
+                            self.message = "Selection cleared."
+                    else:
+                        w0 = self.gesture['world_start']
+                        w1 = self.view.world(self.pointer, self.canvas_layout.canvas)
+                        kind, count = self.session.box_select(w0[0], w0[1], w1[0], w1[1], shift=self.gesture.get('shift', False))
+                        self.sync_selection()
+                        if kind == 'POINTS':
+                            self.message = f"{count} points selected." if count != 1 else "1 point selected."
+                        elif kind == 'PIECES':
+                            self.message = f"{count} pieces selected." if count != 1 else "1 piece selected."
+                        else:
+                            self.message = "Selection cleared." if not self.gesture.get('shift') else "No items selected."
                 self.gesture, self.preview, self.handle_preview = None, None, None
                 return {'RUNNING_MODAL'}
             return {'RUNNING_MODAL'}
@@ -674,9 +723,11 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                 self.clear_interaction_references()
                 self.message = "Draft cancelled."
                 return {'RUNNING_MODAL'}
-            if self.session.point_selection or self.session.selected:
-                self.session.point_selection = []
-                self.session.selected = None
+            if getattr(self, 'card_kind', None):
+                self.card_kind = None
+                return {'RUNNING_MODAL'}
+            if self.session.has_selection():
+                self.session.clear_selection()
                 self.sync_selection()
                 self.message = "Selection cleared."
                 return {'RUNNING_MODAL'}
@@ -757,6 +808,38 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                     self.show_card('HELP')
                     self.message = "Shortcuts: V select, P polygon, R rect, E ellipse, I internal, D dart, J sew, K pin, T tack, F fit, S snap, Ctrl+Z undo, Ctrl+Shift+Z redo."
                     return {'RUNNING_MODAL'}
+                return {'RUNNING_MODAL'}
+        if press and not self.numeric:
+            if event.type == 'A':
+                if event.alt and not event.ctrl and not event.shift:
+                    self.session.clear_selection()
+                    self.sync_selection()
+                    self.message = "Selection cleared."
+                    return {'RUNNING_MODAL'}
+                elif not event.ctrl and not event.alt and not event.shift:
+                    self.session.select_all()
+                    self.sync_selection()
+                    n = len(self.session.selected_patterns)
+                    self.message = f"{n} pieces selected." if n != 1 else "1 piece selected."
+                    return {'RUNNING_MODAL'}
+            if event.type in {'UP_ARROW', 'DOWN_ARROW', 'LEFT_ARROW', 'RIGHT_ARROW'}:
+                if self.session.has_selection():
+                    step = 0.10 if event.shift else 0.01
+                    dx = step if event.type == 'RIGHT_ARROW' else (-step if event.type == 'LEFT_ARROW' else 0.0)
+                    dy = step if event.type == 'UP_ARROW' else (-step if event.type == 'DOWN_ARROW' else 0.0)
+                    self.run_edit(lambda: self.session.move_selection(dx, dy), "Selection nudged.")
+                    return {'RUNNING_MODAL'}
+            if event.type == 'H' and event.shift and not event.ctrl and not event.alt:
+                self.perform_action('FLIP_H')
+                return {'RUNNING_MODAL'}
+            if event.type == 'V' and event.shift and not event.ctrl and not event.alt:
+                self.perform_action('FLIP_V')
+                return {'RUNNING_MODAL'}
+            if event.type == 'R' and event.shift and not event.ctrl and not event.alt:
+                self.perform_action('ROTATE_CW')
+                return {'RUNNING_MODAL'}
+            if event.type in {'LEFT_BRACKET', 'RIGHT_BRACKET'}:
+                self.perform_action('ROTATE_CW' if event.type == 'RIGHT_BRACKET' else 'ROTATE_CCW')
                 return {'RUNNING_MODAL'}
         if not self.minimal_ui and event.type == 'TAB' and press:
             self.toggle_full()
@@ -873,28 +956,57 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
             else:
                 self.selected_anchor = None
                 p, corner = self.hit()
-                if p is None or p.id != self.session.selected:
-                    self.session.point_selection = []
-                self.session.selected, self.session.corner = (p.id if p else None), corner
-                self.session.path = self.hit_path
-                self.session.segment = self.hit_segment
-                if p:
-                    if corner is not None and self.hit_handle:
-                        v = p.path(self.session.path).vertices[corner]
-                        self.gesture = dict(mode='HANDLE', handle=self.hit_handle, anchor=(v.x, v.y))
-                    elif corner is not None and event.shift:
-                        if corner in self.session.point_selection:
-                            self.session.point_selection.remove(corner)
-                        else:
-                            self.session.point_selection.append(corner)
+                if p is None:
+                    if self.tool == 'SELECT':
+                        self.gesture = dict(mode='BOX_SELECT', start=self.pointer,
+                                            world_start=self.view.world(self.pointer, self.canvas_layout.canvas),
+                                            shift=event.shift)
                     else:
-                        self.session.point_selection = [corner] if corner is not None else []
-                        self.gesture = dict(mode='MOVE', start=self.world_pointer(event), points=p.path(self.session.path).points)
-                    if corner is not None:
-                        edges = self.session.document.edges(p.id, self.session.path)
-                        if edges:
-                            self.session.segment = edges[min(corner, len(edges) - 1)]
+                        if not event.shift:
+                            self.session.clear_selection()
+                            self.sync_selection()
+                    return {'RUNNING_MODAL'}
+                if corner is not None and self.hit_handle:
+                    v = p.path(self.hit_path).vertices[corner]
+                    self.session.path = self.hit_path
+                    self.session.corner = corner
+                    self.gesture = dict(mode='HANDLE', handle=self.hit_handle, anchor=(v.x, v.y))
                     self.sync_selection()
+                    return {'RUNNING_MODAL'}
+                cursor_world = self.view.world(self.pointer, self.canvas_layout.canvas)
+                if corner is not None:
+                    v = p.path(self.hit_path).vertices[corner]
+                    pt_key = (p.id, self.hit_path, corner)
+                    edges = self.session.document.edges(p.id, self.hit_path)
+                    if edges:
+                        self.session.segment = edges[min(corner, len(edges) - 1)]
+                    if event.shift:
+                        self.session.select_point(p.id, self.hit_path, corner, toggle=True)
+                        self.sync_selection()
+                        self.gesture = dict(mode='MOVE', start=cursor_world, ref_pos=(v.x, v.y), delta=(0.0, 0.0), moved=False)
+                    else:
+                        if pt_key in self.session.selected_points:
+                            self.gesture = dict(mode='MOVE', start=cursor_world, ref_pos=(v.x, v.y), delta=(0.0, 0.0), moved=False,
+                                                pending_single_select=('POINT', p.id, self.hit_path, corner))
+                        else:
+                            self.session.select_point(p.id, self.hit_path, corner, toggle=False)
+                            self.sync_selection()
+                            self.gesture = dict(mode='MOVE', start=cursor_world, ref_pos=(v.x, v.y), delta=(0.0, 0.0), moved=False)
+                else:
+                    self.session.path = self.hit_path
+                    self.session.segment = self.hit_segment
+                    if event.shift:
+                        self.session.select_piece(p.id, toggle=True)
+                        self.sync_selection()
+                        self.gesture = dict(mode='MOVE', start=cursor_world, ref_pos=cursor_world, delta=(0.0, 0.0), moved=False)
+                    else:
+                        if p.id in self.session.selected_patterns and not self.session.selected_points:
+                            self.gesture = dict(mode='MOVE', start=cursor_world, ref_pos=cursor_world, delta=(0.0, 0.0), moved=False,
+                                                pending_single_select=('PIECE', p.id))
+                        else:
+                            self.session.select_piece(p.id, toggle=False)
+                            self.sync_selection()
+                            self.gesture = dict(mode='MOVE', start=cursor_world, ref_pos=cursor_world, delta=(0.0, 0.0), moved=False)
         return {'RUNNING_MODAL'}
 
     def cleanup(self):

@@ -89,6 +89,8 @@ class OverlayControls:
                              ('button', 'MIRROR_SEW', 'Mirror and sew this edge')])
             rows.extend([('preset_chips', 'PRESET_CHIP', ''),
                          ('pair_buttons', 'DUPLICATE', 'DELETE', 'Duplicate', 'Delete'),
+                         ('pair_buttons', 'FLIP_H', 'FLIP_V', 'Flip H', 'Flip V'),
+                         ('pair_buttons', 'ROTATE_CW', 'ROTATE_CCW', 'Rotate 90°', 'Rotate -90°'),
                          ('pair_buttons', 'PLACE', 'PIN', 'Place in 3D', 'Pin'),
                          ('pair_buttons', 'TACK', 'WRAP', 'Tack to body', 'Wrap'),
                          ('pair_buttons', 'CUT', 'TRACE', 'Cut internal path', 'Trace as piece')])
@@ -277,6 +279,7 @@ class OverlayControls:
                 if history_stack:
                     self.clear_interaction_references()
                 self.run_edit(lambda: self.session.history(action == 'REDO'), action.title() + '.')
+                self.sync_selection()
         elif action == 'DELETE_PIECE':
             self.session.corner = None
             self.session.path = 'OUTER'
@@ -325,14 +328,14 @@ class OverlayControls:
         if action in {'BUILD', 'ARRANGE', 'SIMULATE', 'STOP', 'RESET', 'KEEP', 'DEMO'}:
             return self.workflow_blocker('STOP' if action == 'SIMULATE' and bpy.context.screen.is_animation_playing else action)
         selected = self.session.document.find(self.session.selected)
-        if action in {'DELETE_PIECE', 'DUPLICATE', 'OFFSET', 'UNFOLD', 'MIRROR_SEW', 'CUT', 'TRACE', 'WRAP', 'PLACE', 'PRESET'} or action.startswith('SET_PRESET_'):
-            if selected is None:
+        if action in {'DELETE_PIECE', 'DUPLICATE', 'OFFSET', 'UNFOLD', 'MIRROR_SEW', 'CUT', 'TRACE', 'WRAP', 'PLACE', 'PRESET', 'FLIP_H', 'FLIP_V', 'ROTATE_CW', 'ROTATE_CCW'} or action.startswith('SET_PRESET_'):
+            if selected is None and not self.session.selected_patterns and not self.session.selected_points and self.session.corner is None:
                 return 'Select a piece on the canvas first.'
-        if action == 'CURVE' and self.session.corner is None:
+        if action == 'CURVE' and self.session.corner is None and not self.session.selected_points:
             return 'Select a point to change its corner or curve.'
         if action in {'SPLIT', 'SET_LENGTH', 'UNFOLD'} and self.session.segment is None:
             return 'Select an edge on the canvas first.'
-        if action == 'MERGE' and len(self.session.point_selection) < 2:
+        if action == 'MERGE' and not self.session.can_merge_selected_points() and len(self.session.point_selection) < 2:
             return 'Shift-click at least two points to merge.'
         if action == 'CHAIN_SEW' and (not self.chain_a or not self.chain_b):
             return 'Pick an edge chain for both side A and side B first.'
@@ -655,7 +658,7 @@ class OverlayControls:
                     direct_canvas_actions = {'PLACE', 'PIN', 'TACK', 'SEW', 'FREE_SEW', 'CHAIN_A', 'CHAIN_B',
                                              'RECTANGLE', 'POLYGON', 'ELLIPSE', 'INTERNAL', 'DART', 'SIMULATE',
                                              'KEEP', 'RESET', 'DELETE', 'LIBRARY_LOAD', 'CURVE', 'SPLIT',
-                                             'UNFOLD', 'MIRROR_SEW', 'CUT', 'TRACE', 'MERGE', 'OFFSET'}
+                                             'UNFOLD', 'MIRROR_SEW', 'CUT', 'TRACE', 'MERGE', 'OFFSET', 'FLIP_H', 'FLIP_V', 'ROTATE_CW', 'ROTATE_CCW'}
                     if self.context_anchor is not None and (action in direct_canvas_actions or self.confirm_action):
                         if not self.body_open:
                             self.close_context()

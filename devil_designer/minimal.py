@@ -218,6 +218,8 @@ class MinimalCards:
             density_label = {'AUTO': 'Garment default', 'COARSE': 'Coarse', 'STANDARD': 'Standard', 'FINE': 'Fine'}.get(pattern.mesh_density, pattern.mesh_density.title())
             rows.append(('MENU', 'PIECE_DENSITY_MENU', 'Mesh density', density_label))
             rows.append(('PAIR_ACTIONS', 'DUPLICATE', 'MIRROR_SEW', 'Duplicate', 'Mirror'))
+            rows.append(('PAIR_ACTIONS', 'FLIP_H', 'FLIP_V', 'Flip H', 'Flip V'))
+            rows.append(('PAIR_ACTIONS', 'ROTATE_CW', 'ROTATE_CCW', 'Rotate 90°', 'Rotate -90°'))
             rows.append(('PAIR_ACTIONS', 'UNFOLD', 'DELETE_PIECE', 'Unfold', 'Delete'))
         elif kind == 'CANVAS_MENU':
             title = 'Garment & View'
@@ -291,6 +293,27 @@ class MinimalCards:
             title = 'Image placement'
             rows = [('SLIDER', 'dd_trace_width', 'Width'), ('SLIDER', 'dd_trace_x', 'X position'),
                     ('SLIDER', 'dd_trace_y', 'Y position'), ('TRACE_FIT', 'Fit image and pieces', '')]
+        elif kind == 'MULTI_SELECTION':
+            pieces, points = self.session.selection_counts()
+            if pieces > 0 and points > 0:
+                title = f'{pieces} pieces, {points} points'
+                rows = [('DELETE', 'Delete', 'Del')]
+            elif pieces > 0:
+                title = f'{pieces} pieces'
+                rows = [('DUPLICATE', 'Duplicate', 'Shift+D'),
+                        ('PAIR_ACTIONS', 'FLIP_H', 'FLIP_V', 'Flip H', 'Flip V'),
+                        ('PAIR_ACTIONS', 'ROTATE_CW', 'ROTATE_CCW', 'Rotate 90°', 'Rotate -90°'),
+                        ('MENU', 'PIECE_FABRIC_MENU', 'Fabric', ''),
+                        ('MENU', 'PIECE_DENSITY_MENU', 'Mesh density', ''),
+                        ('DELETE', 'Delete', 'Del')]
+            else:
+                title = f'{points} points'
+                rows = [('CURVE', 'Corner / curve', 'C')]
+                if self.session.can_merge_selected_points():
+                    rows.append(('MERGE', 'Merge points', 'M'))
+                rows.append(('PAIR_ACTIONS', 'FLIP_H', 'FLIP_V', 'Flip H', 'Flip V'))
+                rows.append(('PAIR_ACTIONS', 'ROTATE_CW', 'ROTATE_CCW', 'Rotate 90°', 'Rotate -90°'))
+                rows.append(('DELETE', 'Delete', 'Del'))
         elif kind == 'CUT_RECOVERY':
             title = 'Crossing cut'
             preview = self.cut_preview
@@ -334,6 +357,19 @@ class MinimalCards:
             if self.chain_stage:
                 return 'Click edges in order'
             return 'Pick the matching edge' if self.pending_edge else 'Click two edges to sew'
+        if self.tool == 'SELECT':
+            pieces, points = self.session.selection_counts()
+            if pieces > 0 and points > 0:
+                p_str = f"{pieces} piece{'s' if pieces != 1 else ''}"
+                pt_str = f"{points} point{'s' if points != 1 else ''}"
+                return f"{p_str}, {pt_str} · Drag to move"
+            if pieces > 0:
+                p_str = f"{pieces} piece{'s' if pieces != 1 else ''}"
+                return f"{p_str} · Drag to move"
+            if points > 0:
+                pt_str = f"{points} point{'s' if points != 1 else ''}"
+                return f"{pt_str} · Drag to move"
+            return 'Click to select / Drag to box select'
         return {'SELECT': 'Drag points or pieces / Right-click for options',
                 'RECTANGLE': 'Drag to draw a panel / Shift for a square',
                 'ELLIPSE': 'Drag to draw an ellipse / Shift for a circle',
@@ -467,6 +503,9 @@ class MinimalCards:
             self.card_kind = None
         elif key == 'TRACE':
             self.perform_action('TRACE')
+            self.card_kind = None
+        elif key in {'FLIP_H', 'FLIP_V', 'ROTATE_CW', 'ROTATE_CCW'}:
+            self.perform_action(key)
             self.card_kind = None
         elif key == 'FLIP_SEAM':
             if self.seam_selected:
@@ -684,13 +723,21 @@ class MinimalCards:
                 return {'RUNNING_MODAL'}
             pattern, corner = self.hit()
             if pattern is None:
-                self.session.selected = None
-                self.session.corner = None
-                self.session.segment = None
-                self.session.point_selection = []
+                self.session.clear_selection()
                 self.sync_selection()
                 self.show_card('CANVAS_MENU', point)
                 return {'RUNNING_MODAL'}
+            if self.session.is_multi_selected():
+                hit_in_sel = False
+                if corner is not None:
+                    if (pattern.id, self.hit_path, corner) in self.session.selected_points:
+                        hit_in_sel = True
+                else:
+                    if pattern.id in self.session.selected_patterns:
+                        hit_in_sel = True
+                if hit_in_sel:
+                    self.show_card('MULTI_SELECTION', point)
+                    return {'RUNNING_MODAL'}
             if (self.session.selected != pattern.id or self.session.path != self.hit_path
                     or corner not in self.session.point_selection):
                 self.session.point_selection = [corner] if corner is not None else []
