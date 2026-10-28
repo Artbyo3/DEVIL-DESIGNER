@@ -1,5 +1,5 @@
 bl_info = {
-    "name": "Devil Designer", "author": "Artbyo3", "version": (0, 6, 0),
+    "name": "Devil Designer", "author": "Artbyo3", "version": (0, 7, 0),
     "blender": (5, 2, 0), "location": "View3D > View > Devil Designer; Ctrl+Alt+D",
     "description": "Draft, sew, and drape clothing patterns", "category": "3D View",
 }
