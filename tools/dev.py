@@ -50,7 +50,7 @@ def do_tests():
                        desc=f"Blender Background: {t}"):
             return False
 
-    for t in ["gui_preview", "gui_silhouette", "gui_design", "gui_fast_flow", "gui_arrangement"]:
+    for t in ["gui_preview", "gui_silhouette", "gui_design", "gui_fast_flow", "gui_arrangement", "gui_fit_map"]:
         if not run_cmd([BLENDER_PATH, "--enable-event-simulate", "--factory-startup", "--python", "tools/run_blender_gui.py", "--", t],
                        desc=f"In-Engine GUI: {t}"):
             return False

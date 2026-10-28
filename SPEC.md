@@ -154,6 +154,44 @@ preserve valid pair membership. Designs without pair records remain unchanged.
 
 ## Implementation coverage (0.5 development)
 
+### Fit-map display contract
+
+The dock adds F beside S, H and L. F toggles a display-only fit map on the visible
+simulated garment, with a compact legend in the exposed 3D view. Home fits the
+2D design. Each fabric-surface edge compares its evaluated length in metres with
+the corresponding original flat-panel rest length; sewing bridges are excluded.
+Per-vertex values are rest-length-weighted incident edge ratios, stored as colors
+on a temporary, unlinked evaluated-mesh copy. White spans ratios 0.97–1.03;
+blue saturates at 0.85 and red at 1.15. The overlay does not change source geometry,
+simulation, kept meshes, UVs, materials or viewport shading settings. Turning it
+off or closing the editor removes the display handler. It is an approximate
+deformation guide, not pressure or stress, and folded loose cloth may remain
+neutral. Mismatched source topology or changed patterns must not display stale data.
+
+No seam rest lengths, spring forces, cloth settings or design fields are changed
+by the fit-map feature.
+
+### Opt-in seam Shrink contract
+
+A seam right-click menu offers 0, 10, 20 and 30 percent Shrink. Zero is omitted
+from serialized seams for legacy document and cache-signature equivalence.
+Nonzero choices persist with the seam and participate in transactional undo/redo.
+Both sampled sewn boundaries receive calibrated native shrink weights; at shared
+vertices maximum Shrink wins. Sampling, flat mesh output, UVs, sewing connections
+and sewing forces remain unchanged.
+
+The approved hook immediately follows apply_presets in compile_garment and is
+bypassed when every seam is zero. Only garments opting into nonzero Shrink use
+1 mm self-collision distance; all-zero garments retain the prior 3 mm settings.
+Calibration uses shrink_min 0, shrink_max 0.60, and weights 0.1844,
+0.3587166666666667, 0.5313 for the three nonzero choices. These shared weights
+passed two Cotton rigid-cylinder fixtures within +/-1 pp on both sewn sides,
+including held-out frames. The ruler is paired against a same-frame diagnostic
+1 mm zero reference, not the actual 3 mm default garment. Total opt-in changes
+may differ more, and folds outside the seam can change visibly. README records
+the measured calibration table and opt-in cost. Accuracy is not established for
+arbitrary fabrics, geometries or body-limited contraction.
+
 The requested feature families now have initial working implementations.
 The README documents the UI and practical limits.
 

@@ -846,6 +846,24 @@ def run():
             click((badge.x + badge.w / 2, badge.y + badge.h / 2), 'RIGHTMOUSE')
             check(workspace.card_kind == 'SEAM' and any(row[1] == 'FLIP_SEAM' for rect, row in workspace.minimal_card()[2]),
                   'right clicking seam badge opens seam menu with reverse and remove')
+            for shrink in (10, 20, 30, 0):
+                badge = workspace.seam_badges()[0][0]
+                if workspace.card_kind != 'SEAM':
+                    click((badge.x + badge.w / 2, badge.y + badge.h / 2), 'RIGHTMOUSE')
+                rect, row = next((rect, row) for rect, row in workspace.minimal_card()[2] if row[0] == 'CHOICES' and row[1] == 'Shrink')
+                check(tuple(row[2][1]) == ('0%', '10%', '20%', '30%'), 'seam menu exposes exactly four Shrink choices')
+                warnings = [row for control, row in workspace.minimal_card()[2] if row[0] == 'INFO' and row[1] in ('Nonzero: 1 mm self-collision', 'Other folds may change')]
+                check(len(warnings) == 2 and all(not row[2] for row in warnings), 'Shrinks collision cost and fold warning each use a full-width readable row')
+                click((rect.x + (shrink / 10 + .5) * rect.w / 4, rect.y + rect.h / 2))
+                check(workspace.card_kind is None and workspace.session.document.seams[0].shrink == shrink,
+                      f'Shrink {shrink}% executes and dismisses the contextual menu')
+                check(Document.loads(scene.dd_document).seams[0].shrink == shrink, 'Shrink persists into the editable scene document')
+            workspace.perform_action('UNDO')
+            check(workspace.session.document.seams[0].shrink == 30, 'canvas Undo restores seam Shrink')
+            workspace.perform_action('REDO')
+            check(workspace.session.document.seams[0].shrink == 0, 'canvas Redo restores zero Shrink')
+            badge = workspace.seam_badges()[0][0]
+            click((badge.x + badge.w / 2, badge.y + badge.h / 2), 'RIGHTMOUSE')
             before = workspace.session.document.seams[0].reverse
             workspace.handle_event(bpy.context, event('B', canvas_point))
             check(workspace.session.document.seams[0].reverse != before, 'seam direction changes')

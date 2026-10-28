@@ -16,7 +16,7 @@ unload its old Python modules. Enable Devil Designer if necessary.
 In a 3D Viewport use **Ctrl+Alt+D**, **F3 > Devil Designer**, or **View > Devil Designer**.
 There is no full-height sidebar, searchable all-settings inspector, docked sidebar, or universal
 cursor menu. The workspace opens with a pure 100% full-screen canvas, a compact 8-tool left dock,
-persistent micro-indicators for Snapping `[S]`, Body Guide `[H]`, and Lengths `[L]`, and focused
+persistent micro-indicators for Snapping `[S]`, Body Guide `[H]`, Lengths `[L]`, and Fit map `[F]`, and focused
 right-click contextual menus anchored directly at the cursor. When the 3D viewport is revealed for
 placement or drape inspection, click Full canvas to return. Other Blender controls remain available
 outside the editor when the 3D view is revealed.
@@ -219,6 +219,45 @@ overlapping sewing ranges are rejected.
 percent, with amber pairing feedback. Gathers and ease remain sewable. Invalid
 geometry, missing references, or zero-length ranges still require correction.
 
+### Seam Shrink
+
+Right-click a seam badge and choose **Shrink: 0%, 10%, 20%, or 30%** for a cuff
+or waistband. The choice is undoable and survives saved designs, library loads,
+and blend save/reopen. Both sewn sides receive localized fabric shrink; sewing
+connections and sewing force are unchanged. If seams share a vertex, the largest
+Shrink wins, independently of seam order. Reverse and partial/chained sewing
+retain the setting. Shrink is not a change to the flat pattern or its UVs.
+
+**Opt-in cost:** any nonzero Shrink makes that garment use **1 mm self-collision
+distance**, rather than the usual 3 mm. This can visibly change other folds, even
+away from the seam. All-zero garments bypass the shrink hook and retain the
+original settings, compiled data, and simulation behavior. Changing the setting
+invalidates the simulation cache; reset/resimulate to see the new result.
+
+The native boundary weights are measured calibration data, not literal shrink
+percentages: shrink_min is 0, shrink_max is 0.60. These Cotton cylinder tests use
+paired same-frame lengths against a diagnostic zero reference at **the same 1 mm
+collision setting**. That reference is not the normal 3 mm all-zero garment.
+Frame 481 supplied calibration data; frames 482 through 601 were held out.
+Each sewn side passed +/-1 percentage point; final 61-frame variation stayed
+below 0.25 pp. These results are not an accuracy guarantee for other fabrics,
+body constraints, or garment shapes, or for the total change from a 3 mm drape.
+
+| Rig | Setting | Weight | Frame 481 A / B | Frame 601 A / B |
+| --- | --- | --- | --- | --- |
+| Waistband | 10% | 0.18440000 | 9.44860 / 9.46699% | 9.44860 / 9.46698% |
+| Waistband | 20% | 0.35871667 | 20.90911 / 20.91694% | 20.90910 / 20.91692% |
+| Waistband | 30% | 0.53130000 | 30.52588 / 30.58664% | 30.51950 / 30.57705% |
+| Cuff | 10% | 0.18440000 | 10.51972 / 10.52396% | 10.51984 / 10.52403% |
+| Cuff | 20% | 0.35871667 | 19.50710 / 19.66611% | 19.50767 / 19.66628% |
+| Cuff | 30% | 0.53130000 | 29.73231 / 30.04095% | 29.73148 / 30.04536% |
+
+At the same 20% Shrink and identical boundary weights, changing collision distance
+from 3 mm to 1 mm moved unweighted cloth at frame 601 by **14.514 mm RMS /
+44.365 mm maximum** on the waistband and **6.768 mm RMS / 18.754 mm maximum**
+on the cuff. These measurements exclude pins and a 20 mm / 12 mm band around
+the seam respectively. Inspect neighboring folds when opting in.
+
 ## Avatar reference, placement, wrap, pins, and tacks
 
 For photo tracing, open **Garment > Reference image > Load image**, including on an
@@ -324,6 +363,43 @@ Reset asks for confirmation before removing the simulation/cache and restoring a
 garments. Reset after body geometry/collision changes before simulating again.
 Simulation caches are not automatically baked to disk. A single piece can drape
 without sewing; a selected body is still required for this workflow.
+
+### Fit map
+
+Click the dock's **F** chip or press **F** to toggle the fit map. Simulate first
+to reveal the 3D view, then pause on a frame to inspect it or leave playback running
+to watch it update. **Home** still fits the 2D design; **F** now means Fit map.
+The small legend appears below the exposed 3D view, not over the pattern canvas.
+
+Blue means compressed edges, white means neutral within **±3%**, and red means
+stretched edges. Full blue is **15% compression** (ratio 0.85); full red is
+**15% stretch** (ratio 1.15). Values beyond those limits remain saturated.
+Each fabric-surface edge compares its evaluated world-space length in metres with
+its original flat-panel rest length. Loose sewing bridges are excluded. A vertex
+uses the rest-length-weighted average of its incident edge ratios, reducing noise
+from tiny edges without smoothing across pieces or across sewing bridges.
+
+This is an edge-deformation guide, not pressure, stress, calibrated textile strain,
+or a guarantee of fit. Blue can suggest compression or looseness, but loose cloth
+can fold without shortening edges and stay white. Directional stretch and
+compression can average out at a vertex. Do not use the map as a wrinkle detector.
+
+The display uses a color attribute on an unlinked, temporary evaluated-mesh copy
+and native GPU drawing. No scene overlay object, material override, UV edit, or
+simulation-mesh attribute is created. Switching it off removes the draw handler;
+original shading, materials, mesh data, visibility and UVs stay unchanged. Keep mesh
+never receives the fit colors. Closing the editor also turns the map off; it is not
+a saved design option. Changed patterns or incompatible topology require a reset
+and a new simulation instead of showing mismatched data. The map applies only to
+the visible simulation, not previously kept garments.
+
+Prototype: the included two-panel demo at 2.5 cm spacing and quality 8, evaluated
+through frame 40, had 820 vertices: 806 neutral, 14 stretched, none compressed,
+with ratios 0.9755–1.0814. Mean neighboring variation was 0.22 percentage points;
+no neighboring jump exceeded 10 percentage points. Visual inspection found a calm,
+mostly neutral surface with subtle localized shoulder stretch rather than speckling.
+This demonstrates usable low-noise data on the demo, not readable blue/red regions
+on every garment; the broad neutral zone deliberately keeps ordinary drape white.
 
 ### Wear over kept garments
 

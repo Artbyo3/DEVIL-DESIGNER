@@ -1,5 +1,6 @@
 import json
 import math
+import runpy
 from pathlib import Path
 import sys
 import bpy
@@ -8,7 +9,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.dont_write_bytecode = True
 sys.path.insert(0,str(ROOT))
 import devil_designer
-from devil_designer import garment
+from devil_designer import garment, fit_display
+from devil_designer.fit_map import vertex_ratios, surface_edges
 from devil_designer.core import Document, Session, area
 from devil_designer.meshing import edge_counts, fabric_mesh
 
@@ -74,7 +76,59 @@ check(min(v.z for v in coords)>.8 and max(v.z for v in coords)>1.4,'garment stay
 final = sum((coords[a]-coords[b]).length for a,b in pairs)/len(pairs)
 check(final<initial*.5,'real cloth simulation pulls paired seams together')
 expected_uvs=sorted(tuple(round(x,6) for x in uv.uv) for uv in obj.data.uv_layers.active.data)
+original_vertices = [tuple(vertex.co) for vertex in obj.data.vertices]
+original_edges = [tuple(edge.vertices) for edge in obj.data.edges]
+original_faces = [tuple(face.vertices) for face in obj.data.polygons]
+original_attributes = [(attribute.name, attribute.domain, attribute.data_type) for attribute in obj.data.attributes]
+original_materials = list(obj.data.materials)
+original_material_state = [(material.diffuse_color[:], material.node_tree.as_pointer()) for material in obj.data.materials]
+original_panel_state = [(panel.data.as_pointer(), [tuple(vertex.co) for vertex in panel.data.vertices],
+                         [tuple(item.vector) for item in panel.data.attributes['dd_rest'].data])
+                        for panel in garment.generated(scene, 'panel')]
+original_mesh_count = len(bpy.data.meshes)
+for trial in range(3):
+    display_mesh, fit_ratios = fit_display.snapshot(obj, context.evaluated_depsgraph_get(), scene)
+    check(display_mesh != obj.data and display_mesh.users == 0, 'fit colors live only on an unlinked temporary mesh')
+    check(len(display_mesh.color_attributes['DD Fit Map'].data) == len(coords), 'fit color attribute has one color per simulated vertex')
+    check(all(math.isfinite(value) and value >= 0 for value in fit_ratios), 'real drape produces finite fit ratios')
+    rest = [tuple(item.vector) for panel in garment.generated(scene, 'panel') for item in panel.data.attributes['dd_rest'].data]
+    measured = vertex_ratios(rest, [tuple(point * garment.metres_per_unit(scene)) for point in coords], surface_edges(original_faces))
+    check(max(abs(first - second) for first, second in zip(fit_ratios, measured)) < 1e-6, 'fit map uses flat-panel rest distances and excludes loose sewing bridges')
+    bpy.data.meshes.remove(display_mesh)
+check(len(bpy.data.meshes) == original_mesh_count, 'fit sampling leaves no temporary mesh datablocks')
+check([tuple(vertex.co) for vertex in obj.data.vertices] == original_vertices and
+      [tuple(edge.vertices) for edge in obj.data.edges] == original_edges and
+      [tuple(face.vertices) for face in obj.data.polygons] == original_faces, 'fit map leaves original simulated topology and positions untouched')
+check([(attribute.name, attribute.domain, attribute.data_type) for attribute in obj.data.attributes] == original_attributes,
+      'fit map adds no attributes to the simulated mesh')
+check(list(obj.data.materials) == original_materials and
+      [(material.diffuse_color[:], material.node_tree.as_pointer()) for material in obj.data.materials] == original_material_state,
+      'fit map leaves simulated materials and shader trees untouched')
+check([(panel.data.as_pointer(), [tuple(vertex.co) for vertex in panel.data.vertices],
+        [tuple(item.vector) for item in panel.data.attributes['dd_rest'].data])
+       for panel in garment.generated(scene, 'panel')] == original_panel_state, 'fit map leaves flat panels and rest coordinates untouched')
+previous_spacing = scene.dd_spacing
+scene.dd_spacing += .001
+try:
+    fit_display.snapshot(obj, context.evaluated_depsgraph_get(), scene)
+except ValueError:
+    check(True, 'fit map rejects changed pattern settings instead of showing stale data')
+else:
+    raise AssertionError('Fit map accepted changed source settings')
+finally:
+    scene.dd_spacing = previous_spacing
+extra_modifier = obj.modifiers.new('Fit topology refusal test', 'SUBSURF')
+try:
+    fit_display.snapshot(obj, context.evaluated_depsgraph_get(), scene)
+except ValueError:
+    check(True, 'fit map rejects evaluated topology changes instead of mismatching vertices')
+else:
+    raise AssertionError('Fit map accepted changed evaluated topology')
+finally:
+    obj.modifiers.remove(extra_modifier)
+check(len(bpy.data.meshes) == original_mesh_count, 'fit refusal paths release evaluated meshes')
 result,unclosed = garment.keep_drape(context)
+check('DD Fit Map' not in result.data.color_attributes, 'Keep mesh never inherits the transient fit color attribute')
 check(not any(m.type=='CLOTH' for m in result.modifiers),'kept garment is an ordinary editable mesh')
 check(result.data.uv_layers.active is not None,'kept mesh preserves pattern UVs')
 actual_uvs=sorted(tuple(round(x,6) for x in uv.uv) for uv in result.data.uv_layers.active.data)
@@ -100,5 +154,6 @@ check(len(garment.generated(bpy.context.scene,'final'))==1,'finished garment sur
 report = dict(blender=bpy.app.version_string,checks=checks,initial_seam_gap=initial,
               final_seam_gap=final,unclosed_pairs=unclosed,vertices=len(coords))
 (ROOT/'scratch'/'garment-report.json').write_text(json.dumps(report,indent=2))
+runpy.run_path(str(ROOT/'tests'/'blender_seam_shrink.py'))['run'](check)
 devil_designer.unregister()
 print('ALL GARMENT CHECKS PASSED',flush=True)

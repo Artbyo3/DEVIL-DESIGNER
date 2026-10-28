@@ -10,7 +10,7 @@ from .density import boundary_plan,effective_spacing
 from .core import area
 from .native_features import decorate_mesh,apply_presets,add_anchors
 from .live_panels import build_guard
-from . import layering
+from . import layering, seam_shrink
 
 OWNER = "Artbyo3/DEVIL-DESIGNER"
 _playback_window = None
@@ -385,10 +385,12 @@ def compile_garment(context):
         group.add(ids,1,'REPLACE')
     obj['dd_piece_ids']=json.dumps([p.id for p in doc.patterns])
     apply_presets(obj,cloth,pieces)
+    if any(seam.shrink for seam in doc.seams):
+        seam_shrink.apply(doc,obj,cloth,maps,plan)
     cloth.collision_settings.use_collision = True
     cloth.collision_settings.distance_min = .003/metres_per_unit(scene)
     cloth.collision_settings.use_self_collision = scene.dd_self_collision
-    cloth.collision_settings.self_distance_min = .003/metres_per_unit(scene)
+    cloth.collision_settings.self_distance_min = (.001 if any(seam.shrink for seam in doc.seams) else .003)/metres_per_unit(scene)
     cloth.collision_settings.collision_quality = 4
     cloth.point_cache.frame_start = scene.frame_start
     cloth.point_cache.frame_end = scene.frame_start+scene.dd_frames

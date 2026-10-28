@@ -214,6 +214,7 @@ class Seam:
     id: str = field(default_factory=uid)
     chain_a: tuple = ()
     chain_b: tuple = ()
+    shrink: int = 0
 
     def side(self,index): return list((self.chain_a or (self.a,)) if index==0 else (self.chain_b or (self.b,)))
 
@@ -279,7 +280,7 @@ class Document:
             vertices=[vertex_data(v) for v in p.vertices],paths=[dict(id=q.id,name=q.name,closed=q.closed,role=q.role,\
             vertices=[vertex_data(v) for v in q.vertices]) for q in p.paths],preset=p.preset,wrap_radius=p.wrap_radius,\
             features=p.features,mesh_density=p.mesh_density,fabric_override=getattr(p,'fabric_override',False),placement_mode=p.placement_mode,arrangement=p.arrangement,panel_origin=p.panel_origin) for p in self.patterns],seams=[dict(id=s.id,a=vars(s.a),b=vars(s.b),reverse=s.reverse,\
-            chain_a=[vars(e) for e in s.side(0)],chain_b=[vars(e) for e in s.side(1)]) for s in self.seams],\
+            chain_a=[vars(e) for e in s.side(0)],chain_b=[vars(e) for e in s.side(1)],**({"shrink":s.shrink} if s.shrink else {})) for s in self.seams],\
             anchors=[vars(a) for a in self.anchors],uv_layout=self.uv_layout,**({'linked_pairs':self.linked_pairs} if self.linked_pairs else {})),separators=(',',':'),allow_nan=False)
 
     @classmethod
@@ -308,7 +309,7 @@ class Document:
             if data['version']>=2:
                 for item in data['seams']:
                     document.seams.append(Seam(EdgeRef(**item['a']),EdgeRef(**item['b']),item['reverse'],item['id'],
-                        tuple(EdgeRef(**e) for e in item.get('chain_a',[])),tuple(EdgeRef(**e) for e in item.get('chain_b',[]))))
+                        tuple(EdgeRef(**e) for e in item.get('chain_a',[])),tuple(EdgeRef(**e) for e in item.get('chain_b',[])),item.get('shrink',0)))
             document.anchors=[Anchor(**a) for a in data.get('anchors',[])]
             if data['version']<3 and patterns:
                 points=[point for p in patterns for point in p.points]
@@ -435,7 +436,10 @@ class Document:
             for path in p.paths:
                 if path.role!='HOLE' and any(contains(point,hole) and not any(on_segment(point,a,b) for a,b in zip(hole,hole[1:]+hole[:1])) for point in path.outline() for hole in holes):
                     raise ValueError('Internal paths cannot pass through a hole.')
-        for seam in self.seams: identity(seam.id)
+        for seam in self.seams:
+            identity(seam.id)
+            if type(seam.shrink) is not int or seam.shrink not in (0,10,20,30):
+                raise ValueError("Seam Shrink must be 0, 10, 20 or 30 percent.")
         for anchor in self.anchors:
             identity(anchor.id)
             p=self.find(anchor.pattern)
@@ -987,7 +991,7 @@ class Session(ConstructionMixin):
                     if len(sides_patterns)>1 and sides_patterns.issubset(dup_ids):
                         try:
                             a=[remap(e) for e in seam.side(0)];b=[remap(e) for e in seam.side(1)]
-                            new_seam=Seam(a[0],b[0],seam.reverse,chain_a=tuple(a),chain_b=tuple(b))
+                            new_seam=Seam(a[0],b[0],seam.reverse,chain_a=tuple(a),chain_b=tuple(b),shrink=seam.shrink)
                             self.document.seams.append(new_seam)
                         except (ValueError,KeyError):continue
         result=self.commit(apply)
@@ -1049,6 +1053,13 @@ class Session(ConstructionMixin):
         seam=next((s for s in self.document.seams if s.id==identity),None)
         if seam is None:raise ValueError('That seam no longer exists.')
         return self.commit(lambda:setattr(seam,'reverse',not seam.reverse))
+
+    def set_seam_shrink(self,identity,shrink):
+        if type(shrink) is not int or shrink not in (0,10,20,30):
+            raise ValueError("Seam Shrink must be 0, 10, 20 or 30 percent.")
+        seam=next((seam for seam in self.document.seams if seam.id==identity),None)
+        if seam is None:raise ValueError("That seam no longer exists.")
+        return self.commit(lambda:setattr(seam,'shrink',shrink))
 
     def split_segment(self,edge,fraction=.5):
         if not .0001<fraction<.9999:raise ValueError('Split inside the segment, away from its endpoints.')
@@ -1211,7 +1222,7 @@ def clone_relationships(document,source,target,reverse_outer=False):
         if all(e.pattern==source.id for side in (seam.side(0),seam.side(1)) for e in side):
             try:a,b=[remap(e) for e in seam.side(0)],[remap(e) for e in seam.side(1)]
             except (ValueError,KeyError):continue
-            new=Seam(a[0],b[0],seam.reverse,chain_a=tuple(a),chain_b=tuple(b))
+            new=Seam(a[0],b[0],seam.reverse,chain_a=tuple(a),chain_b=tuple(b),shrink=seam.shrink)
             document.seams.append(new);seam_map[seam.id]=new.id
     for feature in source.features:
         if feature.get('seam') and feature['seam'] not in seam_map:continue

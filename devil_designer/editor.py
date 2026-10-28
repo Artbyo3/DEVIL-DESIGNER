@@ -8,6 +8,7 @@ from .minimal import MinimalCards, minimal_layout
 from .design_tools import DesignTools
 from .silhouette import BodyReference, torso_alignment, VIEWS
 from . import history,layering
+from .fit_display import FitOverlay
 
 _active = None
 
@@ -58,6 +59,7 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         self.message = 'Drag to draw a panel. Sew its edges, then Simulate.'
         self.error_message = None
         self._closed = False
+        self.fit_overlay = FitOverlay(self)
         self.canvas_layout = self.make_layout()
         self.refresh_controls()
         self.update_reference(context)
@@ -527,6 +529,7 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
             self.canvas_layout = self.make_layout()
             self.refresh_controls()
             self.renderer.draw(self)
+            self.fit_overlay.legend(self.renderer)
         except Exception as exc:
             print("Devil Designer drawing error:", exc)
 
@@ -865,6 +868,9 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                 self.gesture, self.preview, self.handle_preview = None, None, None
                 return {'RUNNING_MODAL'}
             return {'RUNNING_MODAL'}
+        if press and event.type == 'F' and not event.ctrl and not event.alt and not self.numeric:
+            self.fit_overlay.toggle()
+            return {'RUNNING_MODAL'}
         if not panel:
             return {'PASS_THROUGH'}
         if event.type == 'ESC' and press:
@@ -956,7 +962,7 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                     return {'RUNNING_MODAL'}
                 if button == 'HELP':
                     self.show_card('HELP')
-                    self.message = "Shortcuts: V select, P polygon, R rect, E ellipse, I internal, D dart, N cut, J sew, K pin, T tack, F fit, S snap, Ctrl+Z undo, Ctrl+Shift+Z redo."
+                    self.message = "Shortcuts: V select, P polygon, R rect, E ellipse, I internal, D dart, N cut, J sew, K pin, T tack, F fit map, Home fit design, S snap, Ctrl+Z undo, Ctrl+Shift+Z redo."
                     return {'RUNNING_MODAL'}
                 return {'RUNNING_MODAL'}
         if press and not self.numeric:
@@ -1018,7 +1024,7 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                          'I': 'INTERNAL', 'D': 'DART', 'J': 'SEW', 'K': 'PIN', 'T': 'TACK', 'N': 'KNIFE'}[event.type]
             self.choose_tool(tool_name)
             return {'RUNNING_MODAL'}
-        if press and event.type in {'HOME', 'F'}:
+        if press and event.type == 'HOME':
             self.fit()
             return {'RUNNING_MODAL'}
         if self.tool == 'KNIFE' and canvas and event.type == 'LEFTMOUSE' and event.value == 'DOUBLE_CLICK':
@@ -1199,6 +1205,7 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
             return
         self.save_window()
         self._closed = True
+        self.fit_overlay.close()
         if self._handle is not None:
             bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
             self._handle = None
