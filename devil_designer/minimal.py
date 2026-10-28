@@ -238,7 +238,14 @@ class MinimalCards:
             rows.append(('INSP_FIT', 'Fit design', ''))
         elif kind == 'POINT':
             title = 'Point'
-            rows = [('CURVE', 'Corner / curve', ''),
+            v = None
+            if pattern and self.session.corner is not None:
+                try:
+                    v = pattern.path(self.session.path).vertices[self.session.corner]
+                except (IndexError, ValueError):
+                    pass
+            active_type = getattr(v, 'point_type', 'CORNER').title() if v else 'Corner'
+            rows = [('CHOICES', 'Point type', ('POINT_TYPE', ('Corner', 'Smooth', 'Auto'), active_type)),
                     ('SLIDER', 'dd_point_x', 'X position'),
                     ('SLIDER', 'dd_point_y', 'Y position')]
             if len(self.session.point_selection) > 1:
@@ -308,7 +315,17 @@ class MinimalCards:
                         ('DELETE', 'Delete', 'Del')]
             else:
                 title = f'{points} points'
-                rows = [('CURVE', 'Corner / curve', 'C')]
+                first_pt = next(iter(self.session.selected_points), None)
+                active_type = 'Corner'
+                if first_pt:
+                    p_pat = doc.find(first_pt[0])
+                    if p_pat:
+                        try:
+                            v = p_pat.path(first_pt[1]).vertices[first_pt[2]]
+                            active_type = getattr(v, 'point_type', 'CORNER').title()
+                        except (IndexError, ValueError):
+                            pass
+                rows = [('CHOICES', 'Point type', ('POINT_TYPE', ('Corner', 'Smooth', 'Auto'), active_type))]
                 if self.session.can_merge_selected_points():
                     rows.append(('MERGE', 'Merge points', 'M'))
                 rows.append(('PAIR_ACTIONS', 'FLIP_H', 'FLIP_V', 'Flip H', 'Flip V'))
@@ -367,7 +384,25 @@ class MinimalCards:
                 p_str = f"{pieces} piece{'s' if pieces != 1 else ''}"
                 return f"{p_str} · Drag to move"
             if points > 0:
-                pt_str = f"{points} point{'s' if points != 1 else ''}"
+                pt_types = []
+                for pid, path_id, idx in self.session.selected_points:
+                    pat = self.session.document.find(pid)
+                    if pat:
+                        try:
+                            v = pat.path(path_id).vertices[idx]
+                            pt_types.append(getattr(v, 'point_type', 'CORNER').title())
+                        except (IndexError, ValueError):
+                            pass
+                if not pt_types and self.session.selected and self.session.corner is not None:
+                    pat = self.session.document.find(self.session.selected)
+                    if pat:
+                        try:
+                            v = pat.path(self.session.path).vertices[self.session.corner]
+                            pt_types.append(getattr(v, 'point_type', 'CORNER').title())
+                        except (IndexError, ValueError):
+                            pass
+                type_str = pt_types[0] if (pt_types and len(set(pt_types)) == 1) else ('Mixed' if len(set(pt_types)) > 1 else 'Corner')
+                pt_str = f"{points} point{'s' if points != 1 else ''} ({type_str})"
                 return f"{pt_str} · Drag to move"
             return 'Click to select / Drag to box select'
         return {'SELECT': 'Drag points or pieces / Right-click for options',
@@ -483,6 +518,10 @@ class MinimalCards:
             self.cut_preview = None
             self.card_kind = None
             self.message = 'Cut cancelled.'
+        elif key.startswith('POINT_TYPE_'):
+            ptype = key.removeprefix('POINT_TYPE_').upper()
+            self.run_edit(lambda: self.session.set_point_type(ptype), f'Point type set to {ptype.title()}.')
+            self.card_kind = None
         elif key == 'CURVE':
             self.perform_action('CURVE')
             self.card_kind = None

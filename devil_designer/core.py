@@ -96,6 +96,48 @@ class Vertex:
     id: str = field(default_factory=uid)
     incoming: tuple = None
     outgoing: tuple = None
+    point_type: str = 'CORNER'
+
+def compute_auto_handles(nodes,idx,closed):
+    v=nodes[idx]
+    if not closed and (idx==0 or idx==len(nodes)-1):
+        return None,None
+    count=len(nodes)
+    if count<2:
+        return None,None
+    before=nodes[idx-1] if (closed or idx>0) else nodes[0]
+    after=nodes[(idx+1)%count] if closed else nodes[min(count-1,idx+1)]
+    dx=after.x-before.x
+    dy=after.y-before.y
+    length=math.hypot(dx,dy)
+    if length<1e-10:
+        return None,None
+    tangent=(dx/length,dy/length)
+    d_before=math.hypot(v.x-before.x,v.y-before.y)
+    d_after=math.hypot(v.x-after.x,v.y-after.y)
+    incoming=(-tangent[0]*d_before/3,-tangent[1]*d_before/3) if (closed or idx>0) else None
+    outgoing=(tangent[0]*d_after/3,tangent[1]*d_after/3) if (closed or idx<count-1) else None
+    return incoming,outgoing
+
+def update_auto_handles(nodes,closed):
+    for i,v in enumerate(nodes):
+        if getattr(v,'point_type','CORNER')=='AUTO':
+            v.incoming,v.outgoing=compute_auto_handles(nodes,i,closed)
+
+def align_smooth_handles(v):
+    if v.outgoing is not None and v.incoming is not None:
+        l_out=math.hypot(*v.outgoing)
+        l_in=math.hypot(*v.incoming)
+        if l_out>1e-10:
+            u=(v.outgoing[0]/l_out,v.outgoing[1]/l_out)
+            v.incoming=(-u[0]*l_in,-u[1]*l_in)
+        elif l_in>1e-10:
+            u=(-v.incoming[0]/l_in,-v.incoming[1]/l_in)
+            v.outgoing=(u[0]*l_out,u[1]*l_out)
+    elif v.outgoing is not None:
+        v.incoming=(-v.outgoing[0],-v.outgoing[1])
+    elif v.incoming is not None:
+        v.outgoing=(-v.incoming[0],-v.incoming[1])
 
 @dataclass
 class Path:
@@ -141,6 +183,7 @@ class Pattern:
 
 
 def sample_path(vertices,closed):
+    update_auto_handles(vertices,closed)
     result=[]
     count=len(vertices) if closed else len(vertices)-1
     for i in range(count):
@@ -183,7 +226,7 @@ class Anchor:
 
 
 def vertex_data(v):
-    return dict(x=float(v.x),y=float(v.y),id=v.id,incoming=v.incoming,outgoing=v.outgoing)
+    return dict(x=float(v.x),y=float(v.y),id=v.id,incoming=v.incoming,outgoing=v.outgoing,point_type=getattr(v,'point_type','CORNER'))
 
 
 def read_vertex(v):
@@ -194,7 +237,12 @@ def read_vertex(v):
             if len(value)!=2 or any(not math.isfinite(float(n)) for n in value): raise ValueError('Invalid Bezier handle.')
             value=tuple(float(n) for n in value)
         handles.append(value)
-    return Vertex(float(v['x']),float(v['y']),v['id'],*handles)
+    ptype=v.get('point_type')
+    if ptype is None:
+        ptype='SMOOTH' if (handles[0] is not None or handles[1] is not None) else 'CORNER'
+    elif ptype not in ('CORNER','SMOOTH','AUTO'):
+        raise ValueError('Unknown point type.')
+    return Vertex(float(v['x']),float(v['y']),v['id'],handles[0],handles[1],point_type=ptype)
 
 
 class Document:
@@ -387,9 +435,12 @@ class Document:
         v=Vertex(*left[3],incoming=curves.sub(left[2],left[3]),outgoing=curves.sub(right[1],right[0]))
         if a.outgoing is None and b.incoming is None:
             v.incoming=v.outgoing=None
+            v.point_type='CORNER'
         else:
             a.outgoing=curves.sub(left[1],left[0]); b.incoming=curves.sub(right[2],right[3])
+            v.point_type='SMOOTH'
         nodes.insert(nodes.index(a)+1,v)
+        update_auto_handles(nodes,edge.path=='OUTER' or p.path(edge.path).closed)
         def remap(span):
             if span.full()!=edge.full(): return [span]
             lo,hi=sorted((span.t0,span.t1)); result=[]
@@ -639,10 +690,13 @@ class Session(ConstructionMixin):
         return self.commit(op)
 
     def add(self,points):
-        validate_polygon(points)
+        raw_pts=[(v.x,v.y) if isinstance(v,Vertex) else v for v in points]
+        validate_polygon(raw_pts)
         names={p.name for p in self.document.patterns}; index=1
         while f'Pattern {index:02d}' in names: index+=1
-        p=Pattern(f'Pattern {index:02d}',[Vertex(*point) for point in points],preset=getattr(self.document,'preset','COTTON'))
+        nodes=[v if isinstance(v,Vertex) else Vertex(*v) for v in points]
+        update_auto_handles(nodes,True)
+        p=Pattern(f'Pattern {index:02d}',nodes,preset=getattr(self.document,'preset','COTTON'))
         self.commit(lambda:self.document.patterns.append(p))
         self.clear_selection();self.selected_patterns.add(p.id)
         self._selected,self._corner,self.path=p.id,None,'OUTER'
@@ -666,6 +720,7 @@ class Session(ConstructionMixin):
         p=self.document.find(self._selected)
         if p is None: raise ValueError('Select a pattern for the internal shape.')
         nodes=[v if isinstance(v,Vertex) else Vertex(*v) for v in points]
+        update_auto_handles(nodes,closed)
         path=Path('Internal '+str(len(p.paths)+1),nodes,closed)
         self.commit(lambda:p.paths.append(path)); self.path,self.corner=path.id,None
         return path
@@ -678,6 +733,7 @@ class Session(ConstructionMixin):
         old=[(v.x,v.y) for v in nodes]
         def apply():
             for v,point in zip(nodes,points): v.x,v.y=point
+            update_auto_handles(nodes,self.path=='OUTER' or p.path(self.path).closed)
             if self.path=='OUTER' and all(math.dist(curves.sub(q,pnt),curves.sub(points[0],old[0]))<1e-8 for pnt,q in zip(old,points)):
                 dx,dy=curves.sub(points[0],old[0])
                 for path in p.paths:
@@ -699,10 +755,12 @@ class Session(ConstructionMixin):
             for pid in pieces:
                 p=self.document.find(pid)
                 if not p:continue
-                for _,nodes,_,_ in p.loops():
+                for _,nodes,closed,_ in p.loops():
                     for v in nodes:v.x+=dx;v.y+=dy
+                    update_auto_handles(nodes,closed)
                 for anchor in self.document.anchors:
                     if anchor.pattern==p.id:anchor.x+=dx;anchor.y+=dy
+            affected_paths=set()
             for pid,path_id,idx in points:
                 if pid in pieces:continue
                 p=self.document.find(pid)
@@ -710,6 +768,11 @@ class Session(ConstructionMixin):
                 nodes=p.path(path_id).vertices
                 if 0<=idx<len(nodes):
                     v=nodes[idx];v.x+=dx;v.y+=dy
+                    affected_paths.add((pid,path_id))
+            for pid,path_id in affected_paths:
+                p=self.document.find(pid)
+                if p:
+                    update_auto_handles(p.path(path_id).vertices,path_id=='OUTER' or p.path(path_id).closed)
         return self.commit(apply)
 
     def flip_horizontal(self):
@@ -949,48 +1012,70 @@ class Session(ConstructionMixin):
         if not .0001<fraction<.9999:raise ValueError('Split inside the segment, away from its endpoints.')
         return self.commit(lambda:self.document.split_edge(edge,fraction))
 
-    def curve_point(self,index=None):
-        if len(self.selected_points)>1 and index is None:
-            def apply_all():
-                for pid,path_id,idx in self.selected_points:
-                    p=self.document.find(pid)
-                    if not p:continue
-                    nodes=p.path(path_id).vertices
-                    if not (0<=idx<len(nodes)):continue
-                    v=nodes[idx]
-                    if v.incoming is not None or v.outgoing is not None:
-                        v.incoming=v.outgoing=None;continue
-                    closed=path_id=='OUTER' or p.path(path_id).closed
-                    before,after=(nodes[idx-1],nodes[(idx+1)%len(nodes)]) if closed else (nodes[max(0,idx-1)],nodes[min(len(nodes)-1,idx+1)])
-                    direction=(after.x-before.x,after.y-before.y);length=math.hypot(*direction)
-                    if length<1e-10:continue
-                    tangent=curves.mul(direction,1/length)
-                    v.incoming=curves.mul(tangent,-math.dist((v.x,v.y),(before.x,before.y))/3)
-                    v.outgoing=curves.mul(tangent,math.dist((v.x,v.y),(after.x,after.y))/3)
-                    if not closed and idx==0:v.incoming=None
-                    if not closed and idx==len(nodes)-1:v.outgoing=None
-            return self.commit(apply_all)
-        p=self.document.find(self._selected)
-        if p is None:raise ValueError('Select a pattern point.')
-        nodes=p.path(self.path).vertices;index=self._corner if index is None else index
-        if index is None:raise ValueError('Select a pattern point.')
+    def set_point_type(self,point_type,points=None):
+        if point_type not in ('CORNER','SMOOTH','AUTO'):raise ValueError('Unknown point type.')
+        if points is None:
+            pts=list(self.selected_points)
+            if not pts and self._selected and self._corner is not None:
+                pts=[(self._selected,self.path,self._corner)]
+        else:
+            pts=list(points)
+        if not pts:raise ValueError('Select a pattern point.')
         def apply():
-            v=nodes[index]
-            if v.incoming is not None or v.outgoing is not None:v.incoming=v.outgoing=None;return
-            closed=self.path=='OUTER' or p.path(self.path).closed
-            before,after=(nodes[index-1],nodes[(index+1)%len(nodes)]) if closed else (nodes[max(0,index-1)],nodes[min(len(nodes)-1,index+1)])
-            direction=(after.x-before.x,after.y-before.y);length=math.hypot(*direction)
-            if length<1e-10:raise ValueError('Cannot create a tangent at this point.')
-            tangent=curves.mul(direction,1/length)
-            v.incoming=curves.mul(tangent,-math.dist((v.x,v.y),(before.x,before.y))/3)
-            v.outgoing=curves.mul(tangent,math.dist((v.x,v.y),(after.x,after.y))/3)
-            if not closed and index==0:v.incoming=None
-            if not closed and index==len(nodes)-1:v.outgoing=None
+            for pid,path_id,idx in pts:
+                p=self.document.find(pid)
+                if not p:continue
+                nodes=p.path(path_id).vertices
+                if not (0<=idx<len(nodes)):continue
+                v=nodes[idx]
+                closed=path_id=='OUTER' or p.path(path_id).closed
+                v.point_type=point_type
+                if point_type=='CORNER':
+                    v.incoming=v.outgoing=None
+                elif point_type=='SMOOTH':
+                    if v.incoming is None and v.outgoing is None:
+                        v.incoming,v.outgoing=compute_auto_handles(nodes,idx,closed)
+                    else:
+                        align_smooth_handles(v)
+                elif point_type=='AUTO':
+                    v.incoming,v.outgoing=compute_auto_handles(nodes,idx,closed)
+            for pid,path_id,_ in pts:
+                p=self.document.find(pid)
+                if p:
+                    update_auto_handles(p.path(path_id).vertices,path_id=='OUTER' or p.path(path_id).closed)
         return self.commit(apply)
 
-    def set_handle(self,index,which,value):
-        p=self.document.find(self._selected);v=p.path(self.path).vertices[index]
-        return self.commit(lambda:setattr(v,which,tuple(value)))
+    def cycle_point_type(self,index=None):
+        pts=list(self.selected_points)
+        if not pts and self._selected and (index is not None or self._corner is not None):
+            pts=[(self._selected,self.path,self._corner if index is None else index)]
+        if not pts:raise ValueError('Select a pattern point.')
+        first_p=self.document.find(pts[0][0])
+        if not first_p:raise ValueError('Select a pattern point.')
+        first_nodes=first_p.path(pts[0][1]).vertices
+        first_v=first_nodes[pts[0][2]]
+        order=['CORNER','SMOOTH','AUTO']
+        current=getattr(first_v,'point_type','CORNER')
+        target=order[(order.index(current)+1)%len(order)]
+        self.set_point_type(target,pts)
+        return target
+
+    def curve_point(self,index=None):
+        return self.cycle_point_type(index=index)
+
+    def set_handle(self,index,which,value,other_which=None,other_value=None,pattern_id=None,path_id=None):
+        pid=pattern_id or self._selected
+        path=path_id or self.path
+        p=self.document.find(pid)
+        if not p:raise ValueError('The pattern no longer exists.')
+        v=p.path(path).vertices[index]
+        def apply():
+            setattr(v,which,tuple(value) if value is not None else None)
+            if other_which and other_value is not None:
+                setattr(v,other_which,tuple(other_value))
+            elif other_which and other_value is None:
+                setattr(v,other_which,None)
+        return self.commit(apply)
 
     def set_length(self,edge,target):
         if not math.isfinite(target) or target<.0001:raise ValueError('Length must be at least 0.01 cm.')
@@ -1053,18 +1138,19 @@ class Session(ConstructionMixin):
 
 def clone_pattern(pattern,offset=(0,0),reflection=None):
     result=copy.deepcopy(pattern);result.id=uid();mapping={pattern.id:result.id}
-    def convert(v):
+    def convert(v,orig):
         old=v.id;v.id=uid();mapping[old]=v.id
+        v.point_type=getattr(orig,'point_type','CORNER')
         p=(v.x,v.y)
         if reflection:
             p=curves.reflect(p,*reflection)
             if v.incoming is not None:v.incoming=curves.reflect(v.incoming,*reflection,vector=True)
             if v.outgoing is not None:v.outgoing=curves.reflect(v.outgoing,*reflection,vector=True)
         v.x,v.y=curves.add(p,offset)
-    for v in result.vertices:convert(v)
-    for path in result.paths:
+    for v,orig in zip(result.vertices,pattern.vertices):convert(v,orig)
+    for path,orig_path in zip(result.paths,pattern.paths):
         old=path.id;path.id=uid();mapping[old]=path.id
-        for v in path.vertices:convert(v)
+        for v,orig in zip(path.vertices,orig_path.vertices):convert(v,orig)
     result.features=[]
     result._id_map=mapping
     return result
