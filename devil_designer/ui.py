@@ -2,6 +2,7 @@ import bpy
 from bpy.app.handlers import persistent
 from .editor import DD_OT_pattern_editor, close_active
 from .operators import CLASSES
+from .viewport_sewing import DD_OT_viewport_seam_action
 from .garment import cancel_playback
 
 
@@ -22,7 +23,7 @@ def on_load(_):
     cancel_playback()
 
 
-classes = (DD_OT_pattern_editor,)+CLASSES
+classes = (DD_OT_pattern_editor,DD_OT_viewport_seam_action)+CLASSES
 PROPERTIES = ('dd_document','dd_history','dd_collection','dd_avatar','dd_spacing','dd_clearance',
               'dd_quality','dd_frames','dd_self_collision','dd_pin_top','dd_weld_distance','dd_thickness',
               'dd_ui_rect','dd_ui_settings','dd_reference_visible','dd_reference_view',

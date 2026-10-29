@@ -62,6 +62,9 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         self.fit_overlay = FitOverlay(self)
         from .state_display import StateOverlay
         self.state_overlay = StateOverlay(self)
+        from .viewport_sewing import ViewportSewing
+        self.seam_hover = None
+        self.viewport_sewing = ViewportSewing(self)
         self.canvas_layout = self.make_layout()
         self.refresh_controls()
         self.update_reference(context)
@@ -295,7 +298,7 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         self._scene.dd_document = value
         self._scene.dd_history = history.store(self.session)
         self._stored = value
-        live_panels.sync(bpy.context)
+        live_panels.sync(bpy.context,preserve_sewing=getattr(getattr(self,'viewport_sewing',None),'preserve_pose',False))
         piece_states.update_display(bpy.context,self.session.document)
         if self._scene.dd_document!=value:
             self.session.document.uv_layout=Document.loads(self._scene.dd_document).uv_layout
@@ -333,6 +336,7 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
     def clear_interaction_references(self):
         self.cancel_gesture()
         self.seam_selected = None
+        self.seam_hover = None
         self.selected_anchor = None
         self.chain_a = []
         self.chain_b = []
@@ -568,7 +572,10 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         self.pointer = (event.mouse_x - self._region.x, event.mouse_y - self._region.y)
         panel = self.canvas_layout.panel.contains(*self.pointer)
         canvas = self.canvas_layout.canvas.contains(*self.pointer)
-        if not panel and not self.pending_tack and not self.pending_place:
+        sewing_result = self.viewport_sewing.event(context, event, panel, canvas)
+        if sewing_result is not None:
+            return sewing_result
+        if not panel and self.tool != 'SEW' and not self.pending_tack and not self.pending_place:
             from .arrangement_controls import point_event
             try:arrangement_result=point_event(context,event)
             except ValueError as failure:
@@ -1210,6 +1217,7 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         self._closed = True
         self.fit_overlay.close()
         self.state_overlay.close()
+        self.viewport_sewing.close()
         if self._handle is not None:
             bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
             self._handle = None

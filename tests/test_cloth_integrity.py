@@ -17,6 +17,12 @@ class ClothIntegrityTests(unittest.TestCase):
                 continue
             segment=ast.get_source_segment(source,node)
             if node.name=='compile_garment':
+                inspection_hook='    plan=boundary_plan(doc,scene.dd_spacing)\n    springs,inspection=resolve_sewing(maps,plan)\n'
+                self.assertEqual(segment.count(inspection_hook),1)
+                segment=segment.replace(inspection_hook,"    springs=set()\n    plan=boundary_plan(doc,scene.dd_spacing)\n    def index_of(edge,fraction):\n        values=maps[edge.pattern][edge.start]\n        t,index=min(values,key=lambda value:abs(value[0]-fraction))\n        if abs(t-fraction)>1e-6:raise ValueError('Sewing samples changed. Rebuild the panels.')\n        return index\n    for _,pairs in plan.seam_pairs:\n        for (edge_a,t_a),(edge_b,t_b) in pairs:\n            a,b=index_of(edge_a,t_a),index_of(edge_b,t_b)\n            if a!=b:springs.add(tuple(sorted((a,b))))\n",1)
+                metadata_hook="    obj['dd_sewing_inspection'] = json.dumps(inspection,separators=(',',':'))\n"
+                self.assertEqual(segment.count(metadata_hook),1)
+                segment=segment.replace(metadata_hook,'',1)
                 state_hook='    from . import piece_states\n    piece_states.update_display(context,doc)\n    if piece_states.required(doc):\n        return piece_states.compile_run(context,doc)\n'
                 self.assertEqual(segment.count(state_hook),1)
                 segment=segment.replace(state_hook,'',1)
