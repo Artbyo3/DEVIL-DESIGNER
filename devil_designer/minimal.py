@@ -225,6 +225,13 @@ class MinimalCards:
                     ('SET_DENSITY_COARSE', 'Coarse', ''),
                     ('SET_DENSITY_STANDARD', 'Standard', ''),
                     ('SET_DENSITY_FINE', 'Fine', '')]
+        elif kind == 'PIECE_SIMULATION':
+            if pattern is None:
+                return None
+            title = 'Piece simulation'
+            rows = [('TOGGLE_STATE_frozen', 'Unfreeze' if pattern.frozen else 'Freeze', 'Held seam'),
+                    ('TOGGLE_STATE_deactivated', 'Activate' if pattern.deactivated else 'Deactivate', 'No collision'),
+                    ('TOGGLE_STATE_strengthened', 'Remove strengthen' if pattern.strengthened else 'Strengthen', '×4 stiffness')]
         elif kind == 'PIECE':
             if pattern is None:
                 return None
@@ -239,6 +246,9 @@ class MinimalCards:
             rows.append(('MENU', 'PIECE_FABRIC_MENU', 'Fabric', fabric_override))
             density_label = {'AUTO': 'Garment default', 'COARSE': 'Coarse', 'STANDARD': 'Standard', 'FINE': 'Fine'}.get(pattern.mesh_density, pattern.mesh_density.title())
             rows.append(('MENU', 'PIECE_DENSITY_MENU', 'Mesh density', density_label))
+            from .piece_states import label
+            simulation_label = label(pattern).replace(' · Strengthened ×4', ' +4×')
+            rows.append(('MENU', 'PIECE_SIMULATION_MENU', 'Simulation', simulation_label or 'Normal'))
             rows.append(('PAIR_ACTIONS', 'DUPLICATE', 'MIRROR_SEW', 'Duplicate', 'Mirror'))
             rows.append(('CLONE_LINKED', 'Clone as linked twin', ''))
             if pattern.arrangement and pattern.arrangement['point']=='front':
@@ -467,7 +477,16 @@ class MinimalCards:
 
     def minimal_action(self, key):
         scene = self._scene
-        if key.startswith('WEAR_OVER_'):
+        if key == 'PIECE_SIMULATION_MENU':
+            self.card_kind = 'PIECE_SIMULATION'
+        elif key.startswith('TOGGLE_STATE_'):
+            from .piece_states import toggle
+            from . import garment
+            garment.stop(bpy.context)
+            flag = key.removeprefix('TOGGLE_STATE_')
+            self.run_edit(lambda: toggle(self.session, flag), 'Piece simulation updated. Click Simulate to apply. Freeze holds both sides of attached seams.')
+            self.card_kind = None
+        elif key.startswith('WEAR_OVER_'):
             obj=self.card_models[int(key.removeprefix('WEAR_OVER_'))]
             if not obj.is_editable:
                 self.error_message=f'Make kept garment "{obj.name}" editable to change Wear over.'
@@ -804,7 +823,7 @@ class MinimalCards:
                     elif key != 'INFO':
                         action = row[1] if key == 'MENU' else key
                         self.minimal_action(action)
-                        if action not in {'BODY_CHANGE', 'PIECE_FABRIC_MENU', 'PIECE_DENSITY_MENU', 'EDIT_ACTIONS', 'SCROLL_WEAR_OVER'}:
+                        if action not in {'BODY_CHANGE', 'PIECE_FABRIC_MENU', 'PIECE_DENSITY_MENU', 'PIECE_SIMULATION_MENU', 'EDIT_ACTIONS', 'SCROLL_WEAR_OVER'}:
                             self.card_kind = None
                     break
             return {'RUNNING_MODAL'}

@@ -429,6 +429,10 @@ class Renderer:
 
                 xs, ys = [pt[0] for pt in outline], [pt[1] for pt in outline]
                 label_txt = pat.name if ed.minimal_ui else pat.name + ' / ' + pat.preset.title()
+                from .piece_states import label
+                state_label = label(pat)
+                if state_label:
+                    label_txt += ' · ' + state_label
                 blf.size(0, 11 * s)
                 lw, dh = blf.dimensions(0, label_txt)
                 lx = (min(xs) + max(xs)) / 2

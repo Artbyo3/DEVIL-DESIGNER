@@ -28,6 +28,11 @@ def configure_collision_collection(context,simulation):
     if cloth is None:
         raise ValueError('The garment simulation has no cloth modifier.')
     excluded={obj for obj in kept if not obj.get('dd_wear_over',True)}
+    from .piece_states import active_document
+    document=garment.document(scene)
+    if any(pattern.deactivated for pattern in document.patterns):
+        active={pattern.id for pattern in active_document(document).patterns}
+        excluded.update(obj for obj in garment.generated(scene,'panel') if obj.get('dd_pattern_id') not in active)
     colliders={obj for obj in scene.objects if obj==scene.dd_avatar or
                (obj not in excluded and any(modifier.type=='COLLISION' for modifier in obj.modifiers))}
     cloth_modifiers=[modifier for obj in bpy.data.objects for modifier in obj.modifiers if modifier.type=='CLOTH']

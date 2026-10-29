@@ -1,3 +1,4 @@
+import json
 import bpy
 from . import garment
 from .fit_map import vertex_ratios, ratio_color, surface_edges
@@ -13,6 +14,10 @@ def snapshot(source, depsgraph, scene):
     for panel in panels:
         flat_faces.extend(tuple(offset + index for index in face.vertices) for face in panel.data.polygons)
         offset += len(panel.data.vertices)
+    if source.get('dd_run_rest'):
+        saved = json.loads(source['dd_run_rest'])
+        rest = [point for identity in json.loads(source['dd_piece_ids']) for point in saved[identity]]
+        flat_faces = [tuple(face.vertices) for face in source.data.polygons]
     evaluated = source.evaluated_get(depsgraph)
     mesh = evaluated.to_mesh()
     try:

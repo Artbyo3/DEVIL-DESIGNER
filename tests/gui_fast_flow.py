@@ -551,6 +551,23 @@ def check_interaction_regressions(workspace, event, point, check):
         minimal_layout(compact)
         check(compact.inspector is None and compact.canvas.w >= compact.panel.w - 16,
               '628 pixel compact workspace maintains full canvas without sidebars')
+        workspace.clear_interaction_references()
+        workspace.session = Session(Document())
+        workspace.session.add([(-.2, 0), (.2, 0), (.2, .4), (-.2, .4)])
+        workspace.persist()
+        workspace.choose_tool('SELECT')
+        for flag in ('frozen', 'deactivated', 'strengthened'):
+            workspace.show_card('PIECE')
+            menu_rect = next(rect for rect, row in workspace.minimal_card()[2] if row[0] == 'MENU' and row[1] == 'PIECE_SIMULATION_MENU')
+            workspace.handle_event(bpy.context, event('LEFTMOUSE', (menu_rect.x + menu_rect.w / 2, menu_rect.y + menu_rect.h / 2)))
+            check(workspace.card_kind == 'PIECE_SIMULATION', 'piece simulation submenu remains open after its cursor-anchored menu click')
+            action_rect = next(rect for rect, row in workspace.minimal_card()[2] if row[0] == 'TOGGLE_STATE_' + flag)
+            workspace.handle_event(bpy.context, event('LEFTMOUSE', (action_rect.x + action_rect.w / 2, action_rect.y + action_rect.h / 2)))
+            check(workspace.card_kind is None and getattr(workspace.session.document.patterns[0], flag), flag + ' is undoable and dismisses directly to the canvas')
+        for index in range(3):
+            workspace.perform_action('UNDO')
+        check(not any(getattr(workspace.session.document.patterns[0], flag) for flag in ('frozen', 'deactivated', 'strengthened')),
+              'three Undo operations restore normal piece simulation states through the real editor')
     finally:
         workspace.clear_interaction_references()
         workspace.session = original_session

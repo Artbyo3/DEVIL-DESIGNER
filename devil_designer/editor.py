@@ -60,6 +60,8 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         self.error_message = None
         self._closed = False
         self.fit_overlay = FitOverlay(self)
+        from .state_display import StateOverlay
+        self.state_overlay = StateOverlay(self)
         self.canvas_layout = self.make_layout()
         self.refresh_controls()
         self.update_reference(context)
@@ -288,12 +290,13 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                 self.perform_action('SIMULATE')
 
     def persist(self):
-        from . import live_panels
+        from . import live_panels, piece_states
         value = self.session.document.dumps()
         self._scene.dd_document = value
         self._scene.dd_history = history.store(self.session)
         self._stored = value
         live_panels.sync(bpy.context)
+        piece_states.update_display(bpy.context,self.session.document)
         if self._scene.dd_document!=value:
             self.session.document.uv_layout=Document.loads(self._scene.dd_document).uv_layout
             self._stored=self._scene.dd_document
@@ -1206,6 +1209,7 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         self.save_window()
         self._closed = True
         self.fit_overlay.close()
+        self.state_overlay.close()
         if self._handle is not None:
             bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
             self._handle = None

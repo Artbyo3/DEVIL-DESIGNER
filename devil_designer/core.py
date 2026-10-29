@@ -166,6 +166,9 @@ class Pattern:
     placement_mode: str = 'LAYOUT'
     arrangement: dict = None
     panel_origin: dict = None
+    frozen: bool = False
+    deactivated: bool = False
+    strengthened: bool = False
 
     @property
     def points(self): return [(v.x,v.y) for v in self.vertices]
@@ -279,7 +282,7 @@ class Document:
         return json.dumps(dict(version=4,preset=getattr(self,'preset','COTTON'),patterns=[dict(id=p.id,name=p.name,\
             vertices=[vertex_data(v) for v in p.vertices],paths=[dict(id=q.id,name=q.name,closed=q.closed,role=q.role,\
             vertices=[vertex_data(v) for v in q.vertices]) for q in p.paths],preset=p.preset,wrap_radius=p.wrap_radius,\
-            features=p.features,mesh_density=p.mesh_density,fabric_override=getattr(p,'fabric_override',False),placement_mode=p.placement_mode,arrangement=p.arrangement,panel_origin=p.panel_origin) for p in self.patterns],seams=[dict(id=s.id,a=vars(s.a),b=vars(s.b),reverse=s.reverse,\
+            features=p.features,mesh_density=p.mesh_density,fabric_override=getattr(p,'fabric_override',False),placement_mode=p.placement_mode,arrangement=p.arrangement,panel_origin=p.panel_origin,**({'simulation':{key:getattr(p,key) for key in ('frozen','deactivated','strengthened') if getattr(p,key)}} if p.frozen or p.deactivated or p.strengthened else {})) for p in self.patterns],seams=[dict(id=s.id,a=vars(s.a),b=vars(s.b),reverse=s.reverse,\
             chain_a=[vars(e) for e in s.side(0)],chain_b=[vars(e) for e in s.side(1)],**({"shrink":s.shrink} if s.shrink else {})) for s in self.seams],\
             anchors=[vars(a) for a in self.anchors],uv_layout=self.uv_layout,**({'linked_pairs':self.linked_pairs} if self.linked_pairs else {})),separators=(',',':'),allow_nan=False)
 
@@ -299,6 +302,9 @@ class Document:
                 p.placement_mode=item.get('placement_mode','LAYOUT') if data['version']>=4 else 'LEGACY'
                 p.arrangement=item.get('arrangement') if data['version']>=4 else None
                 p.panel_origin=item.get('panel_origin') if data['version']>=4 else None
+                state=item.get('simulation',{})
+                if not isinstance(state,dict) or set(state)-{'frozen','deactivated','strengthened'} or any(type(flag) is not bool for flag in state.values()):raise ValueError('Invalid piece simulation state.')
+                for key,flag in state.items():setattr(p,key,flag)
                 if 'fabric_override' in item:
                     p.fabric_override=bool(item['fabric_override'])
                 else:
@@ -397,6 +403,7 @@ class Document:
             if not isinstance(p.name,str) or not p.name.strip(): raise ValueError('Pattern names must contain text.')
             if p.preset not in {'COTTON','LINEN','SILK','DENIM','KNIT','LEATHER'}: raise ValueError('Unknown cloth preset.')
             if p.mesh_density not in ('AUTO','COARSE','STANDARD','FINE'): raise ValueError('Unknown mesh density.')
+            if any(type(getattr(p,key)) is not bool for key in ('frozen','deactivated','strengthened')):raise ValueError('Invalid piece simulation state.')
             if p.placement_mode not in ('LAYOUT','LEGACY'):raise ValueError('Unknown panel placement mode.')
             if p.arrangement is not None:validate_arrangement(p.arrangement)
             if p.panel_origin is not None:

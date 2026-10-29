@@ -17,6 +17,9 @@ class ClothIntegrityTests(unittest.TestCase):
                 continue
             segment=ast.get_source_segment(source,node)
             if node.name=='compile_garment':
+                state_hook='    from . import piece_states\n    piece_states.update_display(context,doc)\n    if piece_states.required(doc):\n        return piece_states.compile_run(context,doc)\n'
+                self.assertEqual(segment.count(state_hook),1)
+                segment=segment.replace(state_hook,'',1)
                 hook='    ensure_collision(scene)\n    layering.prepare_colliders(context)\n'
                 self.assertEqual(segment.count(hook),1)
                 segment=segment.replace(hook,'    ensure_collision(scene)\n',1)

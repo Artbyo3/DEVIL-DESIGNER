@@ -299,6 +299,10 @@ def ensure_collision(scene):
 def compile_garment(context):
     scene = context.scene
     doc = document(scene)
+    from . import piece_states
+    piece_states.update_display(context,doc)
+    if piece_states.required(doc):
+        return piece_states.compile_run(context,doc)
     ensure_collision(scene)
     layering.prepare_colliders(context)
     panels = generated(scene,'panel')
