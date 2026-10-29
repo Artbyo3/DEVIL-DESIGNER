@@ -88,6 +88,13 @@ preserve valid pair membership. Designs without pair records remain unchanged.
   is a drawing reference only, not a placement projection.
 - Avatar-owned body-relative bounding volumes and editable arrangement points
   provide optional click-to-wrap or tangent-flat placement. Points toggle with H.
+- Setup format 2 stores independent fitted ellipse radii and section bases, derived
+  only from evaluated mesh slices at the existing height-fraction bands. Wrapped
+  rows interpolate centers and radii across neighboring volumes in the same body
+  region; radial clearance and arc-length spiral spacing remain intact. No rig or
+  surface projection is used. Format-1 setups remain circular until regeneration
+  or explicit per-piece re-arrangement; mixed setups retain a format-1 snapshot.
+  Arrangement records accept versions 1 and 2; the document format remains 4.
 - Store stable volume/point IDs and relative G/R deltas in document version 4;
   avatar setup is scene data, never bundled with a garment. Cuts retain their
   parent's pattern-space origin so both halves preserve their current placement.
@@ -202,7 +209,7 @@ The README documents the UI and practical limits.
 | Point split/delete/merge, offsets, symmetry and Unfold | Transactional operations with undo, IDs and sewing repair feedback |
 | Internal paths, holes, slits, princess cuts, trace and darts | Selectable paths, constrained meshing, separate slit lips and auto-closing dart sewing |
 | Segment/free/partial/M:N sewing | Arc-length ranges/chains, four-click free sewing, reverse/remove and nonblocking mismatch warnings |
-| Click placement, wrapping, pins/tacks | Avatar arrangement points and cylinders, live layout panels, native constraints; legacy ray/bend fallback |
+| Click placement, wrapping, pins/tacks | Mesh-fitted ellipse stacks and arrangement points, live layout panels, native constraints; legacy circle/ray/bend fallback |
 | Density, UV layout, face sets and groups | Constrained triangulation with shared persistent UV transform and piece metadata |
 | Per-pattern presets | Native stiffness groups; mass density remains an explicit shared weighted value |
 | Simulation/finalize | Native cloth, reset, evaluated output, matched seam welds, UV/group retention |
@@ -220,9 +227,10 @@ require manual repair. Slits expose their
 path mapping; use a cut into separate pieces for independently selectable lips.
 Tacks follow their bound skin triangle through deformation; topology changes
 require reattachment. Measured image scale cannot correct distorted photographs.
-Bounding-volume generation is heuristic and wrapping uses the radius at the point's
-height, not a fitted surface along the entire panel. Tall pieces may intersect wider
-neighboring body sections; inspect the starting fit. Regeneration resets avatar edits.
+Bounding-volume generation remains heuristic. Per-row ellipse interpolation follows
+neighboring sampled sections, not the body surface; terminal rows retain the nearest
+sample's cross-section. Unsamplable sections use body-extents ellipses. Intersections
+remain possible on unusual bodies; inspect the starting fit. Regeneration resets avatar edits.
 Legacy named layouts are non-anatomical placements, not automatic fitting. Cross-avatar
 loading provides an editable starting fit,
 not automatic tailoring to all body proportions. These limits are visible in the

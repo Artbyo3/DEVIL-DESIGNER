@@ -22,7 +22,7 @@ def build_guard(operation):
 
 def point_frame(context,record):
     from .arrangement import resolve_point
-    resolved=resolve_point(context,record['volume'],record['point'])
+    resolved=resolve_point(context,record['volume'],record['point'],record['version'])
     tangent=Vector(resolved['tangent']);up=Vector(resolved['up']);normal=Vector(resolved['normal'])
     frame=Matrix((tangent,up,normal)).transposed().to_4x4()
     frame.translation=resolved['point']
@@ -45,11 +45,18 @@ def position_panel(context,pattern,obj,center):
                 width=(right-left)/unit
                 spiral=width>math.tau*radius
                 minimum=(left-center[0])/unit
-                for vertex in obj.data.vertices:
-                    horizontal,vertical=vertex.co.x,vertex.co.y
-                    angle=horizontal/radius
-                    layer=radius+(max(clearance,.001/unit)*(horizontal-minimum)/(math.tau*radius) if spiral else 0)
-                    vertex.co=(layer*math.sin(angle),vertical,layer*math.cos(angle)-radius)
+                if 'stack' in resolved:
+                    from .ellipse_volumes import wrap_positions
+                    positions=wrap_positions([tuple(vertex.co) for vertex in obj.data.vertices],resolved,width,minimum,.001/unit)
+                    inverse=frame.inverted_safe()
+                    for vertex,position in zip(obj.data.vertices,positions):
+                        vertex.co=inverse @ Vector(position)
+                else:
+                    for vertex in obj.data.vertices:
+                        horizontal,vertical=vertex.co.x,vertex.co.y
+                        angle=horizontal/radius
+                        layer=radius+(max(clearance,.001/unit)*(horizontal-minimum)/(math.tau*radius) if spiral else 0)
+                        vertex.co=(layer*math.sin(angle),vertical,layer*math.cos(angle)-radius)
                 obj.data.update()
             delta=Matrix.Translation(Vector(pattern.arrangement['translation'])/unit) @ Euler(pattern.arrangement['rotation'],'XYZ').to_matrix().to_4x4()
             obj.matrix_world=frame @ delta
@@ -104,8 +111,8 @@ def avatar_signature(context):
     if avatar is None:return ''
     evaluated=avatar.evaluated_get(context.evaluated_depsgraph_get())
     return json.dumps([avatar.as_pointer(),[list(row) for row in evaluated.matrix_world],
-                       [list(point) for point in evaluated.bound_box],avatar.get('dd_arrangement_volumes',''),
-                       context.scene.dd_clearance],separators=(',',':'))
+                       [list(point) for point in evaluated.bound_box],
+                       context.scene.dd_clearance],separators=(',',':'))+chr(10)+avatar.get('dd_arrangement_volumes','')
 
 
 def sync(context):
@@ -129,21 +136,22 @@ def sync(context):
 
 def arrange_piece(context,identity,volume,point,flat=False):
     from . import editor,garment
-    from .arrangement import resolve_point
+    from .arrangement import resolve_point,upgrade_volumes
     resolve_point(context,volume,point)
+    upgrade_volumes(context)
     active=editor._active
     if active is not None and active._scene==context.scene:
         capture(context)
         pattern=active.session.document.find(identity)
         if pattern is None:raise ValueError('Select a piece before choosing an arrangement point.')
         def apply():
-            pattern.arrangement=arrangement_record(volume,point,flat);pattern.panel_origin=None
+            pattern.arrangement=arrangement_record(volume,point,flat,version=2);pattern.panel_origin=None
         active.run_edit(lambda:active.session.commit(apply),
                         pattern.name+' arranged at '+volume+' / '+point+'.')
     else:
         document=capture(context);pattern=document.find(identity)
         if pattern is None:raise ValueError('Select a piece before choosing an arrangement point.')
-        pattern.arrangement=arrangement_record(volume,point,flat)
+        pattern.arrangement=arrangement_record(volume,point,flat,version=2)
         pattern.panel_origin=None
         context.scene.dd_document=document.dumps();garment.build_panels(context)
 

@@ -288,6 +288,13 @@ and heights stay on their volume; volume bounds are fractions of body height.
 The body picker offers **Regenerate body volumes** to remeasure a changed mesh
 or recover invalid setup; this explicitly resets point and volume edits.
 
+New body setups use fitted elliptical sections with separate width and depth radii,
+measured only from the evaluated mesh. No rig, bones, or vertex groups are required.
+Setup and placement records support format 2. Existing format-1 setups keep their
+circular placements on opening; re-arranging one piece upgrades only that piece,
+retaining the old setup for other legacy records. Regenerating explicitly replaces
+the setup for all pieces. Garment document format remains 4.
+
 Volume and point edits belong to the avatar in this scene, never to a garment.
 Moving or scaling the avatar updates its live panels and points. After arranging,
 Blender **G/R** adjustments are saved as relative translation/rotation deltas.
@@ -298,15 +305,17 @@ card clears its arrangement and restores its flat layout position. Ordinary
 The 3D H display caches unchanged world geometry and GPU batches. Orbiting updates
 projection rather than re-resolving volume radii or rebuilding a batch per point.
 Point/volume edits and evaluated avatar frame changes invalidate the display cache;
-placement and wrapping are unchanged. In the repository, see
+the display never re-slices the mesh during redraw. In the repository, see
 ARRANGEMENT_DISPLAY_PERFORMANCE.md for measured before/after results. Reproduce with
 `python tools/dev.py --arrangement-performance current --keep-scratch`.
 
-Wrapping uses the cylinder radius at the selected point's height. Wider-than-one-
-circumference pieces form an outward spiral with separate successive turns.
+Wrapping follows an interpolated ellipse at each mesh row's own height across
+neighboring torso, arm, or leg volumes, with the existing radial clearance.
+Wider-than-one-circumference pieces form an outward spiral with separate successive turns.
 These are editable starting placements, not automatic fitting: anatomical section
-detection is heuristic, missing sections use fallback cylinders, and a tall piece
-can intersect a wider neighboring section on a tapered body. Inspect before draping.
+detection is heuristic, missing sections use body-extents fallback ellipses, and
+rows beyond the sampled stack retain its terminal width/depth. There is no body
+surface projection; unusual proportions can still intersect. Inspect before draping.
 The Tee uses integrated sleeve outlines rather than separate sleeve panels;
 Tee/Tank fronts and backs use explicit chest points, and Skirt uses waist points.
 

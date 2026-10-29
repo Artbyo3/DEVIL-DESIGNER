@@ -76,6 +76,7 @@ def _volume_center(points):
 
 
 def generate_volumes(vertices, triangles, clearance=0.03):
+    from .ellipse_volumes import fit_section
     vertices = [tuple(point) for point in vertices]
     triangles = [tuple(triangle) for triangle in triangles]
     low, extent = _volume_bounds(vertices)
@@ -124,11 +125,15 @@ def generate_volumes(vertices, triangles, clearance=0.03):
                 group = min(groups, key=lambda candidate: abs(_volume_center(candidate)[0] - middle))
             center = _volume_center(group)
             radius = max(math.dist(point, center) for point in group)
-            samples.append({'t': parameter, 'center': list(center), 'radius': radius})
+            radii, basis = fit_section(group, center, normal)
+            samples.append({'t': parameter, 'center': list(center), 'radius': radius,
+                            'radii': radii, 'basis': basis})
         if not samples:
             center = [middle + side * width * .25, extent[1] / extent[2] / 2, (lower + upper) / 2]
             samples = [{'t': 0, 'center': [*center[:2], lower], 'radius': extent[1] / extent[2] / 2},
                        {'t': 1, 'center': [*center[:2], upper], 'radius': extent[1] / extent[2] / 2}]
+            for sample in samples:
+                sample.update(radii=[width / 2, extent[1] / extent[2] / 2], basis=[[1, 0, 0], [0, -1, 0]])
         if arm and len(samples) > 1:
             direction = _volume_unit(tuple(samples[-1]['center'][axis] - samples[0]['center'][axis]
                                            for axis in range(3)))
@@ -140,6 +145,7 @@ def generate_volumes(vertices, triangles, clearance=0.03):
                     center = _volume_center(group)
                     sample['center'] = list(center)
                     sample['radius'] = max(math.dist(point, center) for point in group)
+                    sample['radii'], sample['basis'] = fit_section(group, center, direction)
         start, end = samples[0]['t'], samples[-1]['t']
         if len(samples) == 1:
             duplicate = dict(samples[0], t=1)
@@ -164,13 +170,13 @@ def generate_volumes(vertices, triangles, clearance=0.03):
                         'radius_scale': 1.0, 'samples': samples,
                         'points': [{'id': name, 'angle': index * math.pi / 4, 'height': .5}
                                    for index, name in enumerate(names)]})
-    return {'version': 1, 'clearance': clearance / extent[2],
+    return {'version': 2, 'clearance': clearance / extent[2],
             'aspect': [extent[0] / extent[2], extent[1] / extent[2]], 'volumes': volumes}
 
 
 def _volume_validate(setup):
     try:
-        if setup['version'] != 1 or not math.isfinite(setup['clearance']) or setup['clearance'] < 0:
+        if type(setup['version']) is not int or setup['version'] not in (1, 2) or not math.isfinite(setup['clearance']) or setup['clearance'] < 0:
             raise ValueError
         if len(setup['aspect']) != 2 or any(not math.isfinite(value) or value <= 0 for value in setup['aspect']):
             raise ValueError
@@ -196,6 +202,14 @@ def _volume_validate(setup):
                     raise ValueError
                 if not math.isfinite(sample['radius']) or sample['radius'] <= 0:
                     raise ValueError
+                if setup['version'] == 2:
+                    if len(sample['radii']) != 2 or any(not math.isfinite(value) or value <= 0 for value in sample['radii']):
+                        raise ValueError
+                    if len(sample['basis']) != 2 or any(len(vector) != 3 or any(not math.isfinite(value) for value in vector)
+                                                      or abs(math.hypot(*vector) - 1) > 1e-6 for vector in sample['basis']):
+                        raise ValueError
+                    if abs(_volume_dot(*sample['basis'])) > 1e-6:
+                        raise ValueError
             if len(volume['samples']) < 2 or volume['samples'][0]['t'] != 0 or previous != 1:
                 raise ValueError
             point_ids = set()
@@ -207,6 +221,10 @@ def _volume_validate(setup):
                     raise ValueError
         if not identities:
             raise ValueError
+        if 'legacy' in setup:
+            if setup['version'] != 2 or setup['legacy']['version'] != 1 or 'legacy' in setup['legacy']:
+                raise ValueError
+            _volume_validate(setup['legacy'])
     except (KeyError, TypeError, ValueError, OverflowError) as error:
         raise ValueError('Invalid avatar arrangement volumes; explicitly regenerate avatar setup.') from error
     return setup
@@ -290,6 +308,9 @@ def _volume_find(setup, volume_id, point_id=None):
 
 
 def _volume_resolve(setup, volume, point, low, extent, axes):
+    if setup['version'] == 2:
+        from .ellipse_volumes import resolve_ellipse
+        return resolve_ellipse(setup, volume, point, low, extent, axes)
     parameter = point['height']
     samples = volume['samples']
     first, second = samples[-2:]
@@ -351,10 +372,35 @@ def _volume_resolve(setup, volume, point, low, extent, axes):
             'radius': radius, 'volume': geometry}
 
 
-def resolve_point(context, volume_id, point_id):
+def resolve_point(context, volume_id, point_id, version=None):
     setup = ensure_volumes(context)
+    if version == 2 and setup['version'] == 1:
+        setup = upgrade_volumes(context)
+    if version == 1 and 'legacy' in setup:
+        setup = _volume_validate(setup['legacy'])
     volume, point = _volume_find(setup, volume_id, point_id)
     return _volume_resolve(setup, volume, point, *_volume_frame(context))
+
+
+def upgrade_volumes(context):
+    setup = ensure_volumes(context)
+    if setup['version'] == 2:
+        return setup
+    avatar = _volume_avatar(context)
+    stored = avatar['dd_arrangement_volumes']
+    try:
+        upgraded = ensure_volumes(context, force=True)
+        upgraded['legacy'] = setup
+        for volume in upgraded['volumes']:
+            previous = _volume_find(setup, volume['id'])
+            for key in ('lower', 'upper', 'radius_scale', 'points', 'next_point_id'):
+                if key in previous:
+                    volume[key] = previous[key]
+        avatar['dd_arrangement_volumes'] = json.dumps(_volume_validate(upgraded), allow_nan=False)
+        return upgraded
+    except Exception:
+        avatar['dd_arrangement_volumes'] = stored
+        raise
 
 
 def world_points(context):

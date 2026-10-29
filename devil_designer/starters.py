@@ -69,7 +69,7 @@ def create_tee_starter(measurements, fabric='COTTON'):
     s.sew_chains([make_edge(s.document, f_id, 8, rev=True)], [make_edge(s.document, b_id, 5)], reverse=False)
 
     for pattern,point in zip(s.document.patterns,('front','back')):
-        pattern.arrangement=arrangement_record('chest',point)
+        pattern.arrangement=arrangement_record('chest',point,version=2)
     return s.document
 
 
@@ -124,7 +124,7 @@ def create_tank_starter(measurements, fabric='COTTON'):
     s.sew_chains([make_edge(s.document, f_id, 6, rev=True)], [make_edge(s.document, b_id, 3)], reverse=False)
 
     for pattern,point in zip(s.document.patterns,('front','back')):
-        pattern.arrangement=arrangement_record('chest',point)
+        pattern.arrangement=arrangement_record('chest',point,version=2)
     return s.document
 
 
@@ -165,7 +165,7 @@ def create_skirt_starter(measurements, fabric='COTTON'):
     s.sew_chains([make_edge(s.document, f_id, 3, rev=True)], [make_edge(s.document, b_id, 1)], reverse=False)
 
     for pattern,point in zip(s.document.patterns,('front','back')):
-        pattern.arrangement=arrangement_record('waist',point)
+        pattern.arrangement=arrangement_record('waist',point,version=2)
     return s.document
 
 

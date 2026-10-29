@@ -34,7 +34,7 @@ class ArrangementRecordTests(unittest.TestCase):
 
     def test_corrupt_records_are_refused(self):
         valid=arrangement_record('chest','front')
-        for key,value in (('version',2),('volume',''),('point',3),('flat',1),('translation',[0,0]),('rotation',[0,float('inf'),0])):
+        for key,value in (('version',3),('volume',''),('point',3),('flat',1),('translation',[0,0]),('rotation',[0,float('inf'),0])):
             document=self.document();record=copy.deepcopy(valid);record[key]=value
             document.patterns[0].arrangement=record
             with self.subTest(key=key),self.assertRaises(ValueError):document.validate()
@@ -46,6 +46,15 @@ class ArrangementRecordTests(unittest.TestCase):
             for pattern in document.patterns:pattern.name='Renamed'
             document.patterns.reverse()
             self.assertEqual(Document.loads(document.dumps()).patterns[0].arrangement['point'],'back')
+
+    def test_both_arrangement_versions_roundtrip_without_implicit_conversion(self):
+        for version in (1,2):
+            document=self.document()
+            document.patterns[0].arrangement=arrangement_record('chest','front',version=version)
+            payload=document.dumps()
+            self.assertEqual(Document.loads(payload).dumps(),payload)
+            self.assertEqual(Document.loads(payload).patterns[0].arrangement['version'],version)
+        self.assertEqual(arrangement_record('chest','front')['version'],1)
 
     def test_cut_copies_portable_placement_and_source_origin_transactionally(self):
         for legacy in (False,True):

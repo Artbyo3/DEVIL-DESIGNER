@@ -90,9 +90,18 @@ class ArrangementVolumeTests(unittest.TestCase):
         for first, second in zip(actual, expected):
             self.assertAlmostEqual(first, second, places=7)
 
+    def legacy_setup(self):
+        setup = arrangement.generate_volumes(self.vertices, self.triangles, self.context.scene.dd_clearance / self.context.scene.unit_settings.scale_length)
+        setup['version'] = 1
+        for volume in setup['volumes']:
+            for sample in volume['samples']:
+                del sample['radii'], sample['basis']
+        self.avatar['dd_arrangement_volumes'] = json.dumps(setup)
+        return setup
+
     def test_sparse_box_cross_sections_measure_edges_not_nearby_vertices(self):
         setup = arrangement.generate_volumes(self.vertices, self.triangles)
-        self.assertEqual(setup['version'], 1)
+        self.assertEqual(setup['version'], 2)
         self.assertEqual({volume['id'] for volume in setup['volumes']},
                          {'neck', 'chest', 'waist', 'hip', 'left_upper_arm', 'right_upper_arm',
                           'left_forearm', 'right_forearm', 'left_thigh', 'right_thigh',
@@ -147,6 +156,7 @@ class ArrangementVolumeTests(unittest.TestCase):
         self.assertAlmostEqual(sum(first * second for first, second in zip(resolved['normal'], resolved['up'])), 0)
 
     def test_default_front_back_frames_are_not_mirrored(self):
+        self.legacy_setup()
         front = arrangement.resolve_point(self.context, 'chest', 'front')
         back = arrangement.resolve_point(self.context, 'chest', 'back')
         self.assert_vector(front['normal'], (0, -1, 0))
@@ -186,6 +196,7 @@ class ArrangementVolumeTests(unittest.TestCase):
         self.assertNotEqual(replacement, identity)
 
     def test_volume_bounds_and_radius_are_absolute_edits_of_measurement(self):
+        self.legacy_setup()
         setup = arrangement.ensure_volumes(self.context)
         original = self.volume(setup)
         arrangement.edit_point(self.context, 'chest', 'front', height=.25)
@@ -250,11 +261,12 @@ class ArrangementVolumeTests(unittest.TestCase):
         setup = arrangement.ensure_volumes(self.context)
         resolved = arrangement.resolve_point(self.context, 'chest', 'front')
         self.assertEqual(self.volume(setup)['points'][0]['angle'], 0)
-        self.assertAlmostEqual(resolved['radius'], math.hypot(.5, .4) + .03)
+        self.assertAlmostEqual(resolved['radius'], math.sqrt(2) * .4 + .03)
         self.assertEqual(set(other), {'dd_arrangement_volumes'})
 
     def test_clearance_converts_metres_to_scene_units(self):
         self.context.scene.unit_settings.scale_length = .01
+        self.legacy_setup()
         self.assertAlmostEqual(arrangement.resolve_point(self.context, 'waist', 'front')['radius'],
                                math.hypot(.3, .2) + 3)
 
@@ -296,12 +308,87 @@ class ArrangementVolumeTests(unittest.TestCase):
 
     def test_corrupt_data_requires_explicit_regeneration(self):
         setup = arrangement.ensure_volumes(self.context)
-        for stored in ('{', 'null', '{}', json.dumps(dict(setup, version=2))):
+        for stored in ('{', 'null', '{}', json.dumps(dict(setup, version=3))):
             self.avatar['dd_arrangement_volumes'] = stored
             with self.subTest(stored=stored), self.assertRaisesRegex(ValueError, 'regenerate'):
                 arrangement.ensure_volumes(self.context)
             self.assertEqual(self.avatar['dd_arrangement_volumes'], stored)
-        self.assertEqual(arrangement.ensure_volumes(self.context, force=True)['version'], 1)
+        self.assertEqual(arrangement.ensure_volumes(self.context, force=True)['version'], 2)
+
+    def test_old_setup_and_legacy_resolution_survive_per_piece_opt_in(self):
+        original = self.legacy_setup()
+        stored = self.avatar['dd_arrangement_volumes']
+        before = arrangement.resolve_point(self.context, 'chest', 'front', version=1)
+        self.assertEqual(arrangement.ensure_volumes(self.context), original)
+        self.assertEqual(self.avatar['dd_arrangement_volumes'], stored)
+        upgraded = arrangement.upgrade_volumes(self.context)
+        self.assertEqual(upgraded['version'], 2)
+        self.assertEqual(upgraded['legacy'], original)
+        self.assertEqual(arrangement.resolve_point(self.context, 'chest', 'front', version=1), before)
+        modern = arrangement.resolve_point(self.context, 'chest', 'front', version=2)
+        self.assertNotEqual(modern['point'], before['point'])
+        frame = arrangement._volume_frame(self.context)
+        with patch.object(arrangement, '_volume_frame', return_value=frame), patch.object(arrangement, '_volume_mesh', side_effect=AssertionError('Cached resolution only')), patch.object(
+                arrangement, '_volume_sections', side_effect=AssertionError('No redraw slicing')):
+            arrangement.world_points(self.context)
+            self.assertEqual(arrangement.resolve_point(self.context, 'chest', 'front', version=2), modern)
+        arrangement.ensure_volumes(self.context, force=True)
+        self.assertNotIn('legacy', arrangement.ensure_volumes(self.context))
+        self.assertEqual(arrangement.resolve_point(self.context, 'chest', 'front', version=1)['point'], modern['point'])
+
+    def test_ellipse_radii_are_independent_and_enclose_section_loop(self):
+        from devil_designer.ellipse_volumes import directional_radius
+        setup = arrangement.ensure_volumes(self.context)
+        sample = self.volume(setup)['samples'][0]
+        self.assertAlmostEqual(sample['radii'][0] / sample['radii'][1], 1.5)
+        resolved = arrangement.resolve_point(self.context, 'chest', 'front')
+        self.assertAlmostEqual(resolved['radius'], math.sqrt(2) * .2 + .03)
+        for entry in resolved['volume']['samples']:
+            for direction, expected in (((1,0,0), math.sqrt(2) * .3), ((0,-1,0), math.sqrt(2) * .2)):
+                self.assertAlmostEqual(directional_radius(entry, direction), expected)
+
+    def test_invalid_ellipse_or_legacy_snapshot_is_rejected(self):
+        original = arrangement.ensure_volumes(self.context)
+        for key, value in (('radii', [0,.1]), ('radii', [math.nan,.1]), ('basis', [[1,0,0],[1,0,0]])):
+            invalid = json.loads(json.dumps(original))
+            self.volume(invalid)['samples'][0][key] = value
+            with self.assertRaises(ValueError):
+                arrangement._volume_validate(invalid)
+        invalid = dict(original, legacy=original)
+        with self.assertRaises(ValueError):
+            arrangement._volume_validate(invalid)
+
+    def test_fallback_ellipse_uses_body_extents_without_changing_bands(self):
+        with patch.object(arrangement, '_volume_sections', return_value=[]):
+            setup = arrangement.generate_volumes(self.vertices, self.triangles)
+        arrangement._volume_validate(setup)
+        for volume in setup['volumes']:
+            for sample in volume['samples']:
+                self.assert_vector(sample['radii'], (.15,.1))
+        self.assertEqual(self.volume(setup)['lower'], .66)
+        self.assertEqual(self.volume(setup)['upper'], .80)
+
+    def test_row_interpolation_and_terminal_clamp_keep_each_rows_height(self):
+        from devil_designer.ellipse_volumes import section_at_height, wrap_positions
+        entries = [dict(center=(0,0,0),vectors=((1,0,0),(0,-2,0))),
+                   dict(center=(1,2,2),vectors=((3,0,0),(0,-4,0)))]
+        middle = section_at_height(entries,1,(0,0,1))
+        self.assert_vector(middle['center'],(.5,1,1))
+        self.assert_vector(middle['vectors'][0],(2,0,0))
+        self.assert_vector(middle['vectors'][1],(0,-3,0))
+        terminal = section_at_height(entries,3,(0,0,1))
+        self.assert_vector(terminal['center'],(1,2,3))
+        self.assertEqual(terminal['vectors'],[(3,0,0),(0,-4,0)])
+        resolved = dict(stack=entries,height=0,up=(0,0,1),right=(1,0,0),front=(0,-1,0),clearance=.03,angle=0)
+        actual = wrap_positions([(0,0,0),(0,1,0),(0,3,0)],resolved,.1,-.05,.001)
+        for position, expected in zip(actual,((0,-2.03,0),(.5,-2.03,1),(1,-2.03,3))):
+            self.assert_vector(position,expected)
+
+    def test_ellipse_metric_retains_nonorthogonal_transformed_axis_vectors(self):
+        from devil_designer.ellipse_volumes import directional_radius
+        section = dict(vectors=((2,0,0),(1,-1,0)))
+        self.assertAlmostEqual(directional_radius(section,(1,0,0)),2)
+        self.assertAlmostEqual(directional_radius(section,(0,-1,0)),1/math.sqrt(1.25))
 
     def test_invalid_sample_and_point_schema_is_not_silently_reset(self):
         setup = arrangement.ensure_volumes(self.context)

@@ -37,8 +37,12 @@ def reference_draw(context):
         volumes.add(point['volume'])
         normal=Vector(point['normal']);tangent=Vector(point['tangent'])
         for sample in (point['geometry']['samples'][0],point['geometry']['samples'][-1]):
-            ring=[view3d_utils.location_3d_to_region_2d(context.region,context.region_data,
-                  Vector(sample['center'])+sample['radius']*(normal*math.cos(math.tau*index/32)+tangent*math.sin(math.tau*index/32))) for index in range(33)]
+            if 'vectors' in sample:
+                from devil_designer.ellipse_volumes import ellipse_ring
+                positions=[Vector(position) for position in ellipse_ring(sample,point['geometry']['clearance'],point['geometry']['axis'])]
+            else:
+                positions=[Vector(sample['center'])+sample['radius']*(normal*math.cos(math.tau*index/32)+tangent*math.sin(math.tau*index/32)) for index in range(33)]
+            ring=[view3d_utils.location_3d_to_region_2d(context.region,context.region_data,position) for position in positions]
             for first,second in zip(ring,ring[1:]):
                 if first is None or second is None:continue
                 if panel is not None and any(panel.contains(*value) for value in (first,second)):continue

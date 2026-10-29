@@ -24,10 +24,16 @@ def display_world_points(context):
         rings={}
         for point in points:
             normal=Vector(point['normal']);tangent=Vector(point['tangent'])
-            rings[(point['volume'],point['point'])]=[
-                [Vector(sample['center'])+sample['radius']*(normal*math.cos(math.tau*index/32)+tangent*math.sin(math.tau*index/32))
-                 for index in range(33)]
-                for sample in (point['geometry']['samples'][0],point['geometry']['samples'][-1])]
+            if 'vectors' in point['geometry']['samples'][0]:
+                from .ellipse_volumes import ellipse_ring
+                rings[(point['volume'],point['point'])]=[
+                    [Vector(position) for position in ellipse_ring(sample,point['geometry']['clearance'],point['geometry']['axis'])]
+                    for sample in (point['geometry']['samples'][0],point['geometry']['samples'][-1])]
+            else:
+                rings[(point['volume'],point['point'])]=[
+                    [Vector(sample['center'])+sample['radius']*(normal*math.cos(math.tau*index/32)+tangent*math.sin(math.tau*index/32))
+                     for index in range(33)]
+                    for sample in (point['geometry']['samples'][0],point['geometry']['samples'][-1])]
         _world_cache=(key,points,rings)
     return _world_cache[1]
 
