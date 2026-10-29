@@ -72,6 +72,17 @@ preserve valid pair membership. Designs without pair records remain unchanged.
 ### Sewing
 
 - Segment sewing and free sewing.
+- The same segment and four-click free sewing work on visible arranged live
+  panels in the revealed 3D viewport, including same-piece pairs and M:N chains.
+  Picking uses derived boundary samples with cached visibility, never a second
+  sewing model or stored design format. Multiple visible edges within tolerance
+  refuse the click with an explanation; shared corners never guess a neighbor.
+- Shared seam preview, hover and selection identities connect the 2D canvas and
+  3D viewport. Reverse and delete use the existing document transactions and
+  persistent history. In a 3D sewing session, seam-only panel resampling retains the exact existing
+  transform channels for wrapped, flat-arranged and click-placed pieces.
+  Kept meshes and sewing during playback are excluded. Cached display batches
+  resolve only after source/geometry changes, not on orbit redraws.
 - Partial ranges along segments/curves, plus M:N pairing across edge chains.
 - Reverse, remove, and edit existing pairings.
 - Proportional resampling by arc length, independent of how many control points
@@ -80,6 +91,13 @@ preserve valid pair membership. Designs without pair records remain unchanged.
 - Length mismatch is a warning, NEVER a hard block: intentional gathers and ease
   must remain sewable. Invalid or missing geometry may still require repair.
 - Direction and correspondence must be visible before simulation.
+- The pre-simulation preview consumes the compiler's shared exact fraction-to-vertex
+  resolver and native-verified zero JOIN targets, drawing every resolved pair
+  on the 2D canvas and arranged 3D pieces. Preserve existing strokes and picking.
+  Show mismatch/pass/warn, paired direction arrows and in-place coverage, reversal,
+  local uneven-ease-risk and observed-edit/drift flags. Stale panels must show an
+  explicit unavailable state rather than approximate links. Inspect active piece
+  states without modifying the live scene, solver settings or sewing format.
 
 ### Placement and constraints
 

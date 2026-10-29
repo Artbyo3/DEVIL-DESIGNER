@@ -11,6 +11,7 @@ from .core import area
 from .native_features import decorate_mesh,apply_presets,add_anchors
 from .live_panels import build_guard
 from . import layering, seam_shrink
+from .sewing_preview import resolve_sewing
 
 OWNER = "Artbyo3/DEVIL-DESIGNER"
 _playback_window = None
@@ -344,17 +345,8 @@ def compile_garment(context):
         if scene.dd_pin_top:
             highest = max(v.co.y for v in panel.data.vertices)
             pin.extend(offset+v.index for v in panel.data.vertices if highest-v.co.y<.002/metres_per_unit(scene))
-    springs=set()
     plan=boundary_plan(doc,scene.dd_spacing)
-    def index_of(edge,fraction):
-        values=maps[edge.pattern][edge.start]
-        t,index=min(values,key=lambda value:abs(value[0]-fraction))
-        if abs(t-fraction)>1e-6:raise ValueError('Sewing samples changed. Rebuild the panels.')
-        return index
-    for _,pairs in plan.seam_pairs:
-        for (edge_a,t_a),(edge_b,t_b) in pairs:
-            a,b=index_of(edge_a,t_a),index_of(edge_b,t_b)
-            if a!=b:springs.add(tuple(sorted((a,b))))
+    springs,inspection=resolve_sewing(maps,plan)
     mesh = bpy.data.meshes.new('DD Sewn Fabric')
     mesh.from_pydata(verts,list(springs),faces)
     mesh.update()
@@ -373,6 +365,7 @@ def compile_garment(context):
     tag(obj,'simulation')
     obj['dd_signature'] = marker
     obj['dd_sewing_pairs'] = json.dumps(sorted(springs),separators=(',',':'))
+    obj['dd_sewing_inspection'] = json.dumps(inspection,separators=(',',':'))
     cloth = obj.modifiers.new('DD Cloth','CLOTH')
     settings = cloth.settings
     settings.use_sewing_springs = True

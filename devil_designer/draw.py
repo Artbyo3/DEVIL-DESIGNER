@@ -1,4 +1,5 @@
 import math
+import bpy
 import time
 import blf
 import gpu
@@ -1045,10 +1046,14 @@ class Renderer:
     def seams(self, ed):
         doc = ed.session.document
         c = ed.canvas_layout.canvas
+        preview = ed.viewport_sewing
+        preview.request_truth(bpy.context)
+        badges = {identity: rect for rect, identity, _ in ed.seam_badges()} if ed.minimal_ui else {}
         for index, seam in enumerate(doc.seams):
             mids = []
-            selected = ed.seam_selected == seam.id
-            mismatch = doc.seam_stats(seam)[3] > 1
+            selected = seam.id in (ed.seam_selected, getattr(ed, 'seam_hover', None))
+            record = preview.truth['records'].get(seam.id) if preview.truth else None
+            mismatch = doc.seam_stats(seam)[3] > 1 or bool(record and any(flag != 'B reversed' for flag in record['flags']))
             color = (1, 0.67, 0.31, 1) if selected or mismatch else (0.83, 0.48, 0.75, 0.85)
             if ed.minimal_ui:
                 color = (1, .67, .31, 1) if selected or mismatch else (.28, .65, .63, .85)
@@ -1067,11 +1072,30 @@ class Renderer:
                 mids.append(middle)
                 if ed.tool == 'SEW' and not ed.minimal_ui:
                     self.text(middle[0] + 8 * self.s, middle[1] + 8 * self.s, str(index + 1), 11, color)
-            if ed.tool == 'SEW' or ed.minimal_ui:
-                a, b = mids
-                steps = max(2, int(math.dist(a, b) / (10 * self.s)))
-                for i in range(0, steps, 2):
-                    self.lines([curves.mix(a, b, i / steps), curves.mix(a, b, min(i + 1, steps) / steps)], (*color[:3], 0.35))
+            if record:
+                for pair in record['flat']:
+                    endpoints = [ed.view.screen(point, c) for point in pair]
+                    self.lines(endpoints, (*color[:3], .28), 1)
+                    for point in endpoints:
+                        self.dot(point, 1.6 * self.s, color)
+                for side in (0, 1):
+                    samples = [ed.view.screen(pair[side], c) for pair in record['flat']]
+                    for sample in sorted({len(samples) // 3, 2 * len(samples) // 3}):
+                        if sample < 1 or sample >= len(samples):
+                            continue
+                        before, after = samples[sample - 1], samples[sample]
+                        length = math.dist(before, after)
+                        if length < 1e-6:
+                            continue
+                        direction = ((after[0] - before[0]) / length, (after[1] - before[1]) / length)
+                        wings = [(after[0] - direction[0] * 8 * self.s - direction[1] * sign * 4 * self.s, after[1] - direction[1] * 8 * self.s + direction[0] * sign * 4 * self.s) for sign in (-1, 1)]
+                        self.lines([wings[0], after, wings[1]], color, 2)
+            label = f'Seam {index + 1} · ' + (record['readout'] if record else preview.truth_error)
+            badge = badges.get(seam.id)
+            label_x, label_y = (badge.x + badge.w + 6 * self.s, badge.y + badge.h / 2 + 3 * self.s) if badge else (mids[0][0] + 10 * self.s, mids[0][1] + 16 * self.s)
+            self.text(label_x, label_y, label, 10, color, max_width=max(80 * self.s, c.x + c.w - label_x - 8 * self.s))
+            if record and record['flags']:
+                self.text(label_x, label_y - 12 * self.s, ' · '.join(record['flags']), 10, color, max_width=max(80 * self.s, c.x + c.w - label_x - 8 * self.s))
         for edge in ed.chain_a + ed.chain_b:
             points = [ed.view.screen(doc.edge_point(edge, edge.t0 + (edge.t1-edge.t0) * i / 16), c) for i in range(17)]
             self.lines(points, (1, 0.82, 0.3, 1), 3, True)

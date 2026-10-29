@@ -6,6 +6,46 @@ sewing, avatar placement, native Blender cloth, and a reusable local garment lib
 By **Artbyo3**. **0.9.0**, tested in **Blender 5.2.3 LTS**.
 Requires Blender 5.2+.
 
+## Sew where the panels sit
+
+Reveal the 3D viewport, choose Sew, and click two visible live-panel edges to
+pair whole segments, including two different edges of the same piece. Choose
+Free sewing (or Shift+J over the revealed viewport), then click start A, end A,
+start B, end B; a side can span several connected edges. J selects segment
+sewing. B flips direction, Escape cancels the pending picks, and mismatched
+lengths use the same nonblocking gather warning as the 2D canvas.
+
+Seam strokes, start markers and dashed correspondence links use the shared 2D
+colors. Hovering or selecting a sewn span in either view highlights it in both.
+With Select or Sew, select a seam in 3D and press X or Delete; Ctrl+Z restores
+it. Right-click a sewn span for Reverse seam and Remove seam. Free sewing keeps
+accepting endpoints instead of selecting existing seams; use Select to select
+an existing partial seam. Sewing preserves wrapped, flat-arranged and
+click-placed panel poses. The same document records compile, duplicate, save
+and load through the existing sewing path, including deactivated-piece rules.
+
+Only visible live-panel boundaries and internal edges are pickable, not kept
+meshes or an active drape. Pause simulation before sewing. Shared corners,
+overlapping visible edges and overlapping seam selections refuse ambiguous
+clicks rather than choosing a neighbor. Zoom or orbit to separate them. Hidden
+edges behind the body or another panel are not picked. Edge locations follow
+the actual sampled panel geometry, including its wrapped shape.
+
+The scratch prototype resolved 20/20 representative front/back chest edge
+clicks and rejected both shared-corner checks. A segment seam and an M:N free
+seam had zero record and compiled-mesh differences against equivalent 2D
+records, with independently generated seam IDs normalized. On a 36,300-vertex
+synthetic avatar with 12 volumes, cached seam
+preview plus arrangement display averaged 0.105 ms/redraw display CPU across
+three 120-redraw runs, versus the supplied 0.423 ms historical baseline. The
+same-run arrangement-only mean was 0.082 ms, so preview added about 0.024 ms;
+these are display CPU timings, not end-to-end interaction or frame times.
+The production preview, remeasured with six panels and two seams on the same 36,300-vertex,
+12-volume fixture, averaged 0.100 ms/redraw (0.073 ms without preview).
+Original-master comparison also checks exact 2D records and compiled geometry
+for layout, flat, wrapped, click-placed and manually transformed wrapped panels;
+2D-only editing keeps its prior rebuild path.
+
 ## Install and open
 
 Run `python tools/build.py` to create the installable archive, then install
@@ -73,12 +113,28 @@ unfinished drawing before switching tools or closing. The reference sections bel
 describe the underlying authoring operations; old sidebar paths are superseded by
 the contextual cards described here.
 
+## Pre-simulation sewing preview
+
+Before Simulate, sewing now shows every compiler-resolved point-to-point link
+in both the pattern canvas and the arranged 3D viewport, with paired direction
+arrows. Seam labels retain the existing mismatch threshold: above 1% shows
+Gather warning; sewing allowed, otherwise Pass. Partial/middle-only coverage,
+reversed B direction, uneven-ease risk and observed edits are labelled in place.
+A reversed direction is not necessarily wrong; inspect the endpoint arrows.
+Stale panel samples are explicitly unavailable until rebuilding completes; no
+midpoint-only or approximate pairing is substituted. Deactivated seams have no
+active links. The preview does not run simulation or change your sewing records.
+Historical edit intent cannot be recovered after reopening an existing file.
+See SEWING_DIAGNOSIS.md for the controlled sleeve/trousers evidence and the
+424-pair initialized native rest-length parity gate.
+
 ## Per-piece simulation states
 
 Right-click a piece and open **Simulation** to Freeze, Deactivate, or Strengthen.
 Each action closes the menu. The piece label names its state in the 2D canvas
 and in the revealed 3D view; deactivated panels remain visible as wire guides.
 Click **Simulate** to apply changed states. No sidebar or inspector is added.
+
 
 - **Freeze** holds the current simulated shape, or the arranged panel when no
   drape exists. Frozen and live sewn pieces remain inside one cloth mesh. Both

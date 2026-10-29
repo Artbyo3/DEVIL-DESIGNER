@@ -4,7 +4,7 @@ from functools import wraps
 import bpy
 from bpy.app.handlers import persistent
 from mathutils import Matrix,Vector,Euler
-from .core import arrangement_record
+from .core import Document,arrangement_record
 
 
 _busy=False
@@ -115,7 +115,21 @@ def avatar_signature(context):
                        context.scene.dd_clearance],separators=(',',':'))+chr(10)+avatar.get('dd_arrangement_volumes','')
 
 
-def sync(context):
+def sewing_only_change(document,panels):
+    if len(panels)!=len(document.patterns) or not panels:return False
+    expected=json.loads(document.dumps())
+    seams=expected['seams'];changed=False
+    expected['seams']=[]
+    for panel in panels:
+        try:previous=json.loads(Document.loads(panel.get('dd_document','')).dumps())
+        except (ValueError,TypeError,KeyError):return False
+        changed=changed or previous['seams']!=seams
+        previous['seams']=[]
+        if previous!=expected:return False
+    return changed
+
+
+def sync(context,preserve_sewing=False):
     global _busy
     if _busy:return []
     from . import garment
@@ -132,8 +146,17 @@ def sync(context):
         from .piece_states import synchronize_metadata
         if synchronize_metadata(context,document,panels):return panels
     if len(panels)==len(document.patterns) and all(panel.get('dd_document')==serialized and panel.get('dd_spacing')==scene.dd_spacing and panel.get('dd_units')==garment.metres_per_unit(scene) and panel.get('dd_avatar_frame')==frame for panel in panels):return panels
+    preserve=preserve_sewing and sewing_only_change(document,panels) and all(panel.get('dd_avatar_frame')==frame for panel in panels)
+    transforms={panel.get('dd_pattern_id'):{name:getattr(panel,name) if name=='rotation_mode' else tuple(getattr(panel,name)) for name in ('location','rotation_mode','rotation_euler','rotation_quaternion','rotation_axis_angle','scale')} for panel in panels} if preserve else {}
     _busy=True
-    try:return garment.build_panels(context)
+    try:
+        result=garment.build_panels(context)
+        for panel in result:
+            transform=transforms.get(panel.get('dd_pattern_id'))
+            if transform is not None:
+                for name,value in transform.items():setattr(panel,name,value)
+        if transforms:context.view_layer.update()
+        return result
     finally:_busy=False
 
 

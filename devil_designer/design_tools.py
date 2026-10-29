@@ -296,8 +296,8 @@ class DesignTools:
         a,b,difference,percent=self.session.document.seam_stats(seam)
         return f'Seam: {a*100:.2f} / {b*100:.2f} cm; difference {difference*100:.2f} cm ({percent:.1f}%).'+(' Gather warning; sewing allowed.' if percent>1 else '')
 
-    def design_sew_click(self):
-        edge=self.design_hit_edge()
+    def design_sew_click(self,viewport_hit=None):
+        edge=viewport_hit[0] if viewport_hit is not None else self.design_hit_edge()
         if edge is None:self.message='Click near an outer or internal segment.';return
         scene=self._scene;doc=self.session.document
         if self.chain_stage:
@@ -310,7 +310,8 @@ class DesignTools:
                 chain.append(edge)
             self.message=f'Chain {self.chain_stage}: {len(chain)} segments. Enter switches side / sews.';return
         if scene.dd_free_sewing:
-            t,_=curves.closest_fraction(doc.edge_curve(edge),self.view.world(self.pointer,self.canvas_layout.canvas))
+            point=doc.edge_point(edge,viewport_hit[1]) if viewport_hit is not None else self.view.world(self.pointer,self.canvas_layout.canvas)
+            t,_=curves.closest_fraction(doc.edge_curve(edge),point)
             self.free_clicks.append((edge,t))
             if len(self.free_clicks)==4:
                 try:
