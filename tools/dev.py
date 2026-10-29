@@ -2,6 +2,7 @@ import os
 import sys
 import time
 import argparse
+import json
 import subprocess
 from pathlib import Path
 
@@ -50,7 +51,7 @@ def do_tests():
                        desc=f"Blender Background: {t}"):
             return False
 
-    for t in ["gui_preview", "gui_silhouette", "gui_design", "gui_fast_flow", "gui_arrangement", "gui_fit_map"]:
+    for t in ["gui_preview", "gui_silhouette", "gui_design", "gui_fast_flow", "gui_arrangement", "gui_arrangement_display", "gui_fit_map"]:
         if not run_cmd([BLENDER_PATH, "--enable-event-simulate", "--factory-startup", "--python", "tools/run_blender_gui.py", "--", t],
                        desc=f"In-Engine GUI: {t}"):
             return False
@@ -79,6 +80,20 @@ def do_build():
         print(f"    (User extensions folder not found, skipping sync)")
         
     print("BUILD & VALIDATION COMPLETE!\n")
+    return True
+
+
+def do_arrangement_performance(label):
+    report=SCRATCH / f"arrangement-performance-{label}.json"
+    report.unlink(missing_ok=True)
+    if not run_cmd([BLENDER_PATH, "--factory-startup", "--window-geometry", "0", "0", "1500", "1000",
+                    "--python", "tests/gui_arrangement_performance.py", "--", label],
+                   desc="Arrangement display orbit benchmark"):
+        return False
+    if not report.is_file():
+        print("Arrangement benchmark did not produce its completed measurements.")
+        return False
+    print(json.dumps(json.loads(report.read_text(encoding="utf-8")),indent=2))
     return True
 
 def do_stage_screenshot(stage):
@@ -156,6 +171,7 @@ def do_inspect():
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Devil Designer Dev Tool")
     parser.add_argument("--quick", action="store_true", help="Run fast headless unit tests only (~0.1s)")
+    parser.add_argument("--arrangement-performance", choices=("baseline", "fixed", "current"), help="Measure orbit FPS, CPU, GPU snapshot and arrangement display cost")
     parser.add_argument("--test", action="store_true", help="Run all unit, background, and GUI tests")
     parser.add_argument("--build", action="store_true", help="Build, validate, and sync")
     parser.add_argument("--shots", action="store_true", help="Capture all screenshots")
@@ -168,11 +184,12 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.clean and args.keep_scratch:
         parser.error('--clean and --keep-scratch cannot be combined')
-    if not any([args.quick, args.test, args.build, args.shots, args.stage, args.inspect, args.all, args.clean]):
+    if not any([args.quick, args.test, args.build, args.shots, args.stage, args.inspect, args.all, args.clean, args.arrangement_performance]):
         parser.print_help()
         return 0
         
     operations = [
+        (args.arrangement_performance, lambda: do_arrangement_performance(args.arrangement_performance)),
         (args.quick, do_quick_tests),
         (args.test or args.all, do_tests),
         (args.build or args.all, do_build),

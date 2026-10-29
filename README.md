@@ -295,6 +295,13 @@ Clicking a point again resets those deltas. **Reset to 2D layout** on the piece
 card clears its arrangement and restores its flat layout position. Ordinary
 **Reset drape** removes simulation/cache but keeps arrangements.
 
+The 3D H display caches unchanged world geometry and GPU batches. Orbiting updates
+projection rather than re-resolving volume radii or rebuilding a batch per point.
+Point/volume edits and evaluated avatar frame changes invalidate the display cache;
+placement and wrapping are unchanged. In the repository, see
+ARRANGEMENT_DISPLAY_PERFORMANCE.md for measured before/after results. Reproduce with
+`python tools/dev.py --arrangement-performance current --keep-scratch`.
+
 Wrapping uses the cylinder radius at the selected point's height. Wider-than-one-
 circumference pieces form an outward spiral with separate successive turns.
 These are editable starting placements, not automatic fitting: anatomical section

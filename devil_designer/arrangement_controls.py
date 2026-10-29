@@ -9,6 +9,99 @@ from . import arrangement,live_panels
 
 _draw_handle=None
 _keymaps=[]
+_world_cache=None
+_projection_cache=None
+_batch_cache=None
+_shader=None
+
+
+def display_world_points(context):
+    global _world_cache
+    arrangement._volume_avatar(context)
+    key=(context.scene.as_pointer(),context.view_layer.as_pointer(),live_panels.avatar_signature(context))
+    if _world_cache is None or _world_cache[0]!=key:
+        points=arrangement.world_points(context)
+        rings={}
+        for point in points:
+            normal=Vector(point['normal']);tangent=Vector(point['tangent'])
+            rings[(point['volume'],point['point'])]=[
+                [Vector(sample['center'])+sample['radius']*(normal*math.cos(math.tau*index/32)+tangent*math.sin(math.tau*index/32))
+                 for index in range(33)]
+                for sample in (point['geometry']['samples'][0],point['geometry']['samples'][-1])]
+        _world_cache=(key,points,rings)
+    return _world_cache[1]
+
+
+def display_panel(context):
+    from . import editor
+    active=editor._active
+    return active.canvas_layout.panel if active is not None and active._area==context.area else None
+
+
+def display_shader():
+    interface=gpu.types.GPUShaderCreateInfo()
+    interface.vertex_in(0,'VEC3','position')
+    interface.vertex_in(1,'VEC3','peer')
+    interface.vertex_in(2,'VEC2','offset')
+    interface.push_constant('MAT4','viewProjection')
+    interface.push_constant('VEC2','viewport')
+    interface.push_constant('VEC4','panel')
+    interface.push_constant('VEC4','color')
+    interface.push_constant('BOOL','srgbTarget')
+    interface.fragment_out(0,'VEC4','fragColor')
+    interface.vertex_source('''
+bool covered(vec4 clip) {
+    vec2 pixel = (clip.xy / clip.w + vec2(1.0)) * viewport * 0.5;
+    return all(greaterThanEqual(pixel, panel.xy)) && all(lessThanEqual(pixel, panel.zw));
+}
+void main() {
+    vec4 clip = viewProjection * vec4(position, 1.0);
+    vec4 other = viewProjection * vec4(peer, 1.0);
+    if (clip.w <= 0.0 || other.w <= 0.0 || covered(clip) || covered(other)) {
+        gl_Position = vec4(2.0, 2.0, 0.0, 1.0);
+    } else {
+        gl_Position = vec4(clip.xy / clip.w + 2.0 * offset / viewport, 0.0, 1.0);
+    }
+}
+''')
+    interface.fragment_source('''
+void main() {
+    fragColor = color;
+    if (srgbTarget) {
+        vec3 channels = max(color.rgb, vec3(0.0));
+        fragColor.rgb = mix(pow((channels + 0.055) / 1.055, vec3(2.4)), channels / 12.92,
+                           lessThan(channels, vec3(0.04045)));
+    }
+}
+''')
+    return gpu.shader.create_from_info(interface)
+
+
+def display_batches(shader,points):
+    global _batch_cache
+    key=_world_cache[0]
+    if _batch_cache is None or _batch_cache[0]!=key:
+        positions=[];offsets=[]
+        for point in _world_cache[1]:
+            for index in range(16):
+                first=math.tau*index/16;second=math.tau*(index+1)/16
+                positions.extend((point['position'],)*3)
+                offsets.extend(((0,0),(5*math.cos(first),5*math.sin(first)),(5*math.cos(second),5*math.sin(second))))
+        _batch_cache=[key,batch_for_shader(shader,'TRIS',{'position':positions,'peer':positions,'offset':offsets}),None,None]
+    volumes=set();selected=[]
+    for point in points:
+        if point['volume'] not in volumes:
+            volumes.add(point['volume']);selected.append((point['volume'],point['point']))
+    ring_key=tuple(selected)
+    if _batch_cache[2]!=ring_key:
+        positions=[];peers=[]
+        for identity in selected:
+            for ring in _world_cache[2][identity]:
+                for first,second in zip(ring,ring[1:]):
+                    positions.extend((first,second));peers.extend((second,first))
+        _batch_cache[2]=ring_key
+        _batch_cache[3]=batch_for_shader(shader,'LINES',{'position':positions,'peer':peers,'offset':[(0,0)]*len(positions)}) if positions else None
+    return _batch_cache[1],_batch_cache[3]
 
 
 def arrangement_context(context):
@@ -28,15 +121,21 @@ def selected_piece(context):
 
 
 def projected_points(context):
+    global _projection_cache
     if not context.scene.dd_reference_visible or context.scene.dd_avatar is None or context.region_data is None:return []
-    from . import editor
-    active=editor._active
+    world=display_world_points(context)
+    panel=display_panel(context)
+    key=(_world_cache[0],context.region.as_pointer(),context.region.width,context.region.height,
+         tuple(tuple(row) for row in context.region_data.perspective_matrix),
+         (panel.x,panel.y,panel.w,panel.h) if panel is not None else None)
+    if _projection_cache is not None and _projection_cache[0]==key:return _projection_cache[1]
     points=[]
-    for point in arrangement.world_points(context):
+    for point in world:
         screen=view3d_utils.location_3d_to_region_2d(context.region,context.region_data,Vector(point['position']))
         if screen is None:continue
-        if active is not None and active._area==context.area and active.canvas_layout.panel.contains(*screen):continue
+        if panel is not None and panel.contains(*screen):continue
         points.append(dict(point,screen=tuple(screen)))
+    _projection_cache=(key,points)
     return points
 
 
@@ -47,41 +146,25 @@ def hit_point(context,mouse):
 
 
 def draw_points():
+    global _shader
     context=bpy.context
     if context.area is None or context.area.type!='VIEW_3D':return
     try:points=projected_points(context)
     except (ValueError,ReferenceError,RuntimeError):return
     if not points:return
-    shader=gpu.shader.from_builtin('UNIFORM_COLOR')
+    if _shader is None:_shader=display_shader()
+    shader=_shader
     gpu.state.blend_set('ALPHA')
     try:
-        volumes=set();lines=[]
-        from . import editor
-        active=editor._active
-        for point in points:
-            if point['volume'] in volumes:continue
-            volumes.add(point['volume'])
-            normal=Vector(point['normal']);tangent=Vector(point['tangent'])
-            for sample in (point['geometry']['samples'][0],point['geometry']['samples'][-1]):
-                center=Vector(sample['center']);radius=sample['radius']
-                ring=[view3d_utils.location_3d_to_region_2d(context.region,context.region_data,
-                      center+radius*(normal*math.cos(math.tau*index/32)+tangent*math.sin(math.tau*index/32))) for index in range(33)]
-                for first,second in zip(ring,ring[1:]):
-                    if first is None or second is None:continue
-                    if active is not None and active._area==context.area and any(active.canvas_layout.panel.contains(*value) for value in (first,second)):continue
-                    lines.extend((tuple(first),tuple(second)))
-        if lines:
-            shader.bind();shader.uniform_float('color',(.28,.78,1,.22))
-            batch_for_shader(shader,'LINES',{'pos':lines}).draw(shader)
-        for point in points:
-            horizontal,vertical=point['screen']
-            vertices=[]
-            for index in range(16):
-                first=math.tau*index/16;second=math.tau*(index+1)/16
-                vertices.extend(((horizontal,vertical),(horizontal+5*math.cos(first),vertical+5*math.sin(first)),
-                                 (horizontal+5*math.cos(second),vertical+5*math.sin(second))))
-            shader.bind();shader.uniform_float('color',(.28,.78,1,1))
-            batch_for_shader(shader,'TRIS',{'pos':vertices}).draw(shader)
+        markers,rings=display_batches(shader,points)
+        panel=display_panel(context)
+        shader.bind()
+        shader.uniform_float('viewProjection',context.region_data.perspective_matrix)
+        shader.uniform_float('viewport',(context.region.width,context.region.height))
+        shader.uniform_float('panel',(panel.x,panel.y,panel.x+panel.w,panel.y+panel.h) if panel is not None else (0,0,-1,-1))
+        if rings is not None:
+            shader.uniform_float('color',(.28,.78,1,.22));rings.draw(shader)
+        shader.uniform_float('color',(.28,.78,1,1));markers.draw(shader)
     finally:gpu.state.blend_set('NONE')
 
 
@@ -215,9 +298,10 @@ def register():
 
 
 def unregister():
-    global _draw_handle
+    global _draw_handle,_world_cache,_projection_cache,_batch_cache,_shader
     if _draw_handle is not None:
         bpy.types.SpaceView3D.draw_handler_remove(_draw_handle,'WINDOW');_draw_handle=None
     for keymap,item in _keymaps:keymap.keymap_items.remove(item)
     _keymaps.clear()
+    _world_cache=None;_projection_cache=None;_batch_cache=None;_shader=None
     for operator in (DD_OT_arrangement_edit,DD_OT_arrangement_guide,DD_OT_arrangement_pick):bpy.utils.unregister_class(operator)
