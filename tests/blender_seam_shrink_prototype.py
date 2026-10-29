@@ -256,7 +256,7 @@ def main():
     scratch = prepare_scratch()
     sources = [ROOT / 'devil_designer' / name for name in ('garment.py', 'meshing.py', 'placement.py', 'tack_binding.py')]
     before = {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in sources}
-    package = ROOT / 'dist' / 'devil_designer-0.9.0.zip'
+    package = ROOT / 'dist' / 'devil_designer-0.10.0.zip'
     package_hash = hashlib.sha256(package.read_bytes()).hexdigest()
     devil_designer.register()
     report = dict(prototype_only=True, blender=bpy.app.version_string, contraction_tolerance_percentage_points=1.0,
