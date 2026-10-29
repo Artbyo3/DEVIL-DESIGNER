@@ -128,6 +128,9 @@ def sync(context):
     if all(pattern.placement_mode=='LEGACY' and not pattern.arrangement for pattern in document.patterns):return panels
     serialized=document.dumps()
     frame=avatar_signature(context)
+    if any(panel.get('dd_document')!=serialized for panel in panels) and all(panel.get('dd_avatar_frame')==frame for panel in panels):
+        from .piece_states import synchronize_metadata
+        if synchronize_metadata(context,document,panels):return panels
     if len(panels)==len(document.patterns) and all(panel.get('dd_document')==serialized and panel.get('dd_spacing')==scene.dd_spacing and panel.get('dd_units')==garment.metres_per_unit(scene) and panel.get('dd_avatar_frame')==frame for panel in panels):return panels
     _busy=True
     try:return garment.build_panels(context)

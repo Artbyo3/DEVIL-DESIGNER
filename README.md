@@ -73,6 +73,88 @@ unfinished drawing before switching tools or closing. The reference sections bel
 describe the underlying authoring operations; old sidebar paths are superseded by
 the contextual cards described here.
 
+## Per-piece simulation states
+
+Right-click a piece and open **Simulation** to Freeze, Deactivate, or Strengthen.
+Each action closes the menu. The piece label names its state in the 2D canvas
+and in the revealed 3D view; deactivated panels remain visible as wire guides.
+Click **Simulate** to apply changed states. No sidebar or inspector is added.
+
+- **Freeze** holds the current simulated shape, or the arranged panel when no
+  drape exists. Frozen and live sewn pieces remain inside one cloth mesh. Both
+  endpoints of seams attached to a frozen piece are held; the neighboring live
+  interior still drapes. Freeze does not freeze the whole sewn group or create
+  a separate collider. Same-mesh self-collision is enabled for this run so frozen
+  fabric can collide. Frozen tacks do not drag the held boundary with the body.
+  Native pinning supplies the constraint to the solver; a same-mesh exact-position
+  clamp removes floating-point pin drift from held vertices after cloth evaluation.
+  Its temporary attributes are removed from evaluated output before Keep.
+- **Deactivate** omits the piece completely from run-only meshing and collision.
+  Its seams and anchors are inert for that run, but remain in the editable design.
+  Other pieces are sampled as if it were absent. Activate at least one piece
+  before simulating.
+- **Strengthen** multiplies that piece's preset tension, compression, shear, and
+  bending stiffness by **4**, using independent native vertex-group weights.
+  Shared presets, the other pieces' stiffness values, mass and sewing forces are
+  unchanged. Deactivate takes precedence; stored Freeze and Strengthen choices
+  return on activation.
+
+Flags survive Blender save/reopen, the 100-edit undo history, ordinary duplication,
+and garment-library save/load. Explicitly enabled linked twins share subsequent
+state toggles; switch Linked twin Off for independent states. Linking never edits
+sewing. Frozen outlines remain editable and arrangement remains available. Editing
+an outline rebuilds its sampling; its next frozen run starts from the rebuilt
+arrangement if the old drape is no longer compatible. The library stores the flags
+and editable design, not a portable simulation cache.
+
+All-normal documents omit the new fields and retain the original compilation path.
+State runs use the same meshing, placement, spring formulas, and Keep mesh function.
+Kept frozen garments work as ordinary Wear over bases. Current shape is transferred
+directly into the shared simulation mesh, without a panel-coordinate round trip.
+
+### Prototype measurements (2026-10-29)
+
+Scratch-only gates ran against master `689d785e92ee0ee829d68a353977d58ff87ffb5b`
+before production edits, using Blender 5.2.3 LTS and 121 frames per trial:
+
+| Measurement | Result |
+| --- | --- |
+| Frozen piece maximum movement | 0 mm; required at most 0.001 mm |
+| Unheld live sewn partner maximum movement | 25.510 mm |
+| Maximum seam gap, both-live / one frozen | 1.301 / 1.087 mm |
+| Maximum paired seam-side length difference | 0.461 mm |
+| Seam-side length tolerance | 2 mm + 2% of initial side length, every frame |
+| Maximum permitted seam-gap excess over baseline | 2 mm |
+| Cotton strip mean positive edge strain, normal / 4x | 0.06730% / 0.01684% |
+| Stretch reduction, frames 101-121 | 74.98% |
+| Other Cotton strip maximum trajectory difference | 0.002315 mm; below diagnostic 0.01 mm tolerance |
+| Absent-inner control final outer penetration into excluded shirt surface | 15.707 mm, body retained, zero errors |
+| Frozen kept-base penetration, Standard / High | 0 / 0 mm; matched both shipped-path references |
+
+The strengthened and normal strips shared a Cotton preset; only the selected
+strip's weights changed. The absent-inner control tested actual absence and the
+collision filter, not persistence of flags. Production regression tests separately
+verify inactive faces/seams are absent and sampling matches an absent-piece design.
+The layering fixture is the existing two-piece shirt with a source-matched jacket,
+initially 30 mm radially outward and 5 mm higher. It samples vertices, surface-edge
+midpoints and face centroids, excluding a 12 mm band at open shirt boundaries.
+These are fixture measurements, not guarantees for arbitrary clothing.
+
+An initial panel-coordinate round trip changed kept coordinates by 4.3 nanometres
+and produced 1.144 mm Standard penetration despite a zero reference. That failed
+the no-regression gate. Exact in-mesh transfer eliminated the coordinate change
+and passed both quality gates without relaxing their tolerance or changing the
+collision mechanism. Production tests check exact pose transfer, identical kept
+topology, and retained geometry within the predefined 0.001 mm freeze tolerance.
+
+Production validation also exposed native pin roundoff of 0.000119 mm after
+compiling the run separately; that caused 4.059 mm Standard penetration and failed
+the strict layering gate. The in-mesh exact-position clamp removed this drift.
+The final production path measured 0 mm frozen movement, 0 mm kept-coordinate
+difference, and 0 mm penetration at both Standard and High, matching references
+over 327,423 and 470,666 sampled points respectively. No sewing force, collider
+modifier setting, placement function, or Keep mesh processing was changed.
+
 ## Draft and edit
 
 The source patterns are cubic Bezier paths, stored independently of generated mesh

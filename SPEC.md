@@ -141,6 +141,33 @@ preserve valid pair membership. Designs without pair records remain unchanged.
   and simulation caches. Remap or flag pins/tacks when the body changes.
 - Do not bundle an avatar or other private scene assets in a library design by default.
 
+### Per-piece simulation states
+
+Document version 4 accepts optional per-pattern boolean simulation flags: frozen,
+deactivated, strengthened. Default flags are omitted for unchanged normal documents.
+State controls live in the piece right-click Simulation submenu; existing piece
+labels name active states in 2D and revealed 3D, without additional panels.
+
+Freeze holds the exact current evaluated pose inside the shared sewn cloth mesh.
+Both endpoints of incident sewing springs are pinned; live neighboring interiors
+remain simulated. Frozen anchors do not animate held vertices, and same-mesh
+self-collision is enabled for frozen runs. No separate frozen collider is created.
+An in-mesh post-cloth position clamp removes native pin roundoff on held vertices;
+its private attributes are removed before evaluated output reaches Keep.
+Deactivate filters patterns, incident seams, and anchors out of a run-only design
+before invoking existing meshing functions; active sampling equals physical absence.
+Strengthen multiplies only selected pieces' tension, compression, shear and bending
+by four through native groups, without changing shared presets or mass density.
+
+The normal compiler, protected mesh/placement functions, sewing formulas and Keep
+mesh processing remain unchanged behind a scoped state-run dispatch. All-normal
+simulation is regression-checked against the pre-dispatch compiler. Flag persistence
+covers save/reopen, 100-edit history, duplication and actual library load. Explicit
+linked editing propagates subsequent state toggles only while enabled. Outlines
+and arrangement remain editable; library data does not include simulation caches.
+README records scratch gate tolerances, measured values, and the diagnosed failed
+panel-round-trip transfer that was replaced by exact in-mesh pose transfer.
+
 ## Architecture requirements
 
 1. Extend the versioned design document for Bezier anchors/handles, stable segment
