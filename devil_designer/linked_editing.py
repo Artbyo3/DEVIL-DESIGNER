@@ -126,7 +126,7 @@ def clone_twin(session,as_back=False):
     target.name=source.name+' twin';target.arrangement=None;target.panel_origin=None;target.placement_mode='LAYOUT'
     if as_back and source.arrangement:
         if source.arrangement['point']!='front':raise ValueError('Clone as Back requires a front arrangement point.')
-        target.arrangement=arrangement_record(source.arrangement['volume'],'back',source.arrangement['flat'])
+        target.arrangement=arrangement_record(source.arrangement['volume'],'back',source.arrangement['flat'],version=source.arrangement['version'])
     def apply():
         if previous:session.document.linked_pairs.remove(previous)
         session.document.patterns.append(target)

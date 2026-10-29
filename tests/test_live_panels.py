@@ -111,7 +111,7 @@ class LivePanelTests(unittest.TestCase):
             self.assertEqual([tuple(uv.uv) for uv in panel.data.uv_layers.active.data],original_uv)
             for vertex in panel.data.vertices:
                 world=panel.matrix_world @ vertex.co
-                self.assertGreater(math.hypot(world.x,world.y),.25)
+                self.assertGreater(max(abs(world.x)/.25,abs(world.y)/.15),1)
 
     def test_native_gr_deltas_survive_save_and_point_rearrangement(self):
         from devil_designer import garment,live_panels,arrangement

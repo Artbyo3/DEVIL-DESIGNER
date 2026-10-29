@@ -89,3 +89,6 @@ assert history.restore(restored, scene.dd_history)
 assert len(restored.undo_stack) == count and count > 0
 assert restored.history()
 print('PASS: arrangement preserves persistent history after document reconciliation', flush=True)
+
+import runpy
+runpy.run_path(str(Path(__file__).resolve().parent / 'blender_ellipse.py'), run_name='__main__')

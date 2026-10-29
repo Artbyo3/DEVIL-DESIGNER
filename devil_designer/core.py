@@ -249,14 +249,14 @@ def read_vertex(v):
     return Vertex(float(v['x']),float(v['y']),v['id'],handles[0],handles[1],point_type=ptype)
 
 
-def arrangement_record(volume,point,flat=False):
-    return dict(version=1,volume=volume,point=point,flat=flat,translation=[0.0]*3,rotation=[0.0]*3)
+def arrangement_record(volume,point,flat=False,*,version=1):
+    return dict(version=version,volume=volume,point=point,flat=flat,translation=[0.0]*3,rotation=[0.0]*3)
 
 
 def validate_arrangement(record):
     if not isinstance(record,dict) or set(record)!={'version','volume','point','flat','translation','rotation'}:
         raise ValueError('Invalid arrangement record.')
-    if type(record['version']) is not int or record['version']!=1 or type(record['flat']) is not bool:
+    if type(record['version']) is not int or record['version'] not in (1,2) or type(record['flat']) is not bool:
         raise ValueError('Unsupported arrangement record.')
     for key in ('volume','point'):
         if not isinstance(record[key],str) or not record[key].strip():raise ValueError('Arrangement IDs must be nonempty.')
