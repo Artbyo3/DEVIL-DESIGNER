@@ -1,0 +1,30 @@
+name: Bug
+description: Report a defect or broken behavior.
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what-is-broken
+    attributes:
+      label: What is broken
+    validations:
+      required: true
+  - type: textarea
+    id: why-it-matters
+    attributes:
+      label: Why it matters
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Blender + addon version
+      placeholder: e.g. Blender 4.2.0, DEVIL-DESIGNER 0.10.0
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction-steps
+    attributes:
+      label: Reproduction steps + screenshot/video
+      placeholder: Steps to reproduce, plus attach screenshot or video.
+    validations:
+      required: true
