@@ -5,5 +5,22 @@ name = "Devil Designer"
 tagline = "Draft, sew, and drape clothing patterns inside Blender"
 maintainer = "Artbyo3"
 type = "add-on"
+tags = ["Modeling", "Mesh", "Physics"]
 license = ["SPDX:GPL-3.0-or-later"]
 blender_version_min = "5.2.0"
+
+[permissions]
+files = "Save and load garments and reference images"
+
+[build]
+paths_exclude_pattern = [
+    ".*",
+    "__pycache__/",
+    "tests/",
+    "tools/",
+    "*.zip",
+    "*.blend[1-9]",
+    "*.md",
+    "!README.md",
+    "!SPEC.md",
+]
