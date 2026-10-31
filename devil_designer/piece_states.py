@@ -1,6 +1,6 @@
 import json
 from .core import Document
-from .presets import PRESETS
+from .presets import resolve_preset
 
 
 FLAGS = ('frozen', 'deactivated', 'strengthened')
@@ -136,7 +136,7 @@ def apply_states(document, simulation):
         return
     for key, group_name, properties in [('structural', 'DD Structural', ('tension', 'compression')),
                                         ('shear', 'DD Shear', ('shear',)), ('bending', 'DD Bending', ('bending',))]:
-        values = [PRESETS[pattern.preset][key] * (MULTIPLIER if pattern.strengthened else 1) for pattern in active]
+        values = [resolve_preset(pattern.preset, getattr(document, 'custom_presets', None))[key] * (MULTIPLIER if pattern.strengthened else 1) for pattern in active]
         low, high = min(values), max(values)
         for name in properties:
             setattr(cloth.settings, name + '_stiffness', low)

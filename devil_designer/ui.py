@@ -30,7 +30,8 @@ PROPERTIES = ('dd_document','dd_history','dd_collection','dd_avatar','dd_spacing
               'dd_reference_opacity','dd_reference_x','dd_reference_y','dd_reference_placed',
               'dd_point_x','dd_point_y','dd_width','dd_height','dd_segment_length','dd_offset','dd_wrap_radius',
               'dd_sew_a0','dd_sew_a1','dd_sew_b0','dd_sew_b1','dd_free_sewing','dd_sew_reverse','dd_internal_mode',
-              'dd_lengths_visible','dd_measure_visible','dd_library_name','dd_library_dir','dd_library_selected','dd_library_refit','dd_fabric')
+              'dd_lengths_visible','dd_measure_visible','dd_library_name','dd_library_dir','dd_library_selected','dd_library_refit','dd_fabric',
+              'dd_fabric_structural','dd_fabric_shear','dd_fabric_bending','dd_fabric_density')
 
 
 def register():
@@ -62,6 +63,10 @@ def register():
     Scene.dd_library_selected=bpy.props.IntProperty(default=0,min=0)
     Scene.dd_library_refit=bpy.props.BoolProperty(default=True)
     Scene.dd_fabric = bpy.props.StringProperty(name='Garment fabric',default='COTTON')
+    Scene.dd_fabric_structural = bpy.props.FloatProperty(name='Stretch stiffness',default=25.0,min=0.1,max=500.0,precision=2)
+    Scene.dd_fabric_shear = bpy.props.FloatProperty(name='Shear stiffness',default=15.0,min=0.1,max=500.0,precision=2)
+    Scene.dd_fabric_bending = bpy.props.FloatProperty(name='Bending stiffness',default=0.5,min=0.001,max=50.0,precision=3)
+    Scene.dd_fabric_density = bpy.props.FloatProperty(name='Mass density',default=0.3,min=0.01,max=10.0,precision=3)
     Scene.dd_document = bpy.props.StringProperty(name='Pattern document',default='')
     Scene.dd_collection = bpy.props.PointerProperty(type=bpy.types.Collection)
     from . import live_panels,arrangement_controls

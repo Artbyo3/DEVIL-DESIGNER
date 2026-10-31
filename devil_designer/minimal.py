@@ -82,6 +82,7 @@ class MinimalCards:
         self.toast_until = 0
         self._scene.dd_reference_visible = False
         self._scene.dd_fabric = getattr(self.session.document, 'preset', 'COTTON')
+        self.sync_fabric_settings(self._scene.dd_fabric)
         self.draw_shape = 'RECTANGLE'
         self.internal_tool = 'INTERNAL'
         self.knife_sew = True
@@ -216,9 +217,34 @@ class MinimalCards:
             rows = [('SET_PIN_FABRIC', 'Pin on fabric', 'K'),
                     ('SET_PIN_BODY', 'Attach to body', 'T')]
         elif kind == 'PIECE_FABRIC':
+            if pattern is None:
+                return None
             title = 'Fabric override'
             rows = [('SET_PIECE_FABRIC_AUTO', 'Garment default', '')]
-            rows += [('SET_PIECE_FABRIC_' + name, name.title(), '') for name in FABRICS]
+            customs = list(getattr(doc, 'custom_presets', {}).keys())
+            all_presets = list(FABRICS) + customs
+            active = pattern.preset if getattr(pattern, 'fabric_override', False) else getattr(doc, 'preset', 'COTTON')
+            rows.append(('CHOICES_FABRIC', 'Fabric preset', ('SET_PIECE_FABRIC', all_presets, active)))
+            rows.append(('SLIDER', 'dd_fabric_structural', 'Stretch stiffness'))
+            rows.append(('SLIDER', 'dd_fabric_shear', 'Shear stiffness'))
+            rows.append(('SLIDER', 'dd_fabric_bending', 'Bending stiffness'))
+            rows.append(('SLIDER', 'dd_fabric_density', 'Mass density'))
+            rows.append(('SAVE_PIECE_CUSTOM_PRESET', 'Save as custom preset', ''))
+            if getattr(pattern, 'fabric_override', False) and pattern.preset in getattr(doc, 'custom_presets', {}):
+                rows.append(('DELETE_CUSTOM_PRESET', 'Delete preset', ''))
+        elif kind == 'GARMENT_FABRIC':
+            title = 'Garment fabric'
+            customs = list(getattr(doc, 'custom_presets', {}).keys())
+            all_presets = list(FABRICS) + customs
+            active = getattr(doc, 'preset', 'COTTON')
+            rows.append(('CHOICES_FABRIC', 'Default fabric', ('INSP_GARMENT_FABRIC', all_presets, active)))
+            rows.append(('SLIDER', 'dd_fabric_structural', 'Stretch stiffness'))
+            rows.append(('SLIDER', 'dd_fabric_shear', 'Shear stiffness'))
+            rows.append(('SLIDER', 'dd_fabric_bending', 'Bending stiffness'))
+            rows.append(('SLIDER', 'dd_fabric_density', 'Mass density'))
+            rows.append(('SAVE_GARMENT_CUSTOM_PRESET', 'Save as custom preset', ''))
+            if active in getattr(doc, 'custom_presets', {}):
+                rows.append(('DELETE_CUSTOM_PRESET', 'Delete preset', ''))
         elif kind == 'PIECE_DENSITY':
             title = 'Mesh density override'
             rows = [('SET_DENSITY_AUTO', 'Garment default', ''),
@@ -270,7 +296,10 @@ class MinimalCards:
                 rows.append(('DEMO_PANEL', 'Create panel', '40 × 45 cm'))
                 rows.append(('SET_DRAW_POLYGON', 'Draw your own', 'Tool'))
                 rows.append(('MENU_LIBRARY', 'Library', 'Open'))
-            rows.append(('CHOICES_FABRIC', 'Default fabric', ('INSP_GARMENT_FABRIC', FABRICS, getattr(doc, 'preset', 'COTTON'))))
+            customs = list(getattr(doc, 'custom_presets', {}).keys())
+            all_fabrics = list(FABRICS) + customs
+            rows.append(('CHOICES_FABRIC', 'Default fabric', ('INSP_GARMENT_FABRIC', all_fabrics, getattr(doc, 'preset', 'COTTON'))))
+            rows.append(('MENU', 'GARMENT_FABRIC_MENU', 'Fabric behavior', getattr(doc, 'preset', 'COTTON').title()))
             rows.append(('CHOICES', 'Mesh density', ('INSP_GARMENT_DENSITY', DENSITY, self.named_choice(scene.dd_spacing, DENSITY))))
             rows.append(('CHOICES', 'Quality', ('INSP_QUALITY', QUALITY, self.named_choice(scene.dd_quality, QUALITY))))
             rows.append(('CHOICES', 'Guide opacity', ('INSP_OPACITY', GUIDE_OPACITY, self.named_choice(scene.dd_reference_opacity, GUIDE_OPACITY))))
@@ -391,7 +420,7 @@ class MinimalCards:
 
         scale = self.canvas_layout.scale
         width = min(220 * scale, self.canvas_layout.panel.w - 24 * scale)
-        row_heights = [64 if row[0] == 'CHOICES_FABRIC' else 48 if row[0] == 'CHOICES' else 32 for row in rows]
+        row_heights = [(math.ceil(len(row[2][1]) / 3) * 24 + 16 if len(row[2][1]) > 4 else 36) if row[0] == 'CHOICES_FABRIC' else 48 if row[0] == 'CHOICES' else 32 for row in rows]
         if kind=='PIECE':
             row_height=min(32,(self.canvas_layout.panel.h/scale-130)/max(1,len(rows)))
             row_heights=[max(24,row_height) for row in rows]
@@ -466,11 +495,66 @@ class MinimalCards:
                 'TACK': 'Pick a pattern point, then a point on the body',
                 'PLACE': 'Pick a piece, then a point on the body'}.get(self.tool, '')
 
+    def sync_fabric_settings(self, preset_name):
+        from .presets import resolve_preset
+        vals = resolve_preset(preset_name, getattr(self.session.document, 'custom_presets', None))
+        self._scene.dd_fabric_structural = vals['structural']
+        self._scene.dd_fabric_shear = vals['shear']
+        self._scene.dd_fabric_bending = vals['bending']
+        self._scene.dd_fabric_density = vals['density']
+
     def apply_local_setting(self, key):
         if not self.minimal_ui:
             return super().apply_local_setting(key)
         if key == 'dd_weld_distance':
             self.weld_manual = True
+        if key in {'dd_fabric_structural', 'dd_fabric_shear', 'dd_fabric_bending', 'dd_fabric_density'}:
+            prop_map = {'dd_fabric_structural': 'structural', 'dd_fabric_shear': 'shear',
+                        'dd_fabric_bending': 'bending', 'dd_fabric_density': 'density'}
+            prop = prop_map[key]
+            val = getattr(self._scene, key)
+            doc = self.session.document
+            pattern = self.session.document.find(self.session.selected)
+            if self.card_kind == 'PIECE_FABRIC' and pattern:
+                active = pattern.preset if getattr(pattern, 'fabric_override', False) else getattr(doc, 'preset', 'COTTON')
+                customs = getattr(doc, 'custom_presets', {})
+                if getattr(pattern, 'fabric_override', False) and active in customs:
+                    customs[active][prop] = val
+                    self.session.commit(lambda: None)
+                else:
+                    base = f'{pattern.name} Fabric'
+                    cand = base
+                    existing = set(customs.keys()) | set(FABRICS)
+                    idx = 1
+                    while cand in existing:
+                        idx += 1
+                        cand = f'{base} {idx}'
+                    from .presets import resolve_preset
+                    vals = resolve_preset(active, customs)
+                    vals[prop] = val
+                    self.run_edit(lambda: (self.session.set_custom_preset(cand, vals), self.session.set_fabric_override(cand)),
+                                  f'{pattern.name} fabric override updated.')
+            else:
+                active = getattr(doc, 'preset', 'COTTON')
+                customs = getattr(doc, 'custom_presets', {})
+                if active in customs:
+                    customs[active][prop] = val
+                    self.session.commit(lambda: None)
+                else:
+                    base = f'{active.title()} Custom'
+                    cand = base
+                    existing = set(customs.keys()) | set(FABRICS)
+                    idx = 1
+                    while cand in existing:
+                        idx += 1
+                        cand = f'{active.title()} Custom {idx}'
+                    from .presets import resolve_preset
+                    vals = resolve_preset(active, customs)
+                    vals[prop] = val
+                    self.run_edit(lambda: (self.session.set_custom_preset(cand, vals), self.session.set_document_preset(cand)),
+                                  f'Default fabric updated to {cand}.')
+                    self._scene.dd_fabric = cand
+            return True
         action = {'dd_point_x': 'POINT_APPLY', 'dd_point_y': 'POINT_APPLY', 'dd_segment_length': 'SET_LENGTH'}.get(key)
         if action:
             return self.perform_action(action)
@@ -518,6 +602,10 @@ class MinimalCards:
             name = key.removeprefix('INSP_GARMENT_FABRIC_')
             self.run_edit(lambda: self.session.set_document_preset(name), f'Default fabric set to {name.title()}.')
             scene.dd_fabric = name
+            self.sync_fabric_settings(name)
+        elif key == 'GARMENT_FABRIC_MENU':
+            self.sync_fabric_settings(getattr(self.session.document, 'preset', 'COTTON'))
+            self.show_card('GARMENT_FABRIC', self.card_anchor)
         elif key.startswith('INSP_GARMENT_DENSITY_'):
             choice = key.removeprefix('INSP_GARMENT_DENSITY_')
             scene.dd_spacing = DENSITY[choice]
@@ -542,12 +630,55 @@ class MinimalCards:
         elif key == 'BODY_CHANGE':
             self.show_card('BODY', self.card_anchor)
         elif key == 'PIECE_FABRIC_MENU':
+            pattern = self.session.document.find(self.session.selected)
+            active = pattern.preset if pattern and getattr(pattern, 'fabric_override', False) else getattr(self.session.document, 'preset', 'COTTON')
+            self.sync_fabric_settings(active)
             self.show_card('PIECE_FABRIC', self.card_anchor)
         elif key.startswith('SET_PIECE_FABRIC_'):
             choice = key.removeprefix('SET_PIECE_FABRIC_')
             self.run_edit(lambda: self.session.set_fabric_override(choice),
                           f'Fabric override set to {choice.title() if choice != "AUTO" else "Garment default"}.')
-            self.card_kind = None
+            self.sync_fabric_settings(choice if choice != 'AUTO' else getattr(self.session.document, 'preset', 'COTTON'))
+            if self.card_kind != 'PIECE_FABRIC':
+                self.card_kind = None
+        elif key == 'SAVE_GARMENT_CUSTOM_PRESET':
+            doc = self.session.document
+            base = getattr(doc, 'preset', 'Custom').split(' ')[0]
+            existing = set(getattr(doc, 'custom_presets', {}).keys()) | set(FABRICS)
+            idx = 1
+            cand = f'{base} {idx}'
+            while cand in existing:
+                idx += 1
+                cand = f'{base} {idx}'
+            vals = dict(structural=scene.dd_fabric_structural, shear=scene.dd_fabric_shear,
+                        bending=scene.dd_fabric_bending, density=scene.dd_fabric_density)
+            self.run_edit(lambda: (self.session.set_custom_preset(cand, vals), self.session.set_document_preset(cand)),
+                          f'Custom preset "{cand}" saved with garment.')
+            scene.dd_fabric = cand
+        elif key == 'SAVE_PIECE_CUSTOM_PRESET':
+            pattern = self.session.document.find(self.session.selected)
+            if pattern:
+                doc = self.session.document
+                base = f'{pattern.name} Fabric'
+                existing = set(getattr(doc, 'custom_presets', {}).keys()) | set(FABRICS)
+                idx = 1
+                cand = base
+                while cand in existing:
+                    idx += 1
+                    cand = f'{base} {idx}'
+                vals = dict(structural=scene.dd_fabric_structural, shear=scene.dd_fabric_shear,
+                            bending=scene.dd_fabric_bending, density=scene.dd_fabric_density)
+                self.run_edit(lambda: (self.session.set_custom_preset(cand, vals), self.session.set_fabric_override(cand)),
+                              f'Custom preset "{cand}" saved for {pattern.name}.')
+        elif key == 'DELETE_CUSTOM_PRESET':
+            doc = self.session.document
+            pattern = self.session.document.find(self.session.selected)
+            active = pattern.preset if (self.card_kind == 'PIECE_FABRIC' and pattern and getattr(pattern, 'fabric_override', False)) else getattr(doc, 'preset', 'COTTON')
+            if active in getattr(doc, 'custom_presets', {}):
+                self.run_edit(lambda: self.session.delete_custom_preset(active), f'Preset "{active}" deleted.')
+                new_preset = getattr(doc, 'preset', 'COTTON')
+                scene.dd_fabric = new_preset
+                self.sync_fabric_settings(new_preset)
         elif key == 'PIECE_DENSITY_MENU':
             self.show_card('PIECE_DENSITY', self.card_anchor)
         elif key.startswith('SET_DENSITY_'):
@@ -802,11 +933,14 @@ class MinimalCards:
                             index = min(len(choices_list) - 1, int((point[0] - rect.x) / (rect.w / len(choices_list))))
                         else:
                             cols = 3
-                            c_idx = min(cols - 1, int((point[0] - rect.x) / (rect.w / cols)))
-                            r_idx = 0 if point[1] > rect.y + rect.h / 2 else 1
+                            c_idx = min(cols - 1, max(0, int((point[0] - rect.x) / (rect.w / cols))))
+                            num_rows = math.ceil(len(choices_list) / cols)
+                            row_h = 23 * scale
+                            r_idx = min(num_rows - 1, max(0, int((rect.y + rect.h - 14 * scale - point[1]) / row_h))) if num_rows > 2 else (0 if point[1] > rect.y + rect.h / 2 else 1)
                             index = min(len(choices_list) - 1, r_idx * cols + c_idx)
                         self.minimal_action(prefix + '_' + choices_list[index])
-                        self.card_kind = None
+                        if self.card_kind not in {'GARMENT_FABRIC', 'PIECE_FABRIC'}:
+                            self.card_kind = None
                     elif key == 'PAIR_ACTIONS':
                         action1, action2 = row[1], row[2]
                         if point[0] < rect.x + rect.w / 2:
@@ -823,7 +957,7 @@ class MinimalCards:
                     elif key != 'INFO':
                         action = row[1] if key == 'MENU' else key
                         self.minimal_action(action)
-                        if action not in {'BODY_CHANGE', 'PIECE_FABRIC_MENU', 'PIECE_DENSITY_MENU', 'PIECE_SIMULATION_MENU', 'EDIT_ACTIONS', 'SCROLL_WEAR_OVER'}:
+                        if action not in {'BODY_CHANGE', 'GARMENT_FABRIC_MENU', 'PIECE_FABRIC_MENU', 'PIECE_DENSITY_MENU', 'PIECE_SIMULATION_MENU', 'EDIT_ACTIONS', 'SCROLL_WEAR_OVER'}:
                             self.card_kind = None
                     break
             return {'RUNNING_MODAL'}
