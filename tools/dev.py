@@ -96,6 +96,23 @@ def do_arrangement_performance(label):
     print(json.dumps(json.loads(report.read_text(encoding="utf-8")),indent=2))
     return True
 
+def do_action_performance(label):
+    report = SCRATCH / f'action-performance-{label}.json'
+    report.unlink(missing_ok=True)
+    if not run_cmd([BLENDER_PATH, '--factory-startup', '--window-geometry', '0', '0', '1500', '1000',
+                    '--python', 'tools/action_performance.py', '--', label],
+                   desc='Action-time profiling matrix'):
+        return False
+    if not report.is_file():
+        print('Action benchmark did not produce a report.')
+        return False
+    result = json.loads(report.read_text(encoding='utf-8'))
+    if not result.get('complete'):
+        print(result.get('error', 'Action benchmark is incomplete.'))
+        return False
+    print(f"Measured {len(result['records'])} action conditions: {report}")
+    return True
+
 def do_stage_screenshot(stage):
     print(f"\n=== CAPTURING SCREENSHOT FOR STAGE: {stage} ===")
     from tools.screenshot import capture
@@ -172,6 +189,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="Devil Designer Dev Tool")
     parser.add_argument("--quick", action="store_true", help="Run fast headless unit tests only (~0.1s)")
     parser.add_argument("--arrangement-performance", choices=("baseline", "fixed", "current"), help="Measure orbit FPS, CPU, GPU snapshot and arrangement display cost")
+    parser.add_argument('--action-performance', choices=('baseline', 'fixed', 'current'), help='Profile action latency on a rigged six-panel fixture')
     parser.add_argument("--test", action="store_true", help="Run all unit, background, and GUI tests")
     parser.add_argument("--build", action="store_true", help="Build, validate, and sync")
     parser.add_argument("--shots", action="store_true", help="Capture all screenshots")
@@ -184,11 +202,12 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.clean and args.keep_scratch:
         parser.error('--clean and --keep-scratch cannot be combined')
-    if not any([args.quick, args.test, args.build, args.shots, args.stage, args.inspect, args.all, args.clean, args.arrangement_performance]):
+    if not any([args.quick, args.test, args.build, args.shots, args.stage, args.inspect, args.all, args.clean, args.arrangement_performance, args.action_performance]):
         parser.print_help()
         return 0
         
     operations = [
+        (args.action_performance, lambda: do_action_performance(args.action_performance)),
         (args.arrangement_performance, lambda: do_arrangement_performance(args.arrangement_performance)),
         (args.quick, do_quick_tests),
         (args.test or args.all, do_tests),

@@ -447,6 +447,15 @@ the display never re-slices the mesh during redraw. In the repository, see
 ARRANGEMENT_DISPLAY_PERFORMANCE.md for measured before/after results. Reproduce with
 `python tools/dev.py --arrangement-performance current --keep-scratch`.
 
+Live-panel edits reuse unaffected panels with explicit geometry, sewing, UV and
+placement invalidation, retaining a full-rebuild fallback. Repeated wrapping also
+uses a bounded exact-input cache; wrap and simulation algorithms are unchanged.
+On the six-panel rig, median pin/duplicate/move actions take about 37?39 ms and
+unused arrangement-point edits about 13 ms. Cold affected-piece wraps and first
+guide refreshes can still hitch. See ACTION_TIME_PERFORMANCE.md for the complete
+28-condition profile, exact-output checks and limitations. Reproduce with
+`python tools/dev.py --action-performance current --keep-scratch`.
+
 Wrapping follows an interpolated ellipse at each mesh row's own height across
 neighboring torso, arm, or leg volumes, with the existing radial clearance.
 Wider-than-one-circumference pieces form an outward spiral with separate successive turns.

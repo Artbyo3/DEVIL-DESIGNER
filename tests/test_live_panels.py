@@ -2,6 +2,7 @@ import json
 import math
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 from devil_designer.core import Session,Document,arrangement_record
 
 try:
@@ -32,6 +33,8 @@ class LivePanelTests(unittest.TestCase):
         self.body=bpy.context.object;self.body.scale=(.5,.3,2)
         bpy.ops.object.transform_apply(location=False,rotation=False,scale=True)
         self.scene.dd_spacing=.06;self.scene.dd_avatar=self.body
+        self.scene.dd_clearance = .03
+        self.scene.unit_settings.scale_length = 1
         self.session=Session();self.session.add([(-.15,1.1),(.15,1.1),(.15,1.4),(-.15,1.4)])
         self.scene.dd_document=self.session.document.dumps()
 
@@ -40,6 +43,137 @@ class LivePanelTests(unittest.TestCase):
         live_panels.sync(bpy.context)
         bpy.context.view_layer.update()
         return garment.generated(self.scene,'panel')
+
+    def assert_full_panel_equivalence(self):
+        from devil_designer import garment, live_panels
+        from devil_designer.panel_cache import panel_output
+        def snapshot():
+            return [(panel_output(obj), [list(row) for row in obj.matrix_world],
+                     [(group.name, group.index) for group in obj.vertex_groups],
+                     [item.name for item in obj.data.materials], obj['dd_document'])
+                    for obj in garment.generated(self.scene, 'panel')]
+        expected = snapshot()
+        cached = live_panels.wrapped_positions
+        with patch.object(live_panels, 'wrapped_positions', cached.__wrapped__):
+            garment.build_panels(bpy.context, force_rebuild=True)
+        self.assertEqual(expected, snapshot())
+
+    def test_reuse_skips_unaffected_pins_and_unused_points(self):
+        from devil_designer import garment, live_panels, arrangement
+        live_panels.arrange_piece(bpy.context, self.session.selected, 'chest', 'front')
+        self.session = Session(garment.document(self.scene))
+        first = self.session.document.patterns[0]
+        self.session.add([(.4, 1.1), (.7, 1.1), (.7, 1.4), (.4, 1.4)])
+        second = self.session.document.patterns[-1]
+        self.scene.dd_document = self.session.document.dumps()
+        garment.build_panels(bpy.context)
+        with patch.object(garment, 'fabric_mesh', wraps=garment.fabric_mesh) as mesh:
+            garment.build_panels(bpy.context)
+            self.assertEqual(mesh.call_count, 0)
+            arrangement.edit_point(bpy.context, 'chest', 'front', action='ADD')
+            garment.build_panels(bpy.context)
+            self.assertEqual(mesh.call_count, 0)
+            arrangement.edit_point(bpy.context, 'chest', 'custom_1', action='DELETE')
+            garment.build_panels(bpy.context)
+            self.assertEqual(mesh.call_count, 0)
+        for identity in (first.id, second.id):
+            self.session.select_piece(identity)
+            pattern = self.session.document.find(identity)
+            center = tuple(sum(point[axis] for point in pattern.points) / 4 for axis in (0, 1))
+            self.session.add_anchor(center)
+            self.scene.dd_document = self.session.document.dumps()
+            with patch.object(garment, 'fabric_mesh', wraps=garment.fabric_mesh) as mesh:
+                garment.build_panels(bpy.context)
+                self.assertEqual([call.args[1].id for call in mesh.call_args_list], [identity])
+            self.assert_full_panel_equivalence()
+            self.session.document.anchors.clear()
+            self.scene.dd_document = self.session.document.dumps()
+            with patch.object(garment, 'fabric_mesh', wraps=garment.fabric_mesh) as mesh:
+                garment.build_panels(bpy.context)
+                self.assertEqual([call.args[1].id for call in mesh.call_args_list], [identity])
+            self.assert_full_panel_equivalence()
+
+    def test_reuse_invalidates_density_sewing_units_uv_and_arrangement(self):
+        from devil_designer import garment, live_panels, arrangement
+        live_panels.arrange_piece(bpy.context, self.session.selected, 'chest', 'front')
+        self.session = Session(garment.document(self.scene))
+        first = self.session.document.patterns[0]
+        self.session.add([(.4, 1.1), (.8, 1.1), (.8, 1.5), (.4, 1.5)])
+        second = self.session.document.patterns[-1]
+        self.session.sew(self.session.document.edges(first.id)[0], self.session.document.edges(second.id)[0])
+        self.scene.dd_document = self.session.document.dumps()
+        garment.build_panels(bpy.context)
+        for change in ('density', 'geometry', 'uv', 'spacing', 'units', 'avatar', 'point', 'clearance', 'order'):
+            with self.subTest(change=change):
+                doc = garment.document(self.scene)
+                if change == 'density':doc.patterns[1].mesh_density = 'FINE'
+                if change == 'geometry':doc.patterns[1].vertices[1].x += .015
+                if change == 'uv':doc.uv_layout['scale'] *= 1.1
+                if change == 'spacing':self.scene.dd_spacing = .045
+                if change == 'units':self.scene.unit_settings.scale_length = .8
+                if change == 'avatar':self.body.scale.z = 1.1
+                if change == 'point':arrangement.edit_point(bpy.context, 'chest', 'front', angle=.12)
+                if change == 'clearance':self.scene.dd_clearance += .002
+                if change == 'order':doc.patterns.reverse()
+                self.scene.dd_document = doc.dumps()
+                with patch.object(garment, 'fabric_mesh', wraps=garment.fabric_mesh) as mesh:
+                    if change == 'avatar':
+                        with patch.object(live_panels, '_busy', True):bpy.context.view_layer.update()
+                    garment.build_panels(bpy.context)
+                    self.assertGreater(mesh.call_count, 0)
+                    if change == 'density':self.assertEqual(mesh.call_count, 2)
+                self.assert_full_panel_equivalence()
+        self.scene.unit_settings.scale_length = 1
+
+    def test_reuse_falls_back_for_missing_cache_or_edited_mesh(self):
+        from devil_designer import garment
+        obj = self.panels()[0]
+        for change in ('missing', 'vertex', 'uv', 'metadata', 'matrix', 'attribute', 'shared', 'shape'):
+            with self.subTest(change=change):
+                if change == 'missing':del obj['dd_panel_inputs']
+                if change == 'vertex':obj.data.vertices[0].co.x += .02
+                if change == 'uv':obj.data.uv_layers.active.data[0].uv.x += .02
+                if change == 'metadata':obj['dd_anchor_indices'] = 'invalid'
+                if change == 'matrix':obj['dd_panel_matrix'] = 'invalid'
+                if change == 'attribute':obj.data.attributes.new('external', 'FLOAT', 'POINT')
+                if change == 'shape':obj.shape_key_add(name='External shape')
+                linked = None
+                if change == 'shared':
+                    linked = bpy.data.objects.new('Shared mesh', obj.data)
+                    self.scene.collection.objects.link(linked)
+                with patch.object(garment, 'fabric_mesh', wraps=garment.fabric_mesh) as mesh:
+                    garment.build_panels(bpy.context)
+                    self.assertEqual(mesh.call_count, 1)
+                if linked is not None:bpy.data.objects.remove(linked, do_unlink=True)
+                self.assert_full_panel_equivalence()
+
+    def test_reuse_preserves_reset_and_legacy_manual_transform(self):
+        from devil_designer import garment
+        doc = garment.document(self.scene)
+        doc.patterns[0].placement_mode = 'LEGACY'
+        self.scene.dd_document = doc.dumps()
+        obj = garment.build_panels(bpy.context)[0]
+        obj['dd_panel_warning'] = 'stale arrangement warning'
+        obj.location.x += .17
+        obj.rotation_euler.z += .2
+        bpy.context.view_layer.update()
+        expected = [list(row) for row in obj.matrix_world]
+        mesh_pointer = obj.data.as_pointer()
+        simulation = bpy.data.objects.new('Disposable drape', bpy.data.meshes.new('Drape'))
+        self.scene.collection.objects.link(simulation)
+        garment.tag(simulation, 'simulation')
+        obj.hide_set(True)
+        obj.hide_render = True
+        self.scene.frame_set(self.scene.frame_start + 3)
+        garment.build_panels(bpy.context)
+        self.assertEqual(obj.data.as_pointer(), mesh_pointer)
+        self.assertEqual(self.scene.get('dd_arrangement_message'), '')
+        self.assertFalse(garment.generated(self.scene, 'simulation'))
+        self.assertFalse(obj.hide_get())
+        self.assertFalse(obj.hide_render)
+        self.assertEqual(self.scene.frame_current, self.scene.frame_start)
+        self.assertEqual(expected, [list(row) for row in obj.matrix_world])
+        self.assert_full_panel_equivalence()
 
     def test_closed_piece_edit_move_and_delete_update_live_panels(self):
         from devil_designer import garment,live_panels
