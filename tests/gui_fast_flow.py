@@ -568,6 +568,81 @@ def check_interaction_regressions(workspace, event, point, check):
             workspace.perform_action('UNDO')
         check(not any(getattr(workspace.session.document.patterns[0], flag) for flag in ('frozen', 'deactivated', 'strengthened')),
               'three Undo operations restore normal piece simulation states through the real editor')
+
+        workspace.clear_interaction_references()
+        workspace.session = Session(Document())
+        workspace.session.add([(0, 0), (.3, 0), (.3, .4), (0, .4)])
+        workspace.session.add([(.5, 0), (.8, 0), (.8, .4), (.5, .4)])
+        p1 = workspace.session.document.patterns[0]
+        p2 = workspace.session.document.patterns[1]
+        p1.vertices[0].outgoing = (.05, .02)
+        p1.vertices[1].incoming = (-.05, .02)
+        workspace.session.document.linked_pairs.append({'members': [p1.id, p2.id], 'enabled': True, 'transform': [1.0, 1.0], 'mapping': {}})
+        workspace.persist()
+        workspace.fit()
+        edge1 = workspace.session.document.edges(p1.id)[0]
+        edge2 = workspace.session.document.edges(p2.id)[0]
+        workspace.session.sew(edge1, edge2)
+        workspace.session.selected = p1.id
+        workspace.session.selected_patterns = {p1.id}
+        workspace.session.segment = edge1
+        workspace.choose_tool('SELECT')
+        c = workspace.canvas_layout.canvas
+        workspace.gesture = dict(mode='BOX_SELECT', start=(c.x + 20, c.y + 20))
+        workspace.pointer = (c.x + 150, c.y + 150)
+        workspace.error_message = ''
+        workspace.renderer.draw(workspace)
+        check(not workspace.error_message,
+              'box-select draw path renders without error with curved edges and twin piece')
+        workspace.gesture = None
+
+        with patch.object(workspace, 'design_hit_edge', return_value=edge1):
+            workspace.session.segment = None
+            workspace.error_message = ''
+            workspace.renderer.draw(workspace)
+            check(not workspace.error_message,
+                  'hovered curved edge draw path renders without error')
+
+        workspace.session.selected = p1.id
+        workspace.session.selected_patterns = {p1.id}
+        workspace.error_message = ''
+        workspace.renderer.draw(workspace)
+        check(not workspace.error_message,
+              'canvas draw with unselected twin renders without KeyError a and preserves pattern rendering')
+        check(len(workspace.seam_badges()) > 0,
+              'seam badges and paired pills render alongside pattern pieces')
+
+        edge1_other = workspace.session.document.edges(p1.id)[1]
+        workspace.choose_tool('SEW')
+        workspace.stage = 'SEW'
+        workspace.pending_edge = edge1
+        for hovered in (edge1_other, edge2):
+            with patch.object(workspace, 'design_hit_edge', return_value=hovered):
+                workspace.error_message = ''
+                workspace.renderer.draw(workspace)
+                check(not workspace.error_message,
+                      'sew mode with pending edge and hovered edge renders without EdgeRef attribute error')
+        workspace.pending_edge = None
+
+        for stage in ('DRAFT', 'SEW', 'ARRANGE', 'SIMULATE', 'LIBRARY'):
+            workspace.stage = stage
+            workspace.error_message = ''
+            workspace.renderer.draw(workspace)
+            check(not workspace.error_message, f'{stage} stage draw path renders without error')
+
+        workspace.stage = 'DRAFT'
+        for tool in ('SELECT', 'RECTANGLE', 'POLYGON', 'ELLIPSE', 'INTERNAL', 'DART', 'KNIFE', 'PIN'):
+            workspace.choose_tool(tool)
+            workspace.error_message = ''
+            workspace.renderer.draw(workspace)
+            check(not workspace.error_message, f'{tool} tool draw path renders without error')
+
+        for card in ('PIECE', 'SEAM', 'BODY', 'SETTINGS', 'LIBRARY'):
+            workspace.show_card(card)
+            workspace.error_message = ''
+            workspace.renderer.draw(workspace)
+            check(not workspace.error_message, f'{card} card draw renders without error')
+        workspace.card_kind = None
     finally:
         workspace.clear_interaction_references()
         workspace.session = original_session
@@ -802,6 +877,16 @@ def run():
                 card = workspace.minimal_card()
                 check(card is None or sum(row[0] != 'INFO' for rect, row in card[2]) <= 5,
                       kind + ' card stays within the five-control cap')
+            workspace.show_card('GARMENT')
+            g_card = workspace.minimal_card()
+            m_rects = workspace.card_mode_rects(g_card[0])
+            check(len(m_rects) == 2 and list(m_rects.keys()) == ['GARMENT', 'BODY'],
+                  'Garment card header exposes Garment | Body mode switcher')
+            check(not any(row[1] == 'Chest / Bust' for _, row in g_card[2]),
+                  'Garment mode does not duplicate body measurement rows')
+            body_tab = m_rects['BODY']
+            click((body_tab.x + body_tab.w / 2, body_tab.y + body_tab.h / 2))
+            check(workspace.card_kind == 'BODY', 'clicking Body mode pill in header switches popover to Body mode')
             workspace.card_kind = None
 
             canvas_pos = (workspace.canvas_layout.canvas.x + 20, workspace.canvas_layout.canvas.y + 20)
@@ -856,6 +941,8 @@ def run():
             for point in ((-.25, 0), (.25, 0)):
                 click(workspace.view.screen(point, workspace.canvas_layout.canvas))
             check(len(workspace.session.document.seams) == 1, 'Sew pairs the panels directly on canvas')
+            check(len(workspace.seam_badges()) == 2 and workspace.seam_badges()[0][1] == workspace.seam_badges()[1][1],
+                  'each seam renders two matching edge-anchored numbered pills on both sewn edges')
             badge = workspace.seam_badges()[0][0]
             click((badge.x + badge.w / 2, badge.y + badge.h / 2))
             check(workspace.seam_selected == workspace.session.document.seams[0].id and workspace.card_kind is None,

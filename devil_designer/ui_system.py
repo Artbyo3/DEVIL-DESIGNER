@@ -39,7 +39,13 @@ SURFACE_OUTLINE = (0.267, 0.306, 0.345, 1.0)
 SELECTION = (1.0, .635, .337, 1.0)
 TEXT_ON_ACCENT = (.047, .145, .137, 1.0)
 
-RADIUS_DEFAULT = 7.0
+RADIUS_WINDOW = 4.0
+RADIUS_DOCK = 4.0
+RADIUS_DOCK_ITEM = 3.0
+RADIUS_CARD = 4.0
+RADIUS_CONTROL = 3.0
+RADIUS_BADGE = 2.0
+RADIUS_DEFAULT = RADIUS_CONTROL
 
 
 @dataclass
@@ -69,11 +75,11 @@ class ComponentRenderer:
         h = 24 * s
 
         r = Rect(x + 10 * s, y - h / 2, w, h)
-        draw_ctx.round_rect(r, (0.08, 0.10, 0.12, 0.95), radius=5.0)
-        draw_ctx.round_rect_outline(r, BORDER_SUBTLE, radius=5.0, width=1.0)
+        draw_ctx.round_rect(r, (0.08, 0.10, 0.12, 0.95), radius=RADIUS_CONTROL)
+        draw_ctx.round_rect_outline(r, BORDER_SUBTLE, radius=RADIUS_CONTROL, width=1.0)
         draw_ctx.text(r.x + 8 * s, r.y + 6 * s, tooltip.text, 10, TEXT_PRIMARY)
 
         if tooltip.shortcut:
             pill_r = Rect(r.x + r.w - sw - 4 * s, r.y + 3 * s, sw, 18 * s)
-            draw_ctx.round_rect(pill_r, BG_ELEVATED, radius=3.0)
+            draw_ctx.round_rect(pill_r, BG_ELEVATED, radius=RADIUS_BADGE)
             draw_ctx.text(pill_r.x + pill_r.w / 2, pill_r.y + 4 * s, tooltip.shortcut, 9, ACCENT, center=True)

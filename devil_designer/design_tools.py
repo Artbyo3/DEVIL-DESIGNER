@@ -427,7 +427,10 @@ class DesignTools:
             edge=self.gesture.get('edge')
             if edge and pattern.id==edge.pattern:
                 result=copy.deepcopy(pattern)
-                nodes=result.path(edge.path).vertices
+                try:
+                    nodes=result.path(edge.path).vertices
+                except ValueError:
+                    return pattern
                 a=next((v for v in nodes if v.id==edge.start),None)
                 b=next((v for v in nodes if v.id==edge.end),None)
                 if a and b:
@@ -460,10 +463,13 @@ class DesignTools:
                             if 0<=self.session.corner<len(nodes):nodes[self.session.corner].x+=dx;nodes[self.session.corner].y+=dy
                         except (ValueError,KeyError,IndexError):pass
             elif self.preview and pattern.id==self.session.selected:
-                nodes=result.path(self.session.path).vertices
+                try:
+                    nodes=result.path(self.session.path).vertices
+                except ValueError:
+                    return pattern
                 old=[(v.x,v.y) for v in nodes]
                 for v,point in zip(nodes,self.preview):v.x,v.y=point
-                if self.session.path=='OUTER' and self.session.corner is None:
+                if self.session.path=='OUTER' and self.session.corner is None and old:
                     pdx,pdy=curves.sub(self.preview[0],old[0])
                     for path in result.paths:
                         for v in path.vertices:v.x+=pdx;v.y+=pdy
@@ -475,11 +481,14 @@ class DesignTools:
                 else:
                     h_idx,h_name,h_val=self.handle_preview;o_name,o_val,pid,path_id=None,None,self.session.selected,'OUTER'
                 if pattern.id==pid:
-                    target_nodes=result.path(path_id).vertices
-                    if 0<=h_idx<len(target_nodes):
-                        setattr(target_nodes[h_idx],h_name,h_val)
-                        if o_name and o_val is not None:
-                            setattr(target_nodes[h_idx],o_name,o_val)
+                    try:
+                        target_nodes=result.path(path_id).vertices
+                        if 0<=h_idx<len(target_nodes):
+                            setattr(target_nodes[h_idx],h_name,h_val)
+                            if o_name and o_val is not None:
+                                setattr(target_nodes[h_idx],o_name,o_val)
+                    except ValueError:
+                        pass
             return result
         if self.handle_preview:
             if len(self.handle_preview)==7:
@@ -488,11 +497,14 @@ class DesignTools:
                 h_idx,h_name,h_val=self.handle_preview;o_name,o_val,pid,path_id=None,None,self.session.selected,'OUTER'
             if pattern.id==pid:
                 result=copy.deepcopy(pattern)
-                target_nodes=result.path(path_id).vertices
-                if 0<=h_idx<len(target_nodes):
-                    setattr(target_nodes[h_idx],h_name,h_val)
-                    if o_name and o_val is not None:
-                        setattr(target_nodes[h_idx],o_name,o_val)
+                try:
+                    target_nodes=result.path(path_id).vertices
+                    if 0<=h_idx<len(target_nodes):
+                        setattr(target_nodes[h_idx],h_name,h_val)
+                        if o_name and o_val is not None:
+                            setattr(target_nodes[h_idx],o_name,o_val)
+                except ValueError:
+                    return pattern
                 return result
         if pattern.id!=self.session.selected:return pattern
         if not self.preview:return pattern

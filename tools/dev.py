@@ -35,9 +35,12 @@ def run_cmd(cmd, cwd=str(ROOT), desc=""):
     return True
 
 def do_quick_tests():
-    print("\n=== RUNNING FAST HEADLESS UNIT TESTS ===")
+    print("\n=== RUNNING STATIC INTEGRITY & MOCKED HEADLESS UNIT TESTS ===")
+    if not run_cmd([sys.executable, "-m", "tools.check_dead_code"],
+                   desc="Static Import & Dead-Code Integrity"):
+        return False
     return run_cmd([sys.executable, "-m", "unittest", "discover", "-s", "tests", "-p", "test_*.py"],
-                   desc="Headless Unit Tests")
+                   desc="Mocked Headless Unit Tests")
 
 def do_tests():
     print("\n=== RUNNING ALL TEST SUITES ===")
@@ -45,12 +48,14 @@ def do_tests():
     if not do_quick_tests():
         return False
 
+    print("\n=== RUNNING REAL-BLENDER BACKGROUND & LOAD SMOKE SUITES ===")
     for t in ["blender_smoke.py", "blender_garment.py", "blender_advanced.py", "blender_silhouette.py",
               "blender_density.py", "blender_arrangement.py", "blender_tack_binding.py", "blender_tracing.py", "blender_layering.py", "blender_piece_states.py", "blender_sewing_preview.py"]:
         if not run_cmd([BLENDER_PATH, "--background", "--factory-startup", "--python-exit-code", "1", "--python", f"tests/{t}"],
                        desc=f"Blender Background: {t}"):
             return False
 
+    print("\n=== RUNNING REAL-BLENDER IN-ENGINE GUI SUITES ===")
     for t in ["gui_preview", "gui_silhouette", "gui_design", "gui_fast_flow", "gui_arrangement", "gui_arrangement_display", "gui_fit_map", "gui_viewport_sewing"]:
         if not run_cmd([BLENDER_PATH, "--enable-event-simulate", "--factory-startup", "--python", "tools/run_blender_gui.py", "--", t],
                        desc=f"In-Engine GUI: {t}"):
@@ -78,6 +83,10 @@ def do_build():
         print(f"    Synced to {user_ext}")
     else:
         print(f"    (User extensions folder not found, skipping sync)")
+
+    if not run_cmd([BLENDER_PATH, "--background", "--factory-startup", "--python-exit-code", "1", "--python", "tests/blender_smoke.py"],
+                   desc="Real-Blender Full-Package & Zip Load Gate"):
+        return False
         
     print("BUILD & VALIDATION COMPLETE!\n")
     return True
