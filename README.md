@@ -18,7 +18,7 @@ Full documentation, user guides, pattern drafting manuals, and simulation refere
 
 ## Installation
 
-Download `devil_designer-0.10.0.zip` from [Releases](https://github.com/Artbyo3/DEVIL-DESIGNER/releases) or build it locally with `python tools/build.py`, then install in Blender via **Edit > Preferences > Add-ons > Install from Disk...**.
+Download `devil_designer-0.11.0.zip` from [Releases](https://github.com/Artbyo3/DEVIL-DESIGNER/releases) or build it locally with `python tools/build.py`, then install in Blender via **Edit > Preferences > Add-ons > Install from Disk...**.
 
 For full setup details, requirements, and upgrading instructions, see the [Installation Guide](https://artbyo3.github.io/DEVIL-DESIGNER/install/).
 
