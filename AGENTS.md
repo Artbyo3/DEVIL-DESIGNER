@@ -108,6 +108,10 @@ All test suites must pass 100% with no regressions on every change.
 - Cleanup must validate its repository-local target and refuse links/junctions. Never delete source, required assets/licenses, installable ZIPs, or user projects, and never silently discard an unsaved scene to unlock a file.
 - Before handing off finished work, verify the installable ZIP still exists and scratch has been removed unless diagnostics or an explicitly requested review are still pending.
 
+## WORKING REPORTS AND REPOSITORY ROOT
+- Working reports (session reports, benchmarks, diagnoses, verification logs, audits) never live in the repository root — they go in a new top-level folder named `reports/`.
+- The repository root is reserved strictly for product and project configuration files (`README.md`, `SPEC.md`, `LICENSE`, `AGENTS.md`, and top-level runner scripts). Never place working reports or diagnostic writeups in the root directory.
+
 ## REQUIRED RELEASE CHECKLIST
 Follow this sequence whenever the user requests a release:
 1. Inspect Git status, remotes, branch ancestry, manifest version, tags, and existing GitHub releases. Preserve current work and never release an older commit in its place.

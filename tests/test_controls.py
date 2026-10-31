@@ -25,6 +25,21 @@ class IconTests(unittest.TestCase):
     def test_icon_data_is_cached(self):
         self.assertIs(icon_geometry(), icon_geometry())
 
+    def test_packaging_excludes_artwork_sources(self):
+        root = Path(__file__).resolve().parents[1]
+        manifest = (root / 'devil_designer' / 'blender_manifest.toml').read_text(encoding='utf-8')
+        self.assertIn('"assets/icons/*.png"', manifest)
+        self.assertIn('"assets/icons/*.svg"', manifest)
+        archive_path = root / 'dist' / 'devil_designer-0.11.0.zip'
+        if archive_path.exists():
+            from zipfile import ZipFile
+            with ZipFile(archive_path) as archive:
+                names = archive.namelist()
+            self.assertIn('assets/icons/geometry.json', names)
+            self.assertIn('assets/icons/sources.json', names)
+            self.assertFalse(any(name.startswith('assets/icons/') and (name.endswith('.png') or name.endswith('.svg')) for name in names))
+
+
 class WindowTests(unittest.TestCase):
     def test_simple_workspace_has_three_primary_actions(self):
         layout = Layout(1400, 900)

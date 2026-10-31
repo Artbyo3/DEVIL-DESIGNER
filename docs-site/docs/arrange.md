@@ -85,10 +85,10 @@ Devil Designer optimizes viewport responsiveness through aggressive geometric an
 The 3D avatar guide display (<kbd>H</kbd>) caches unchanged world geometry and GPU batches:
 * **Orbiting & Projection:** Orbiting updates projection matrices rather than re-resolving volume radii or rebuilding a batch per point.
 * **Cache Invalidation:** Point/volume edits and evaluated avatar frame changes invalidate the display cache; the display never re-slices the mesh during redraw.
-* **Benchmarks:** See `ARRANGEMENT_DISPLAY_PERFORMANCE.md` in the repository root for measured before/after results (reproducible via `python tools/dev.py --arrangement-performance current --keep-scratch`).
+* **Benchmarks:** See `reports/ARRANGEMENT_DISPLAY_PERFORMANCE.md` for measured before/after results (reproducible via `python tools/dev.py --arrangement-performance current --keep-scratch`).
 
 ### Action-Time Caching
 * **Live-Panel Invalidation:** Live-panel edits reuse unaffected panels with explicit geometry, sewing, UV, and placement invalidation, while retaining a full-rebuild fallback.
 * **Exact-Input Wrap Cache:** Repeated wrapping uses a bounded exact-input cache.
 * **Latency Profile:** On a six-panel test rig, median pin, duplicate, and move actions take ~37–39 ms, and unused arrangement-point edits take ~13 ms. Cold affected-piece wraps and initial guide refreshes may still hitch.
-* **Profiling Report:** See `ACTION_TIME_PERFORMANCE.md` in the repository root for the full 28-condition profile (reproducible via `python tools/dev.py --action-performance current --keep-scratch`).
+* **Profiling Report:** See `reports/ACTION_TIME_PERFORMANCE.md` for the full 28-condition profile (reproducible via `python tools/dev.py --action-performance current --keep-scratch`).
