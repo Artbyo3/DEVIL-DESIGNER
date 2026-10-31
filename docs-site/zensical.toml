@@ -1,0 +1,61 @@
+[project]
+site_url = "http://localhost:8000/"
+site_name = "Devil Designer"
+site_description = "A movable 2D clothing-pattern editor and cloth authoring tool for Blender."
+site_author = "Artbyo3"
+extra_css = ["stylesheets/extra.css"]
+
+nav = [
+  { "Home" = "index.md" },
+  { "Installation" = "install.md" },
+  { "Quickstart" = "quickstart.md" },
+  { "Drafting" = "draft.md" },
+  { "Sewing" = "sew.md" },
+  { "Arrangement" = "arrange.md" },
+  { "Simulation" = "simulate.md" },
+  { "Library" = "library.md" },
+  { "FAQ" = "faq.md" },
+]
+
+[project.theme]
+language = "en"
+features = [
+  "content.code.copy",
+  "navigation.indexes",
+  "navigation.instant",
+  "navigation.sections",
+  "search.highlight",
+]
+
+[[project.theme.palette]]
+scheme = "slate"
+toggle.icon = "lucide/moon"
+toggle.name = "Dark mode"
+
+[project.markdown_extensions]
+abbr = {}
+admonition = {}
+attr_list = {}
+def_list = {}
+footnotes = {}
+md_in_html = {}
+toc.permalink = true
+pymdownx.arithmatex.generic = true
+pymdownx.betterem = {}
+pymdownx.caret = {}
+pymdownx.details = {}
+pymdownx.highlight.anchor_linenums = true
+pymdownx.highlight.line_spans = "__span"
+pymdownx.highlight.pygments_lang_class = true
+pymdownx.inlinehilite = {}
+pymdownx.keys = {}
+pymdownx.magiclink = {}
+pymdownx.mark = {}
+pymdownx.smartsymbols = {}
+pymdownx.superfences.custom_fences = [
+  { name = "mermaid", class = "mermaid", format = "pymdownx.superfences.fence_code_format" },
+]
+pymdownx.tabbed.alternate_style = true
+pymdownx.tabbed.combine_header_slug = true
+pymdownx.tasklist.custom_checkbox = true
+pymdownx.tilde = {}
