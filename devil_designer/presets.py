@@ -1,10 +1,10 @@
 PRESETS = {
-    'SILK': dict(structural=10.0, shear=5.0, bending=.08, density=.08),
-    'KNIT': dict(structural=7.0, shear=4.0, bending=.12, density=.25),
-    'COTTON': dict(structural=25.0, shear=15.0, bending=.5, density=.30),
-    'LINEN': dict(structural=35.0, shear=20.0, bending=1.0, density=.25),
-    'DENIM': dict(structural=65.0, shear=35.0, bending=3.0, density=.5),
-    'LEATHER': dict(structural=85.0, shear=55.0, bending=5.0, density=.7),
+    'SILK': dict(structural=12.3, shear=6.2, bending=0.55, density=0.07),
+    'KNIT': dict(structural=7.1, shear=3.5, bending=0.95, density=0.17),
+    'COTTON': dict(structural=32.0, shear=16.0, bending=2.2, density=0.14),
+    'LINEN': dict(structural=65.0, shear=32.5, bending=6.0, density=0.19),
+    'DENIM': dict(structural=120.0, shear=60.0, bending=68.0, density=0.40),
+    'LEATHER': dict(structural=180.0, shear=90.0, bending=115.0, density=0.60),
 }
 
 

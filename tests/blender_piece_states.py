@@ -171,7 +171,7 @@ document.patterns[0].strengthened = True
 scene.dd_document = document.dumps()
 simulation = garment.compile_garment(bpy.context)
 cloth = next(modifier for modifier in simulation.modifiers if modifier.type == 'CLOTH')
-check(cloth.settings.tension_stiffness == 25 and cloth.settings.tension_stiffness_max == 100, 'Strengthen multiplies Cotton tension by four')
+check(cloth.settings.tension_stiffness == PRESETS['COTTON']['structural'] and cloth.settings.tension_stiffness_max == PRESETS['COTTON']['structural'] * 4, 'Strengthen multiplies Cotton tension by four')
 indices = piece_states.piece_indices(simulation)
 group = simulation.vertex_groups['DD Structural']
 check(all(group.weight(index) == 1 for index in indices[document.patterns[0].id]) and all(group.weight(index) == 0 for index in indices[document.patterns[1].id]), 'shared Cotton preset remains normal on the other piece')
