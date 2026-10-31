@@ -73,6 +73,7 @@ The editor opens as an immersive, non-intrusive workspace:
 * **Micro-Indicators:** Persistent status toggles in the corner for Snapping (`[S]`), Body Guide (`[H]`), Segment Lengths (`[L]`), and Fit Map (`[F]`).
 * **Contextual Right-Click Menus:** Right-clicking any element (a piece, point, edge, internal path, seam badge, anchor, or empty canvas) opens a compact, focused card right at your cursor.
 * **Revealed 3D Viewport:** When 3D placement, sewing, or drape inspection is active, the 3D viewport is revealed alongside the canvas. Click **Full canvas** to return to the dedicated 2D view.
+* **Interface Icons:** Public interface icons are sourced CC0 artwork from Kenney, Maki, and Temaki. Provenance and original licenses ship in `devil_designer/assets/icons`. The Blender renderer caches native GPU geometry with zero extra runtime dependencies.
 
 ### Exiting the Editor
 
@@ -84,21 +85,61 @@ The editor opens as an immersive, non-intrusive workspace:
 
 ## Verifying the Installation
 
-To verify that the add-on passes all unit and integration tests:
+To verify that the add-on passes all unit, integration, and publication tests:
 
 ```bash
-# Unit tests
+# Fast headless unit tests
 python -m unittest discover -s tests -p "test_*.py" -v
 
-# Headless Blender integration tests
+# Headless Blender integration test suites
 blender --background --factory-startup --python-exit-code 1 --python tests/blender_smoke.py
 blender --background --factory-startup --python-exit-code 1 --python tests/blender_garment.py
 blender --background --factory-startup --python-exit-code 1 --python tests/blender_advanced.py
 blender --background --factory-startup --python-exit-code 1 --python tests/blender_silhouette.py
+blender --background --factory-startup --python-exit-code 1 --python tests/blender_density.py
+blender --background --factory-startup --python-exit-code 1 --python tests/blender_arrangement.py
+blender --background --factory-startup --python-exit-code 1 --python tests/blender_tack_binding.py
+blender --background --factory-startup --python-exit-code 1 --python tests/blender_tracing.py
+blender --background --factory-startup --python-exit-code 1 --python tests/blender_layering.py
+blender --background --factory-startup --python-exit-code 1 --python tests/blender_piece_states.py
+blender --background --factory-startup --python-exit-code 1 --python tests/blender_sewing_preview.py
 
-# Public publication audit
-python tools/check_public.py
+# In-engine interactive GUI test suites
+blender --factory-startup --python tests/gui_preview.py
+blender --factory-startup --python tests/gui_design.py
+blender --factory-startup --python tests/gui_silhouette.py
 
-# Blender extension manifest validation
+# Package build and extension validation
+python tools/build.py
 blender --background --factory-startup --command extension validate dist/devil_designer-0.10.0.zip
+
+# Public publication and privacy audit
+python tools/check_public.py
 ```
+
+The publication audit checks source, archives, and reachable Git history to ensure no private account names, absolute machine paths, or unapproved commit identities are included. The product specification (`SPEC.md` in the repository root) records intended scope and implementation coverage.
+
+---
+
+## Developer Workspace & Scratch Discipline
+
+When developing or contributing to Devil Designer:
+
+* **`dist/`:** Holds the installable extension ZIP (`devil_designer-0.10.0.zip`) and is never auto-deleted.
+* **`scratch/`:** Everything disposable belongs in the ignored `scratch/` directory: test scenes, backups, benchmark reports, screenshots, generated scripts, preview logs, icon downloads, temporary dependencies, and test garment libraries. Never place source files, required artwork, licenses, or user projects in scratch.
+
+Use the developer runner script (`dev.cmd` on Windows or `tools/dev.py`) so child processes run cleanly without generating bytecode caches:
+
+```cmd
+# Run all test suites and package the extension
+.\dev.cmd --test --build
+
+# Run visual audits, retaining generated screenshots in scratch
+.\dev.cmd --shots --keep-scratch
+.\dev.cmd --inspect --keep-scratch
+
+# Clean the disposable scratch workspace
+.\dev.cmd --clean
+```
+
+The `--clean` command only deletes `scratch/`; it never deletes `dist/`, source files, or user projects. It refuses linked directories and reports locked files rather than force-closing Blender or discarding work. Close disposable preview windows before cleaning. Standalone test, screenshot, and icon utilities also write to `scratch/`; run `--clean` when finished.

@@ -67,3 +67,18 @@ UV coordinates are generated 1:1 from the flat 2D pattern drafting layout:
 * Pattern islands retain their exact relative scale, rotation, and placement.
 * Devil Designer does not normalize islands independently or automatically repack UVs.
 * Piece face identifiers and vertex groups are preserved for easy ID masking in Substance 3D Painter.
+
+### How are the fabric presets calibrated, and what are their solver limits?
+Presets (Silk, Knit, Cotton, Linen, Leather, Denim) are calibrated against physical textile benchmarks (KES-F / FAST derived data and Peirce cantilever bending lengths). Known physics and solver limits include:
+* **0.02 m spacing:** Calibration is exact near 0.02 m spacing because Blender assigns mass per vertex and bending per edge without area/length normalization.
+* **3/8 shear lock:** Triangle-mesh shear is locked to 3/8 of structural stiffness because Blender creates zero shear springs on triangular CDT meshes.
+* **Shared density:** Multi-fabric garments share one area-weighted density because native Blender cloth simulation uses a single mass setting across the compiled object.
+
+### Why is quad-grid conversion deferred on Keep mesh?
+Keep mesh outputs clean, welded triangle topology with optional Solidify thickness. Quad-grid conversion was prototyped but deferred because it did not reliably preserve welded boundary seams. No quad conversion, decimation, rigging, or weight transfer is performed.
+
+### Where are the add-on interface icons sourced?
+Public interface icons are sourced CC0 artwork from Kenney, Maki, and Temaki. Provenance and original licenses are preserved in `devil_designer/assets/icons`.
+
+### Where are disposable developer files and test reports stored?
+All temporary test outputs, screenshots, benchmark reports, and generated scripts are placed in the git-ignored `scratch/` folder. The installable extension ZIP is kept in `dist/` and is never automatically deleted. Running `.\dev.cmd --clean` purges the scratch directory safely without touching source files or user projects.

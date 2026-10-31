@@ -42,7 +42,8 @@ Devil Designer uses true cubic Bezier curves rather than faceted polylines:
 * **Anchor Points & Handles:** Click an anchor point to select it. When converted to a curve point (<kbd>C</kbd>), smooth gold Bezier handles appear. Drag either handle to adjust curvature.
 * **Exact Dimensions in Centimetres:** Dimensions and segment lengths are displayed in centimetres (while internal coordinates use metres).
 * **Live Arc-Length Integration:** Curve lengths are calculated using numerical Bezier arc-length integration, updating in real time as handles move.
-* **Exact Numeric Edits:** Right-click an anchor point or segment to enter exact numerical coordinates (**Point X/Y**) or define an **Exact length**. When setting an exact length, you choose which endpoint remains anchored and which side adjusts.
+* **Exact Numeric Edits:** Right-click an anchor point or segment to enter exact numerical coordinates (**Point X/Y**) or define an **Exact length**. When setting an exact length, you choose which endpoint remains anchored and which side adjusts. Numeric point and edge edits apply on completion as one undoable action; pressing <kbd>Escape</kbd> cancels an in-progress value drag.
+* **Fit Design Framing:** Pressing <kbd>Home</kbd> (or <kbd>F</kbd> when Fit Map is disabled) frames all pattern pieces cleanly clear of the dock and pinned cards without shrinking the actual canvas.
 
 ---
 
@@ -94,9 +95,11 @@ Press <kbd>I</kbd> to activate the **Internal** tool on a selected piece.
 ### Cut Knife (<kbd>N</kbd>)
 The Cut tool allows splitting pieces directly across their surface:
 * **Modes:** **Cut & Sew** (default; creates matching seam across the cut) or **Cut only** (separates pieces without sewing).
-* **Usage:** Click two or more points across a pattern piece, crossing its outer boundary exactly twice. Press <kbd>Enter</kbd> or double-click to finish.
-* **Result:** Splits the piece into `Piece 1` and `Piece 2`. Both halves retain original fabric settings, mesh density, and their exact source-space UV layout.
-* **Conflict Resolution:** If a straight cut crosses existing straight open internal lines, Devil Designer offers **Split and retry** to stage the split and cut cleanly in one undoable transaction.
+* **Usage:** Click two or more points across a pattern piece, crossing its outer boundary exactly twice. Press <kbd>Enter</kbd> or double-click to finish; <kbd>Escape</kbd> cancels. Hold <kbd>Shift</kbd> to constrain axes.
+* **Geometry Rules:** The cut line can begin and end outside the piece: only the interior section is cut. Each target piece must cross the outline exactly twice; tangencies, overlapping outline edges, self-crossings, and crossings through holes are safely refused without modifying the design.
+* **Targeting:** Selected pieces are the targets; with no selection, every fully crossed piece is cut. A cut crossing an existing internal path is refused (split that path first). Internal curve cuts, slits, and holes use **Cut along path**.
+* **Result:** Splits the piece into two halves named with the original name plus ` 1` and ` 2`. Both halves retain original fabric settings, mesh density, and their exact source-space UV layout. Outer-edge sewing is remapped with repair warnings if needed.
+* **Conflict Resolution:** If a straight cut crosses existing straight open internal lines, Devil Designer offers **Split and retry** to stage the split and cut cleanly as one undoable transaction, preserving supported sewing and anchors. Curved or closed crossing shapes, overlaps, or anchors on the cut require manual adjustment.
 
 ### Princess Seams & Slits
 * An open internal line that runs from boundary to boundary acts as a seam line for splitting (e.g. princess seams).

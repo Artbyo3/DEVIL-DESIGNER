@@ -61,5 +61,17 @@ Loading a library garment over an existing open design automatically captures an
 
 ## Document Versioning & Backward Compatibility
 
-* **Document Version 4:** Current format storing Bezier curves, stable segment IDs, arrangement point IDs, relative transforms, and per-piece simulation flags.
-* **Legacy Formats (Versions 1–3):** Older garments created with circular volumes or named Bodice/Sleeves/Skirt layouts automatically migrate on load, preserving pattern outlines, legacy placements, and sewing connections.
+* **Document Version 4:** Current format storing Bezier curves, stable segment IDs, arrangement point IDs, relative transforms (G/R deltas), pattern-space source bounds for cut parent tracking, and per-piece simulation flags.
+* **Legacy Formats (Versions 1–3):** Older garments created with circular volumes, ray placement, manual wrap radius, or named Bodice/Sleeves/Skirt layouts automatically migrate on load, preserving pattern outlines, legacy placements, and sewing connections.
+
+---
+
+## Saving and `.blend` File Compatibility
+
+Devil Designer integrates non-destructively with Blender's standard save system:
+
+* **What Is Serialized:** Saving your `.blend` file normally saves all versioned Bezier source paths, sewing ranges, constraints, fabric presets, UV layouts, avatar selection, editor placement, kept meshes, and drafting undo/redo history (`scene.dd_document` and `scene.dd_history`).
+* **Dual Undo Architecture:**
+    * **Inside the Editor:** Pressing <kbd>Ctrl</kbd> + <kbd>Z</kbd> and <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Z</kbd> steps through internal 2D pattern geometry and seam history (up to 100 transactional edits in `dd_history`), completely isolated from scene object operations.
+    * **In the 3D Viewport:** Blender's native undo operates on 3D scene objects and mesh evaluations.
+* **Non-Destructive Reloading:** Reopening the `.blend` file restores your complete editable vector patterns and arrangement states. If external mesh edits alter topology, sewing that requires repair is reported without corrupting the file.
