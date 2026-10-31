@@ -15,15 +15,15 @@ hide:
     <p class="dd-landing-tagline">A movable 2D clothing-pattern editor and cloth authoring tool for Blender.</p>
     
     <!-- Draggable add-on package card: drag into Blender to install, click to download zip -->
-    <a href="https://github.com/Artbyo3/DEVIL-DESIGNER/releases/download/v0.10.0/devil_designer-0.10.0.zip"
+    <a href="https://github.com/Artbyo3/DEVIL-DESIGNER/releases/download/v0.11.0/devil_designer-0.11.0.zip"
        download
        draggable="true"
        id="dd-install-card"
        class="dd-install-card"
-       aria-label="Download or drag Devil Designer v0.10.0 into Blender">
+       aria-label="Download or drag Devil Designer v0.11.0 into Blender">
       <div class="dd-install-header">
         <span class="dd-install-name">Devil Designer</span>
-        <span class="dd-install-version">v0.10.0</span>
+        <span class="dd-install-version">v0.11.0</span>
       </div>
       <div class="dd-install-hint">Drag into Blender</div>
       <div class="dd-install-disclaimer">Extensions listing awaiting approval — this installs the direct download.</div>
@@ -51,11 +51,11 @@ hide:
 (function() {
   const card = document.getElementById('dd-install-card');
   if (!card) return;
-  const assetUrl = 'https://github.com/Artbyo3/DEVIL-DESIGNER/releases/download/v0.10.0/devil_designer-0.10.0.zip';
+  const assetUrl = 'https://github.com/Artbyo3/DEVIL-DESIGNER/releases/download/v0.11.0/devil_designer-0.11.0.zip';
   card.addEventListener('dragstart', (e) => {
     e.dataTransfer.setData('text/uri-list', assetUrl);
     e.dataTransfer.setData('text/plain', assetUrl);
-    e.dataTransfer.setData('DownloadURL', `application/zip:devil_designer-0.10.0.zip:${assetUrl}`);
+    e.dataTransfer.setData('DownloadURL', `application/zip:devil_designer-0.11.0.zip:${assetUrl}`);
     e.dataTransfer.effectAllowed = 'copyLink';
   });
 })();

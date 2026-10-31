@@ -6,7 +6,7 @@ site_author = "Artbyo3"
 extra_css = ["stylesheets/extra.css"]
 
 [project.extra]
-version = "v0.10.0"
+version = "v0.11.0"
 
 nav = [
   { "Installation" = "install.md" },
