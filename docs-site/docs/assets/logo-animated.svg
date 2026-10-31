@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" width="100%" height="100%">
+  <defs>
+    <!-- Palette Gradient: ACCENT_BG (#1E3633) to BG_WELL (#14181C) -->
+    <linearGradient id="wellGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1E3633" />
+      <stop offset="55%" stop-color="#14181C" />
+      <stop offset="100%" stop-color="#14181C" />
+    </linearGradient>
+    <!-- Subtle Inner Spotlight (#70D5C5) -->
+    <radialGradient id="tealGlow" cx="48%" cy="45%" r="52%">
+      <stop offset="0%" stop-color="#70D5C5" stop-opacity="0.16" />
+      <stop offset="100%" stop-color="#14181C" stop-opacity="0" />
+    </radialGradient>
+    <!-- Crisp Drop Shadow for Foreground Icon -->
+    <filter id="iconShadow" x="-12%" y="-12%" width="124%" height="124%">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#0A0D10" flood-opacity="0.65" />
+    </filter>
+  </defs>
+  <style>
+    .stitch-ring {
+      transform-origin: 500px 500px;
+      animation: stitchSpin 42s linear infinite;
+    }
+    .char-body {
+      transform-origin: 460px 490px;
+      animation: charBreathe 3.2s ease-in-out infinite;
+    }
+    .char-horn {
+      transform-origin: 635px 295px;
+      animation: hornTwitch 3.2s ease-in-out infinite;
+    }
+    .char-tail-pivot {
+      transform-origin: 252px 588px;
+      animation: tailWagPivot 2.1s ease-in-out infinite;
+    }
+    .char-needle {
+      transform-origin: 730px 630px;
+      animation: needleBob 2.6s ease-in-out infinite;
+    }
+
+    @keyframes stitchSpin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    @keyframes charBreathe {
+      0%, 100% { transform: translateY(0px) scale(1, 1) rotate(0deg); }
+      50% { transform: translateY(-7px) scale(1.015, 0.988) rotate(-0.8deg); }
+    }
+    @keyframes hornTwitch {
+      0%, 65%, 100% { transform: rotate(0deg) translateY(0px); }
+      74% { transform: rotate(9deg) translateY(-4px); }
+      82% { transform: rotate(-5deg) translateY(1px); }
+      90% { transform: rotate(6deg) translateY(-2px); }
+    }
+    @keyframes tailWagPivot {
+      0%, 100% { transform: rotate(0deg); }
+      25% { transform: rotate(-7.5deg) translateY(-4px); }
+      50% { transform: rotate(1.5deg); }
+      75% { transform: rotate(6.8deg) translateY(4px); }
+    }
+    @keyframes needleBob {
+      0%, 100% { transform: translate(0px, 0px) rotate(0deg); }
+      50% { transform: translate(-6px, -11px) rotate(-4.5deg); }
+    }
+  </style>
+
+  <!-- Container: Tailor's Circular Medallion Seal -->
+  <g class="medallion-base">
+    <circle cx="500" cy="500" r="444" fill="#232930" stroke="#3A444F" stroke-width="6" />
+    <circle cx="500" cy="500" r="416" fill="#1E3633" stroke="#70D5C5" stroke-width="8" />
+    <circle cx="500" cy="500" r="380" fill="url(#wellGrad)" stroke="#3A6B63" stroke-width="4" />
+    <circle cx="500" cy="500" r="380" fill="url(#tealGlow)" />
+    <circle class="stitch-ring" cx="500" cy="500" r="398" fill="none" stroke="#FFA256" stroke-width="5" stroke-dasharray="16 14" stroke-linecap="round" />
+  </g>
+
+  <!-- Foreground Logo: Animated Horned 'D', Wagging Tail & Needle -->
+  <g transform="translate(60.6, 70.2) scale(0.87)" fill-rule="evenodd" filter="url(#iconShadow)">
+    <!-- 1. Horned Stitched 'D' Body & Cutouts -->
+    <g class="char-body">
+      <path fill="#70D5C5" d="M 302 334 C 242 295, 248 212, 322 176 C 346 164, 358 172, 353 194 C 344 232, 356 266, 386 277 C 468 258, 568 268, 638 324 C 716 386, 732 504, 676 598 C 618 692, 488 712, 344 702 C 286 698, 254 684, 258 652 L 302 334 Z M 432 365 L 394 631 C 506 641, 594 598, 596 498 C 598 398, 522 356, 432 365 Z M 337.1 379.7 A 11.5 11.5 0 0 1 359.9 383.0 L 350.9 444.3 A 11.5 11.5 0 0 1 328.1 441.0 Z M 322.1 487.7 A 11.5 11.5 0 0 1 344.9 491.0 L 335.9 552.3 A 11.5 11.5 0 0 1 313.1 549.0 Z M 306.1 595.7 A 11.5 11.5 0 0 1 328.9 599.0 L 319.9 660.3 A 11.5 11.5 0 0 1 297.1 657.0 Z" />
+    </g>
+    <!-- 2. Detached Right Devil Horn -->
+    <g class="char-horn">
+      <path fill="#70D5C5" d="M 614 273 C 628 252, 633 234, 631 215 C 629 198, 646 196, 661 211 C 690 240, 700 286, 684 323 C 665 301, 642 284, 614 273 Z" />
+    </g>
+    <!-- 3. Bottom Thread Swoosh (Animated Tail with Spline Morphing + Pivot) -->
+    <g class="char-tail-pivot">
+      <path fill="#70D5C5" d="M 252 572 L 247 604 C 210 615, 192 634, 195 656 C 201 702, 314 734, 444 726 C 554 719, 636 680, 684 636 C 678 656, 646 694, 596 720 C 482 801, 292 810, 192 745.2 C 122 698.6, 136 598, 252 572 Z">
+        <animate attributeName="d" dur="2.1s" repeatCount="indefinite" calcMode="spline"
+          keyTimes="0; 0.25; 0.5; 0.75; 1"
+          keySplines="0.42 0 0.58 1; 0.42 0 0.58 1; 0.42 0 0.58 1; 0.42 0 0.58 1"
+          values="M 252 572 L 247 604 C 210 615, 192 634, 195 656 C 201 702, 314 734, 444 726 C 554 719, 636 680, 684 636 C 678 656, 646 694, 596 720 C 482 801, 292 810, 192 745.2 C 122 698.6, 136 598, 252 572 Z; M 252 572 L 247 604 C 206 612, 188 628, 192 650 C 200 694, 318 712, 448 696 C 558 682, 648 628, 704 576 C 696 604, 658 652, 604 686 C 486 776, 294 794, 190 738 C 120 694, 136 598, 252 572 Z; M 252 572 L 247 604 C 210 615, 192 634, 195 656 C 201 702, 314 734, 444 726 C 554 719, 636 680, 684 636 C 678 656, 646 694, 596 720 C 482 801, 292 810, 192 745.2 C 122 698.6, 136 598, 252 572 Z; M 252 572 L 247 604 C 214 618, 196 640, 198 662 C 204 710, 310 752, 440 750 C 548 748, 624 720, 664 686 C 660 704, 632 734, 586 754 C 476 824, 290 826, 194 754 C 124 704, 136 598, 252 572 Z; M 252 572 L 247 604 C 210 615, 192 634, 195 656 C 201 702, 314 734, 444 726 C 554 719, 636 680, 684 636 C 678 656, 646 694, 596 720 C 482 801, 292 810, 192 745.2 C 122 698.6, 136 598, 252 572 Z" />
+      </path>
+    </g>
+    <!-- 4. Sewing Needle & Eye -->
+    <g class="char-needle">
+      <path fill="#70D5C5" d="M 603 811 C 600 816, 606 821, 611 815 L 780 594 C 804 576, 829 556, 847 526 C 868 491, 862 456, 840 444 C 816 431, 782 448, 760 485 C 742 515, 735 544, 731 571 L 603 811 Z M 825 475 C 835 482, 827 507, 810 530 C 793 553, 773 566, 763 559 C 753 552, 761 527, 778 504 C 795 481, 815 468, 825 475 Z" transform="rotate(3 730 630)" />
+    </g>
+  </g>
+</svg>

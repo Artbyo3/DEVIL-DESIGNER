@@ -204,6 +204,15 @@ body:has(.dd-landing-container) .md-content__inner {
   letter-spacing: 0.02em;
 }
 
+.dd-install-disclaimer {
+  font-size: 0.7rem;
+  color: #8E9BA8;
+  opacity: 0.85;
+  letter-spacing: 0.01em;
+  line-height: 1.3;
+  margin-top: 0.1rem;
+}
+
 /* Navigation Buttons */
 .dd-landing-nav {
   display: flex;
@@ -338,12 +347,151 @@ body:has(.dd-landing-container) .md-content__inner {
 .md-header {
   background-color: #191D22 !important;
   border-bottom: 1px solid #28303A;
+  min-height: 76px;
+}
+
+.md-header__inner {
+  min-height: 76px;
+  display: flex;
+  align-items: center;
+}
+
+.md-header__button.md-logo {
+  display: none !important;
 }
 
 .md-header__title {
   font-weight: 700;
   letter-spacing: 0.04em;
   color: #70D5C5 !important;
+  font-size: 1.15rem;
+  height: auto;
+  min-height: 56px;
+  line-height: normal;
+  display: flex;
+  align-items: center;
+}
+
+.md-header__ellipsis,
+.md-header__topic {
+  overflow: visible !important;
+}
+
+.md-header__title .md-header__topic {
+  position: static !important;
+  opacity: 1 !important;
+  transform: none !important;
+  pointer-events: auto !important;
+}
+
+.dd-title-lockup {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none !important;
+  color: #70D5C5 !important;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.dd-title-logo {
+  display: inline-block;
+  width: auto;
+  height: 56px;
+  vertical-align: middle;
+  margin-right: -2px;
+  flex-shrink: 0;
+}
+
+.dd-title-text {
+  display: inline;
+  color: #70D5C5;
+  letter-spacing: 0.04em;
+}
+
+/* Header GitHub release entry with version tag */
+.md-header__source .md-source {
+  display: flex;
+  align-items: center;
+  height: 44px;
+  padding: 0 0.6rem;
+  border-radius: 4px;
+  text-decoration: none !important;
+  transition: background-color 0.15s ease, opacity 0.15s ease;
+}
+
+.md-header__source .md-source:hover {
+  background-color: rgba(112, 213, 197, 0.08);
+  opacity: 1;
+}
+
+.md-header__source .md-source__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.8rem;
+  height: 2.2rem;
+  color: #CBD5E1;
+  margin-right: 0.25rem;
+}
+
+.md-header__source .md-source__icon svg {
+  width: 1.25rem;
+  height: 1.25rem;
+  margin: 0 !important;
+}
+
+.md-header__source .md-source__repository {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  line-height: 1.2;
+  margin: 0 !important;
+  padding: 0 !important;
+  max-width: none;
+}
+
+.md-header__source .dd-source-name {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #E5ECF2;
+  letter-spacing: 0.02em;
+}
+
+.md-header__source .md-source__facts {
+  display: flex;
+  align-items: center;
+  margin: 0.1rem 0 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.72rem;
+  color: #8E9BA8;
+  opacity: 1;
+}
+
+.md-header__source .md-source__fact--version {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: #8E9BA8;
+}
+
+.md-header__source .md-source__fact--version:before {
+  display: inline-block;
+  width: 0.72rem;
+  height: 0.72rem;
+  background-color: #8E9BA8;
+  margin: 0;
+  vertical-align: middle;
+}
+
+/* Sidebar sticky offset to match the 76px header height */
+.md-sidebar {
+  top: 76px !important;
+}
+
+/* Sidebar navigation: links only, no logo or title at top */
+.md-sidebar--primary .md-nav__title {
+  display: none !important;
 }
 
 .md-sidebar--primary,
@@ -436,4 +584,33 @@ body:has(.dd-landing-container) .md-content__inner {
 
 .md-footer {
   display: none !important;
+}
+
+/* ============================================================
+   PAGE TRANSITION: Subtle crossfade and vertical settle
+   ============================================================ */
+
+@keyframes dd-page-enter {
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.md-content__inner,
+.dd-landing-content {
+  animation: dd-page-enter 200ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: opacity, transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .md-content__inner,
+  .dd-landing-content {
+    animation: none !important;
+    transform: none !important;
+  }
 }
