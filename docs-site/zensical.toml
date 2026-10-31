@@ -5,8 +5,10 @@ site_description = "A movable 2D clothing-pattern editor and cloth authoring too
 site_author = "Artbyo3"
 extra_css = ["stylesheets/extra.css"]
 
+[project.extra]
+version = "v0.10.0"
+
 nav = [
-  { "Home" = "index.md" },
   { "Installation" = "install.md" },
   { "Quickstart" = "quickstart.md" },
   { "Drafting" = "draft.md" },
@@ -19,18 +21,19 @@ nav = [
 
 [project.theme]
 language = "en"
+custom_dir = "overrides"
+favicon = "assets/favicon.svg"
 features = [
   "content.code.copy",
   "navigation.indexes",
   "navigation.instant",
+  "navigation.instant.prefetch",
   "navigation.sections",
   "search.highlight",
 ]
 
-[[project.theme.palette]]
+[project.theme.palette]
 scheme = "slate"
-toggle.icon = "lucide/moon"
-toggle.name = "Dark mode"
 
 [project.markdown_extensions]
 abbr = {}

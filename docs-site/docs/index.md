@@ -26,6 +26,7 @@ hide:
         <span class="dd-install-version">v0.10.0</span>
       </div>
       <div class="dd-install-hint">Drag into Blender</div>
+      <div class="dd-install-disclaimer">Extensions listing awaiting approval — this installs the direct download.</div>
     </a>
 
     <!-- Minimal entry options (Quickstart, Documentation, GitHub) -->

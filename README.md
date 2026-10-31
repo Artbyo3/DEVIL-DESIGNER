@@ -1,3 +1,11 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs-site/docs/assets/readme-logo-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="docs-site/docs/assets/readme-logo-light.svg">
+    <img alt="Devil Designer logo" src="docs-site/docs/assets/readme-logo-dark.svg" width="140">
+  </picture>
+</p>
+
 # Devil Designer
 
 A movable 2D clothing-pattern editor and cloth authoring tool for Blender.

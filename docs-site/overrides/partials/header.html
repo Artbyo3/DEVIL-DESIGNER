@@ -1,0 +1,64 @@
+{% set class = "md-header" %}
+{% if "navigation.tabs.sticky" in features %}
+  {% set class = class ~ " md-header--shadow md-header--lifted" %}
+{% elif "navigation.tabs" not in features %}
+  {% set class = class ~ " md-header--shadow" %}
+{% endif %}
+<header class="{{ class }}" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="{{ lang.t('header') }}">
+    <label class="md-header__button md-icon" for="__drawer" aria-label="{{ lang.t('nav') }}">
+      {% set icon = config.theme.icon.menu or "material/menu" %}
+      {% include ".icons/" ~ icon ~ ".svg" %}
+    </label>
+    <div class="md-header__title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            <a href="{{ config.extra.homepage | d(nav.homepage.url, true) | url }}" class="dd-title-lockup" title="{{ config.site_name | e }}">
+              <img src="{{ 'assets/logo-clean-animated.svg' | url }}" alt="D" class="dd-title-logo"><span class="dd-title-text">evil Designer</span>
+            </a>
+          </span>
+        </div>
+      </div>
+    </div>
+    {% if config.theme.palette %}
+      {% if not config.theme.palette is mapping %}
+        {% include "partials/palette.html" %}
+      {% endif %}
+    {% endif %}
+    {% if not config.theme.palette is mapping %}
+      {% include "partials/javascripts/palette.html" %}
+    {% endif %}
+    {% if config.extra.alternate %}
+      {% include "partials/alternate.html" %}
+    {% endif %}
+    {% if "search" in config.plugins %}
+      {% set search = config.plugins["search"] | attr("config") %}
+      {% if search.enabled %}
+        <label class="md-header__button md-icon" for="__search" aria-label="{{ lang.t('search') }}">
+          {% set icon = config.theme.icon.search or "material/magnify" %}
+          {% include ".icons/" ~ icon ~ ".svg" %}
+        </label>
+        {% include "partials/search.html" %}
+      {% endif %}
+    {% endif %}
+    <div class="md-header__source">
+      <a href="https://github.com/Artbyo3/DEVIL-DESIGNER/releases/latest" title="GitHub - {{ config.extra.version | d('v0.10.0') }}" class="md-source" target="_blank" rel="noopener">
+        <div class="md-source__icon md-icon">
+          {% include ".icons/fontawesome/brands/github.svg" %}
+        </div>
+        <div class="md-source__repository">
+          <div class="dd-source-name">GitHub</div>
+          <ul class="md-source__facts">
+            <li class="md-source__fact md-source__fact--version">{{ config.extra.version | d('v0.10.0') }}</li>
+          </ul>
+        </div>
+      </a>
+    </div>
+  </nav>
+  {% if "navigation.tabs.sticky" in features %}
+    {% if "navigation.tabs" in features %}
+      {% include "partials/tabs.html" %}
+    {% endif %}
+  {% endif %}
+</header>
