@@ -120,7 +120,8 @@ def material(index):
 
 
 @build_guard
-def build_panels(context):
+def build_panels(context, force_rebuild=False):
+    from .panel_cache import panel_inputs, panel_pose, panel_output
     scene = context.scene
     scene['dd_arrangement_message']=''
     doc = document(scene)
@@ -137,33 +138,49 @@ def build_panels(context):
     else:
         doc.uv_layout=dict(origin=[minx,miny],scale=extent)
         scene.dd_document=doc.dumps()
+    existing = {obj.get('dd_pattern_id'): obj for obj in generated(scene, 'panel')}
+    serialized = doc.dumps()
     prepared = []
+    allocated = []
+    input_keys = {}
+    reused = set()
+    def prepare_mesh(p, piece_index):
+        coords,faces,boundaries = fabric_mesh(doc,p,effective_spacing(p,scene.dd_spacing),counts)
+        cx = (min(v[0] for v in p.points)+max(v[0] for v in p.points))/2
+        cy = (min(v[1] for v in p.points)+max(v[1] for v in p.points))/2
+        if p.panel_origin and (p.placement_mode=='LEGACY' or p.arrangement):
+            left,bottom,right,top=p.panel_origin['bounds'];cx=(left+right)/2;cy=(bottom+top)/2
+        mesh = bpy.data.meshes.new('DD '+p.name)
+        allocated.append(mesh)
+        def position(x,y):
+            x,y=x-cx,y-cy
+            if p.wrap_radius>0 and p.placement_mode=='LEGACY' and p.arrangement is None:
+                angle=x/p.wrap_radius
+                return (math.sin(angle)*p.wrap_radius/unit,y/unit,(1-math.cos(angle))*p.wrap_radius/unit)
+            return (x/unit,y/unit,0)
+        mesh.from_pydata([position(x,y) for x,y in coords],[],faces)
+        uv = mesh.uv_layers.new(name='Pattern UV')
+        for loop in mesh.loops:
+            x,y = coords[loop.vertex_index]
+            uv.data[loop.index].uv = ((x-minx)/extent,(y-miny)/extent)
+        mesh.update()
+        metadata=decorate_mesh(mesh,piece_index,coords,counts.outputs[p.id])
+        return p,mesh,boundaries,(cx,cy),metadata
     try:
         for piece_index,p in enumerate(doc.patterns):
-            coords,faces,boundaries = fabric_mesh(doc,p,effective_spacing(p,scene.dd_spacing),counts)
-            cx = (min(v[0] for v in p.points)+max(v[0] for v in p.points))/2
-            cy = (min(v[1] for v in p.points)+max(v[1] for v in p.points))/2
-            if p.panel_origin and (p.placement_mode=='LEGACY' or p.arrangement):
-                left,bottom,right,top=p.panel_origin['bounds'];cx=(left+right)/2;cy=(bottom+top)/2
-            mesh = bpy.data.meshes.new('DD '+p.name)
-            prepared.append((p,mesh,boundaries,(cx,cy),None))
-            def position(x,y):
-                x,y=x-cx,y-cy
-                if p.wrap_radius>0 and p.placement_mode=='LEGACY' and p.arrangement is None:
-                    angle=x/p.wrap_radius
-                    return (math.sin(angle)*p.wrap_radius/unit,y/unit,(1-math.cos(angle))*p.wrap_radius/unit)
-                return (x/unit,y/unit,0)
-            mesh.from_pydata([position(x,y) for x,y in coords],[],faces)
-            uv = mesh.uv_layers.new(name='Pattern UV')
-            for loop in mesh.loops:
-                x,y = coords[loop.vertex_index]
-                uv.data[loop.index].uv = ((x-minx)/extent,(y-miny)/extent)
-            mesh.update()
-            metadata=decorate_mesh(mesh,piece_index,coords,counts.outputs[p.id])
-            prepared[-1]=(p,mesh,boundaries,(cx,cy),metadata)
+            key = panel_inputs(doc, p, piece_index, counts, scene.dd_spacing, unit)
+            input_keys[p.id] = key
+            obj = existing.get(p.id)
+            if (not force_rebuild and obj is not None and obj.type == 'MESH'
+                    and obj.data.users == 1 and obj.get('dd_panel_inputs') == key
+                    and obj.get('dd_panel_output') == panel_output(obj)):
+                reused.add(p.id)
+                prepared.append((p, obj.data, None, None, None))
+            else:
+                prepared.append(prepare_mesh(p, piece_index))
     except Exception:
-        for _,mesh,_,_,_ in prepared:
-            bpy.data.meshes.remove(mesh)
+        for mesh in allocated:
+            if mesh.users == 0:bpy.data.meshes.remove(mesh)
         raise
     reset(context)
     old = {o.get('dd_pattern_id'):o for o in generated(scene,'panel')}
@@ -184,6 +201,13 @@ def build_panels(context):
     source_matrices={identity:obj.matrix_world.copy() for identity,obj in old.items()}
     for index,(p,mesh,boundaries,center,metadata) in enumerate(prepared):
         obj = old.pop(p.id,None)
+        pose = panel_pose(context, p)
+        reuse = (p.id in reused and pose is not None and obj.get('dd_panel_pose') == pose
+                 and obj.parent is None and not obj.constraints
+                 and (p.placement_mode == 'LEGACY' and not p.arrangement
+                      or obj.get('dd_panel_matrix') == json.dumps([list(row) for row in obj.matrix_world])))
+        if p.id in reused and not reuse:
+            p,mesh,boundaries,center,metadata = prepare_mesh(p, index)
         created=obj is None
         if obj is None:
             obj = bpy.data.objects.new(p.name,mesh)
@@ -199,14 +223,18 @@ def build_panels(context):
             else:
                 obj.location = (center[0]/unit, 0, center[1]/unit)
                 obj.rotation_euler = (math.pi/2, 0, 0)
-        else:
+        elif not reuse:
             previous = obj.data
             obj.data = mesh
             if previous.users==0:
                 bpy.data.meshes.remove(previous)
-        if p.placement_mode!='LEGACY' or p.arrangement:
+        if reuse:
+            warning = obj.get('dd_panel_warning', '') if p.placement_mode != 'LEGACY' or p.arrangement else ''
+            if warning:scene['dd_arrangement_message']=(scene['dd_arrangement_message']+' '+warning).strip()
+        elif p.placement_mode!='LEGACY' or p.arrangement:
             from .live_panels import position_panel
             warning=position_panel(context,p,obj,center)
+            obj['dd_panel_warning'] = warning
             if warning:scene['dd_arrangement_message']=(scene['dd_arrangement_message']+' '+warning).strip()
         elif created and p.panel_origin and p.panel_origin['source']!=p.id and p.panel_origin['source'] in source_matrices:
             obj.matrix_world=source_matrices[p.panel_origin['source']]
@@ -214,19 +242,25 @@ def build_panels(context):
         source_matrices[p.id]=obj.matrix_world.copy()
         tag(obj,'panel')
         obj['dd_pattern_id'] = p.id
-        obj['dd_edge_samples']=json.dumps(metadata['samples'],separators=(',',':'))
-        obj['dd_anchor_indices']=json.dumps(metadata['anchors'],separators=(',',':'))
-        boundaries={key:[i for _,i in values] for key,values in metadata['samples'].items()}
-        obj['dd_boundaries'] = json.dumps(boundaries,separators=(',',':'))
+        if not reuse:
+            obj['dd_edge_samples']=json.dumps(metadata['samples'],separators=(',',':'))
+            obj['dd_anchor_indices']=json.dumps(metadata['anchors'],separators=(',',':'))
+            boundaries={key:[i for _,i in values] for key,values in metadata['samples'].items()}
+            obj['dd_boundaries'] = json.dumps(boundaries,separators=(',',':'))
         for group in list(obj.vertex_groups):obj.vertex_groups.remove(group)
         group=obj.vertex_groups.new(name='Piece '+p.name)
         group.add(list(range(len(mesh.vertices))),1,'REPLACE')
-        obj['dd_document'] = doc.dumps()
+        obj['dd_document'] = serialized
         obj['dd_spacing'] = scene.dd_spacing
         obj['dd_units'] = unit
         obj.name = p.name
+        obj.data.materials.clear()
         obj.data.materials.append(material(index))
         obj.color = material(index).diffuse_color
+        obj['dd_panel_inputs'] = input_keys[p.id]
+        obj['dd_panel_pose'] = pose if pose is not None else '!invalid'
+        obj['dd_panel_matrix'] = json.dumps([list(row) for row in obj.matrix_world])
+        if not reuse:obj['dd_panel_output'] = panel_output(obj)
         result.append(obj)
     remove_objects(list(old.values()))
     from .live_panels import avatar_signature

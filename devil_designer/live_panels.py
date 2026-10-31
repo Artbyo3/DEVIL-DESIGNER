@@ -5,6 +5,7 @@ import bpy
 from bpy.app.handlers import persistent
 from mathutils import Matrix,Vector,Euler
 from .core import Document,arrangement_record
+from .panel_cache import wrapped_positions
 
 
 _busy=False
@@ -46,8 +47,8 @@ def position_panel(context,pattern,obj,center):
                 spiral=width>math.tau*radius
                 minimum=(left-center[0])/unit
                 if 'stack' in resolved:
-                    from .ellipse_volumes import wrap_positions
-                    positions=wrap_positions([tuple(vertex.co) for vertex in obj.data.vertices],resolved,width,minimum,.001/unit)
+                    payload=json.dumps(([tuple(vertex.co) for vertex in obj.data.vertices],resolved,width,minimum,.001/unit),separators=(',',':'))
+                    positions=wrapped_positions(payload)
                     inverse=frame.inverted_safe()
                     for vertex,position in zip(obj.data.vertices,positions):
                         vertex.co=inverse @ Vector(position)
@@ -255,5 +256,6 @@ def register():
 
 
 def unregister():
+    wrapped_positions.cache_clear()
     for handlers,callback in ((bpy.app.handlers.depsgraph_update_post,capture_updates),(bpy.app.handlers.save_pre,before_save)):
         if callback in handlers:handlers.remove(callback)
