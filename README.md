@@ -2,10 +2,6 @@
 
 A movable 2D clothing-pattern editor and cloth authoring tool for Blender.
 
-![AI disclosure: this project was created entirely with AI tools](https://img.shields.io/badge/AI%20disclosure-created%20entirely%20with%20AI%20tools-informational?style=flat-square)
-
-This project was created entirely with AI tools.
-
 ## Documentation
 
 Full documentation, user guides, pattern drafting manuals, and simulation references are hosted at:
