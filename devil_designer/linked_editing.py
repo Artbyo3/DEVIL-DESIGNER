@@ -43,6 +43,17 @@ def _mirror(document,pair,source_id):
     first,second=pair['members'];forward=source_id==first
     source=document.find(source_id);target=document.find(second if forward else first)
     mapping=pair['mapping'] if forward else {value:key for key,value in pair['mapping'].items()}
+    if len(source.vertices)==len(target.vertices):
+        for s_v,t_v in zip(source.vertices,target.vertices):
+            if s_v.id not in mapping and t_v.id not in mapping.values():
+                mapping[s_v.id]=t_v.id
+    for s_p,t_p in zip(source.paths,target.paths):
+        if s_p.id not in mapping and t_p.id not in mapping.values():
+            mapping[s_p.id]=t_p.id
+        if len(s_p.vertices)==len(t_p.vertices):
+            for s_v,t_v in zip(s_p.vertices,t_p.vertices):
+                if s_v.id not in mapping and t_v.id not in mapping.values():
+                    mapping[s_v.id]=t_v.id
     horizontal,vertical=pair['transform'];vertical=vertical if forward else -vertical
     def identity(value):
         if value not in mapping:mapping[value]=uid()

@@ -538,6 +538,7 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
             self.renderer.draw(self)
             self.fit_overlay.legend(self.renderer)
         except Exception as exc:
+            self.error_message = f"Render error: {exc}"
             print("Devil Designer drawing error:", exc)
 
     def modal(self, context, event):
@@ -768,7 +769,15 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                             dx = dist * math.cos(ang)
                             dy = dist * math.sin(ang)
                     pat = self.session.document.find(self.gesture['pattern_id'])
-                    v = pat.path(self.gesture['path_id']).vertices[self.gesture['corner']]
+                    if not pat:
+                        return {'RUNNING_MODAL'}
+                    try:
+                        nodes = pat.path(self.gesture['path_id']).vertices
+                    except ValueError:
+                        return {'RUNNING_MODAL'}
+                    if not (0 <= self.gesture['corner'] < len(nodes)):
+                        return {'RUNNING_MODAL'}
+                    v = nodes[self.gesture['corner']]
                     ptype = getattr(v, 'point_type', 'CORNER')
                     h_name = self.gesture['handle']
                     o_name = 'incoming' if h_name == 'outgoing' else 'outgoing'
@@ -1191,6 +1200,9 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                             orig_c1=ctrl[1], orig_c2=ctrl[2], anchor_a=(a.x, a.y), anchor_b=(b.x, b.y),
                             moved=False, new_outgoing=a.outgoing, new_incoming=b.incoming
                         )
+                        self.session.selected = p.id
+                        self.session.selected_patterns = {p.id}
+                        self.session.selected_points.clear()
                         self.session.corner = None
                         self.session.point_selection = []
                         self.sync_selection()
