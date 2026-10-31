@@ -1,0 +1,22 @@
+name: Feature
+description: Suggest a new capability or feature idea.
+labels: ["feature"]
+body:
+  - type: textarea
+    id: what-is-wanted
+    attributes:
+      label: What is wanted
+    validations:
+      required: true
+  - type: textarea
+    id: why-it-matters
+    attributes:
+      label: Why it matters
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance-idea
+    attributes:
+      label: Acceptance idea
+    validations:
+      required: false

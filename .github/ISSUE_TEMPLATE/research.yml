@@ -1,0 +1,16 @@
+name: Research
+description: Propose an investigation, spike, or prototype experiment.
+labels: ["research"]
+body:
+  - type: textarea
+    id: what-is-wanted
+    attributes:
+      label: What is wanted
+    validations:
+      required: true
+  - type: textarea
+    id: why-it-matters
+    attributes:
+      label: Why it matters
+    validations:
+      required: true

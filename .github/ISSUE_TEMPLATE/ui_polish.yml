@@ -1,0 +1,16 @@
+name: UI polish
+description: Propose an interface tweak, layout fix, or visual polish.
+labels: ["ui"]
+body:
+  - type: textarea
+    id: what-is-wanted-or-broken
+    attributes:
+      label: What is wanted or broken
+    validations:
+      required: true
+  - type: textarea
+    id: why-it-matters
+    attributes:
+      label: Why it matters
+    validations:
+      required: true
