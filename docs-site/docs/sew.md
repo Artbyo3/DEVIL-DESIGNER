@@ -84,7 +84,7 @@ Other contextual indicators displayed on seams:
 * **Observed edits:** Flagged when underlying geometry changed after seam creation.
 * **Unavailable state:** Displayed if panel geometry is stale, pending rebuild; no midpoint-only or approximate pairing is substituted. Deactivated seams have no active links.
 
-The preview does not run simulation or alter your sewing records. Historical edit intent cannot be recovered after reopening an existing file. For detailed diagnostic validation and the 424-pair initialized native rest-length parity gate, see `SEWING_DIAGNOSIS.md` in the repository root.
+The preview does not run simulation or alter your sewing records. Historical edit intent cannot be recovered after reopening an existing file. For detailed diagnostic validation and the 424-pair initialized native rest-length parity gate, see `reports/SEWING_DIAGNOSIS.md`.
 
 ---
 

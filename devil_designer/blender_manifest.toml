@@ -23,4 +23,6 @@ paths_exclude_pattern = [
     "*.md",
     "!README.md",
     "!SPEC.md",
+    "assets/icons/*.png",
+    "assets/icons/*.svg",
 ]
