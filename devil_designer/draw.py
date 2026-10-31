@@ -899,10 +899,11 @@ class Renderer:
                         cols = 3
                         choice_w = control.w / cols
                         row_h = 20 * scale
+                        num_rows = math.ceil(len(choices_list) / cols)
                         for index, choice in enumerate(choices_list):
                             r_idx = index // cols
                             c_idx = index % cols
-                            chip = Rect(control.x + c_idx * choice_w + 2 * scale, control.y + (1 - r_idx) * (row_h + 3 * scale) + 4 * scale, choice_w - 4 * scale, row_h)
+                            chip = Rect(control.x + c_idx * choice_w + 2 * scale, control.y + (num_rows - 1 - r_idx) * (row_h + 3 * scale) + 4 * scale, choice_w - 4 * scale, row_h)
                             self.round_rect(chip, ACCENT_BG if choice == active else ELEVATED, radius=5)
                             if choice == active:
                                 self.round_rect_outline(chip, ACCENT_BORDER, radius=5)

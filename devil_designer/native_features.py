@@ -1,7 +1,7 @@
 import bmesh
 from mathutils import Matrix
 from .meshing import distance_to_segment
-from .presets import PRESETS
+from .presets import resolve_preset
 from . import tack_binding
 
 
@@ -38,23 +38,24 @@ def decorate_mesh(mesh,piece,coords,metadata):
     finally:bm.free()
 
 
-def apply_presets(obj,cloth,pieces):
+def apply_presets(obj,cloth,pieces,custom_presets=None):
     for key,group_name,property_name,base_names in [
         ('structural','DD Structural','vertex_group_structural_stiffness',('tension','compression')),
         ('shear','DD Shear','vertex_group_shear_stiffness',('shear',)),
         ('bending','DD Bending','vertex_group_bending',('bending',))]:
-        values=[PRESETS[preset][key] for _,_,preset in pieces]
+        values=[resolve_preset(preset,custom_presets)[key] for _,_,preset in pieces]
         low,high=min(values),max(values)
         for base in base_names:
             setattr(cloth.settings,base+'_stiffness',low)
             setattr(cloth.settings,base+'_stiffness_max',high)
         group=obj.vertex_groups.new(name=group_name)
         for ids,_,preset in pieces:
-            weight=(PRESETS[preset][key]-low)/(high-low) if high>low else 1
+            val=resolve_preset(preset,custom_presets)[key]
+            weight=(val-low)/(high-low) if high>low else 1
             group.add(ids,weight,'REPLACE')
         setattr(cloth.settings,property_name,group.name)
     area_total=sum(area for _,area,_ in pieces)
-    cloth.settings.mass=sum(area*PRESETS[preset]['density'] for _,area,preset in pieces)/max(area_total,1e-12)
+    cloth.settings.mass=sum(area*resolve_preset(preset,custom_presets)['density'] for _,area,preset in pieces)/max(area_total,1e-12)
     obj['dd_preset_note']='Structural, shear and bending vary by piece. Native cloth mass density is an area-weighted shared value.'
 
 

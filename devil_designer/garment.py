@@ -415,7 +415,7 @@ def compile_garment(context):
         group=obj.vertex_groups.new(name='Piece '+pattern.name)
         group.add(ids,1,'REPLACE')
     obj['dd_piece_ids']=json.dumps([p.id for p in doc.patterns])
-    apply_presets(obj,cloth,pieces)
+    apply_presets(obj,cloth,pieces,getattr(doc,'custom_presets',None))
     if any(seam.shrink for seam in doc.seams):
         seam_shrink.apply(doc,obj,cloth,maps,plan)
     cloth.collision_settings.use_collision = True

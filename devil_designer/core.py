@@ -270,13 +270,14 @@ def validate_arrangement(record):
 
 
 class Document:
-    def __init__(self,patterns=None,seams=None,anchors=None,uv_layout=None,preset='COTTON',linked_pairs=None):
+    def __init__(self,patterns=None,seams=None,anchors=None,uv_layout=None,preset='COTTON',linked_pairs=None,custom_presets=None):
         self.patterns=patterns or []
         self.seams=seams or []
         self.anchors=anchors or []
         self.uv_layout=uv_layout
         self.preset=preset
         self.linked_pairs=linked_pairs or []
+        self.custom_presets=custom_presets or {}
 
     def dumps(self):
         return json.dumps(dict(version=4,preset=getattr(self,'preset','COTTON'),patterns=[dict(id=p.id,name=p.name,\
@@ -284,7 +285,7 @@ class Document:
             vertices=[vertex_data(v) for v in q.vertices]) for q in p.paths],preset=p.preset,wrap_radius=p.wrap_radius,\
             features=p.features,mesh_density=p.mesh_density,fabric_override=getattr(p,'fabric_override',False),placement_mode=p.placement_mode,arrangement=p.arrangement,panel_origin=p.panel_origin,**({'simulation':{key:getattr(p,key) for key in ('frozen','deactivated','strengthened') if getattr(p,key)}} if p.frozen or p.deactivated or p.strengthened else {})) for p in self.patterns],seams=[dict(id=s.id,a=vars(s.a),b=vars(s.b),reverse=s.reverse,\
             chain_a=[vars(e) for e in s.side(0)],chain_b=[vars(e) for e in s.side(1)],**({"shrink":s.shrink} if s.shrink else {})) for s in self.seams],\
-            anchors=[vars(a) for a in self.anchors],uv_layout=self.uv_layout,**({'linked_pairs':self.linked_pairs} if self.linked_pairs else {})),separators=(',',':'),allow_nan=False)
+            anchors=[vars(a) for a in self.anchors],uv_layout=self.uv_layout,**({'linked_pairs':self.linked_pairs} if self.linked_pairs else {}),**({'custom_presets':self.custom_presets} if getattr(self,'custom_presets',None) else {})),separators=(',',':'),allow_nan=False)
 
     @classmethod
     def loads(cls,value):
@@ -293,6 +294,11 @@ class Document:
             data=json.loads(value)
             if data['version'] not in (1,2,3,4): raise ValueError('Unsupported pattern document version.')
             doc_preset=data.get('preset','COTTON')
+            custom_presets=data.get('custom_presets',{})
+            if not isinstance(custom_presets,dict):raise ValueError('Invalid custom presets.')
+            for cp_name,cp_vals in custom_presets.items():
+                if not isinstance(cp_name,str) or not cp_name.strip() or not isinstance(cp_vals,dict) or set(cp_vals)!={'structural','shear','bending','density'} or any(type(val) not in (int,float) or not math.isfinite(val) or val<=0 for val in cp_vals.values()):
+                    raise ValueError('Invalid custom fabric preset.')
             patterns=[]
             for item in data['patterns']:
                 p=Pattern(item['name'],[read_vertex(v) for v in item['vertices']],item['id'])
@@ -310,7 +316,7 @@ class Document:
                 else:
                     p.fabric_override=bool(item.get('preset') is not None and item.get('preset')!=doc_preset)
                 patterns.append(p)
-            document=cls(patterns,uv_layout=data.get('uv_layout'),preset=doc_preset)
+            document=cls(patterns,uv_layout=data.get('uv_layout'),preset=doc_preset,custom_presets=custom_presets)
             document.linked_pairs=data.get('linked_pairs',[])
             if data['version']>=2:
                 for item in data['seams']:
@@ -398,10 +404,12 @@ class Document:
         def identity(value):
             if not isinstance(value,str) or not value or value in ids: raise ValueError('Pattern, path, point, and feature IDs must be unique.')
             ids.add(value)
+        valid_presets={'COTTON','LINEN','SILK','DENIM','KNIT','LEATHER'}|set(getattr(self,'custom_presets',{}) or {})
+        if getattr(self,'preset','COTTON') not in valid_presets: raise ValueError('Unknown cloth preset.')
         for p in self.patterns:
             identity(p.id)
             if not isinstance(p.name,str) or not p.name.strip(): raise ValueError('Pattern names must contain text.')
-            if p.preset not in {'COTTON','LINEN','SILK','DENIM','KNIT','LEATHER'}: raise ValueError('Unknown cloth preset.')
+            if p.preset not in valid_presets: raise ValueError('Unknown cloth preset.')
             if p.mesh_density not in ('AUTO','COARSE','STANDARD','FINE'): raise ValueError('Unknown mesh density.')
             if any(type(getattr(p,key)) is not bool for key in ('frozen','deactivated','strengthened')):raise ValueError('Invalid piece simulation state.')
             if p.placement_mode not in ('LAYOUT','LEGACY'):raise ValueError('Unknown panel placement mode.')
@@ -717,7 +725,8 @@ class Session(ConstructionMixin):
         return self.commit(op)
 
     def set_document_preset(self,name):
-        if name not in {'COTTON','LINEN','SILK','DENIM','KNIT','LEATHER'}: raise ValueError('Unknown cloth preset.')
+        valid={'COTTON','LINEN','SILK','DENIM','KNIT','LEATHER'}|set(getattr(self.document,'custom_presets',{}) or {})
+        if name not in valid: raise ValueError('Unknown cloth preset.')
         def op():
             self.document.preset=name
             for p in self.document.patterns:
@@ -735,9 +744,32 @@ class Session(ConstructionMixin):
             def op():
                 for p in pats:p.fabric_override=False;p.preset=getattr(self.document,'preset','COTTON')
             return self.commit(op)
-        if name not in {'COTTON','LINEN','SILK','DENIM','KNIT','LEATHER'}: raise ValueError('Unknown cloth preset.')
+        valid={'COTTON','LINEN','SILK','DENIM','KNIT','LEATHER'}|set(getattr(self.document,'custom_presets',{}) or {})
+        if name not in valid: raise ValueError('Unknown cloth preset.')
         def op():
             for p in pats:p.fabric_override=True;p.preset=name
+        return self.commit(op)
+
+    def set_custom_preset(self,name,values):
+        if not isinstance(name,str) or not name.strip() or not isinstance(values,dict) or set(values)!={'structural','shear','bending','density'} or any(type(val) not in (int,float) or not math.isfinite(val) or val<=0 for val in values.values()):
+            raise ValueError('Invalid custom fabric preset.')
+        def op():
+            if not hasattr(self.document,'custom_presets') or self.document.custom_presets is None:
+                self.document.custom_presets={}
+            self.document.custom_presets[name]=dict(values)
+        return self.commit(op)
+
+    def delete_custom_preset(self,name):
+        if not hasattr(self.document,'custom_presets') or name not in self.document.custom_presets:
+            raise ValueError('Unknown custom preset.')
+        def op():
+            del self.document.custom_presets[name]
+            if self.document.preset==name:
+                self.document.preset='COTTON'
+            for p in self.document.patterns:
+                if p.preset==name:
+                    p.preset=self.document.preset
+                    p.fabric_override=False
         return self.commit(op)
 
     def add(self,points):
