@@ -278,7 +278,12 @@ sample's cross-section. Unsamplable sections use body-extents ellipses. Intersec
 remain possible on unusual bodies; inspect the starting fit. Regeneration resets avatar edits.
 Legacy named layouts are non-anatomical placements, not automatic fitting. Cross-avatar
 loading provides an editable starting fit,
-not automatic tailoring to all body proportions. These limits are visible in the
+not automatic tailoring to all body proportions. Built-in fabric presets (SILK, KNIT,
+COTTON, LINEN, DENIM, LEATHER) are calibrated against KES-F / FAST data and cantilever
+bending lengths; known simulation limits apply: calibration is exact near 0.02 m spacing
+(Blender assigns mass per vertex and bending per edge without area/length normalization),
+triangle-mesh shear is locked to 3/8 of structural (no shear springs on CDT triangles),
+and multi-fabric garments share one area-weighted density. These limits are visible in the
 usage documentation and do not imply Marvelous Designer feature/performance parity.
 
 ## Acceptance examples
