@@ -4,7 +4,7 @@ import unittest
 import zlib
 from unittest.mock import patch
 
-from tools.check_public import ALIAS, EMAIL, inspect_commit_metadata, inspect_payload, inspect_text
+from tools.check_public import ALIAS, EMAIL, ROOT, inspect_commit_metadata, inspect_payload, inspect_text
 
 
 def png_chunk(chunk_type, data):
@@ -73,10 +73,23 @@ class PublicationTests(unittest.TestCase):
         inspect_payload('devil_designer/assets/icons/SELECT.png', icon_png(png_chunk(b'tEXt', b'Author\x00local identity')), errors)
         self.assertTrue(any('metadata' in error for error in errors))
 
-    def test_unexpected_binary_is_rejected(self):
+    def test_docs_site_placeholder_is_permitted(self):
         errors = []
-        inspect_payload('old-preview.png', icon_png(), errors)
-        self.assertTrue(errors)
+        placeholder = (ROOT / 'docs-site/docs/assets/images/video-placeholder.png').read_bytes()
+        inspect_payload('docs-site/docs/assets/images/video-placeholder.png', placeholder, errors)
+        self.assertEqual(errors, [])
+
+    def test_docs_site_image_metadata_is_rejected(self):
+        errors = []
+        inspect_payload('docs-site/docs/assets/images/video-placeholder.png', icon_png(png_chunk(b'tEXt', b'Author\x00local identity')), errors)
+        self.assertTrue(any('metadata' in error for error in errors))
+
+    def test_unexpected_binary_is_rejected(self):
+        for path in ('old-preview.png', 'devil_designer/preview.png', 'docs/video-placeholder.png'):
+            with self.subTest(path=path):
+                errors = []
+                inspect_payload(path, icon_png(), errors)
+                self.assertTrue(errors)
 
     def test_truncated_icon_is_rejected(self):
         errors = []

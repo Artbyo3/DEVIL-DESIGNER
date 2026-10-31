@@ -39,9 +39,12 @@ def inspect_commit_metadata(records, errors):
 
 
 def inspect_payload(name, payload, errors):
-    if name.startswith('devil_designer/assets/icons/') and name.endswith('.png'):
+    is_icon = name.startswith('devil_designer/assets/icons/') and name.endswith('.png')
+    is_docs_image = name.startswith('docs-site/') and name.endswith('.png')
+    if is_icon or is_docs_image:
+        kind = 'icon image' if is_icon else 'image'
         if not payload.startswith(b'\x89PNG\r\n\x1a\n'):
-            errors.append(name+': invalid icon image')
+            errors.append(name+': invalid '+kind)
             return
         offset = 8
         chunk_types = []
@@ -51,16 +54,19 @@ def inspect_payload(name, payload, errors):
             chunk_data = payload[offset+8:offset+8+length]
             checksum = payload[offset+8+length:offset+12+length]
             if len(checksum) != 4 or int.from_bytes(checksum, 'big') != zlib.crc32(chunk_type+chunk_data):
-                errors.append(name+': corrupt icon image')
+                errors.append(name+': corrupt '+kind)
                 return
             if chunk_type not in {b'IHDR', b'IDAT', b'IEND'}:
                 errors.append(name+': unexpected image metadata')
-            if chunk_type == b'IHDR' and (length != 13 or struct.unpack('>II', chunk_data[:8]) != (64, 64)):
-                errors.append(name+': unexpected icon dimensions')
+            if chunk_type == b'IHDR':
+                if length != 13:
+                    errors.append(name+': unexpected icon dimensions' if is_icon else name+': corrupt image')
+                elif is_icon and struct.unpack('>II', chunk_data[:8]) != (64, 64):
+                    errors.append(name+': unexpected icon dimensions')
             chunk_types.append(chunk_type)
             offset += length + 12
         if offset != len(payload) or not chunk_types or chunk_types[0] != b'IHDR' or chunk_types[-1] != b'IEND' or b'IDAT' not in chunk_types:
-            errors.append(name+': incomplete icon image')
+            errors.append(name+': incomplete '+kind)
         return
     try:
         data = payload.decode('utf-8')
