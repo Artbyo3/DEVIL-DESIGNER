@@ -14,7 +14,7 @@
       <div class="md-header__ellipsis">
         <div class="md-header__topic">
           <span class="md-ellipsis">
-            <a href="{{ config.extra.homepage | d(nav.homepage.url, true) | url }}" class="dd-title-lockup" title="{{ config.site_name | e }}">
+            <a href="{% if page.url == '' %}{{ config.site_url }}{% else %}{{ config.extra.homepage | d(nav.homepage.url, true) | url }}{% endif %}" class="dd-title-lockup" title="{{ config.site_name | e }}">
               <img src="{{ 'assets/logo-clean-animated.svg' | url }}" alt="D" class="dd-title-logo"><span class="dd-title-text">evil Designer</span>
             </a>
           </span>

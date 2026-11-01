@@ -1,0 +1,344 @@
+html:has(.dd-landing-container),
+body:has(.dd-landing-container) {
+  height: 100%;
+  scrollbar-gutter: auto;
+  overflow: hidden !important;
+}
+
+body:has(.dd-landing-container) {
+  --dd-home-header: 76px;
+  height: 100dvh !important;
+  max-height: 100dvh !important;
+}
+
+body:has(.dd-landing-container) .md-header {
+  display: block !important;
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 110;
+  box-shadow: none;
+}
+
+body:has(.dd-landing-container) .md-header__inner {
+  max-width: 1200px;
+  padding-inline: 24px;
+}
+
+body:has(.dd-landing-container) .md-header__button,
+body:has(.dd-landing-container) .md-search {
+  display: none !important;
+}
+
+body:has(.dd-landing-container) .md-header__title {
+  margin: 0;
+}
+
+body:has(.dd-landing-container) .md-header__source {
+  display: block;
+  width: auto;
+  margin-left: auto;
+}
+
+body:has(.dd-landing-container) .md-content__inner {
+  animation: none;
+  will-change: auto;
+}
+
+.dd-landing-container {
+  top: var(--dd-home-header);
+  width: 100%;
+  height: calc(100dvh - var(--dd-home-header));
+  padding: 24px 32px 16px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto 64px;
+  justify-items: center;
+  align-items: center;
+  gap: 20px;
+}
+
+.dd-video-slot {
+  position: relative;
+  inset: auto;
+  min-height: 0;
+  max-width: 1080px;
+  border: 1px solid var(--dd-panel-border);
+  border-radius: 12px;
+  background: #14171b;
+}
+
+.dd-video-slot::after {
+  background: none;
+}
+
+.dd-video-slot > img,
+.dd-video-slot > video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+  opacity: 1;
+  display: block;
+}
+
+.dd-landing-content {
+  width: 100%;
+  max-width: 640px;
+  padding: 0;
+  margin: 0;
+  animation: none;
+  will-change: auto;
+}
+
+.md-typeset .dd-landing-title {
+  margin: 0 0 8px;
+  font-size: clamp(26px, 2.5vw, 34px);
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.035em;
+  color: var(--dd-text);
+}
+
+.md-typeset .dd-landing-tagline {
+  max-width: 520px;
+  margin: 0 0 20px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: #b4bec8;
+}
+
+.dd-install-card {
+  width: min(100%, 420px);
+  min-width: 0;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+  gap: 6px;
+  border: 1px solid #49635f;
+  border-radius: 10px;
+  background: var(--dd-panel);
+  box-shadow: 0 4px 16px #0000001a;
+  transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease;
+}
+
+.dd-install-card:hover {
+  transform: none;
+  border-color: var(--dd-mint);
+  background: #28312f;
+  box-shadow: 0 4px 20px #00000026;
+}
+
+.dd-install-header {
+  gap: 10px;
+}
+
+.dd-install-name {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: -0.015em;
+}
+
+.dd-install-version {
+  padding: 3px 7px;
+  border-radius: 5px;
+  font-size: 11px;
+  line-height: 1.3;
+  letter-spacing: 0.01em;
+}
+
+.dd-install-hint {
+  font-size: 13px;
+  line-height: 1.4;
+  letter-spacing: 0;
+  color: var(--dd-mint);
+}
+
+.dd-install-disclaimer {
+  max-width: 340px;
+  margin: 2px 0 0;
+  font-size: 11px;
+  line-height: 1.45;
+  letter-spacing: 0;
+  color: #a4b0bc;
+  opacity: 1;
+}
+
+.dd-landing-nav {
+  width: 100%;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+.md-typeset .dd-landing-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 16px;
+  border-color: var(--dd-panel-border);
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.3;
+  color: #cbd5e1;
+  background: transparent;
+}
+
+.md-typeset .dd-landing-btn--primary {
+  border-color: #495751;
+  color: var(--dd-mint) !important;
+  background: #70d5c50c;
+}
+
+.md-typeset .dd-landing-btn:hover {
+  border-color: var(--dd-mint);
+  color: var(--dd-mint) !important;
+  background: #70d5c514;
+}
+
+body:has(.dd-landing-container) a:focus-visible {
+  outline: 2px solid var(--dd-mint);
+  outline-offset: 4px;
+}
+
+.dd-contributors-container {
+  position: relative;
+  inset: auto;
+  min-width: 0;
+  width: calc(100% + 64px);
+  align-self: end;
+  gap: 8px;
+}
+
+.dd-contributors-label {
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.4;
+  letter-spacing: 0.16em;
+}
+
+.dd-contributors-stripe {
+  width: 100%;
+  height: 32px;
+  mask-image: linear-gradient(to right, transparent, #000 8%, #000 92%, transparent);
+}
+
+.dd-contributor-item {
+  gap: 10px;
+  margin-right: 88px;
+}
+
+.dd-contributor-avatar {
+  width: 24px;
+  height: 24px;
+  border-color: var(--dd-panel-border);
+}
+
+.dd-contributor-name {
+  font-size: 12px;
+  line-height: 1.4;
+  color: #a4b0bc;
+}
+
+@media (max-width: 600px) {
+  body:has(.dd-landing-container) {
+    --dd-home-header: 64px;
+  }
+
+  body:has(.dd-landing-container) .md-header,
+  body:has(.dd-landing-container) .md-header__inner {
+    min-height: var(--dd-home-header);
+  }
+
+  body:has(.dd-landing-container) .md-header__inner {
+    padding-inline: 16px;
+  }
+
+  body:has(.dd-landing-container) .md-header__title {
+    font-size: 16px;
+    min-height: 48px;
+    overflow: visible;
+  }
+
+  body:has(.dd-landing-container) .dd-title-logo {
+    height: 40px;
+  }
+
+  body:has(.dd-landing-container) .md-source {
+    padding: 0 4px;
+  }
+
+  body:has(.dd-landing-container) .md-source__icon {
+    width: 22px;
+    margin-right: 6px;
+  }
+
+  body:has(.dd-landing-container) .dd-source-name {
+    font-size: 12px;
+  }
+
+  body:has(.dd-landing-container) .md-source__facts {
+    font-size: 10px;
+  }
+
+  .dd-landing-container {
+    padding: 16px 20px max(16px, env(safe-area-inset-bottom));
+    gap: 20px;
+    grid-template-rows: minmax(0, 1fr) auto 56px;
+  }
+
+  .dd-video-slot {
+    border-radius: 8px;
+  }
+
+  .md-typeset .dd-landing-tagline {
+    max-width: 330px;
+    font-size: 14px;
+    margin-bottom: 18px;
+  }
+
+  .dd-install-card {
+    padding: 16px;
+  }
+
+  .md-typeset .dd-landing-btn {
+    padding-inline: 12px;
+    font-size: 12px;
+  }
+
+  .dd-contributors-container {
+    width: calc(100% + 40px);
+  }
+}
+
+@media (max-height: 650px) {
+  .dd-landing-container {
+    padding-block: 12px;
+    gap: 12px;
+    grid-template-rows: minmax(0, 1fr) auto 48px;
+  }
+
+  .md-typeset .dd-landing-title {
+    font-size: 24px;
+  }
+
+  .md-typeset .dd-landing-tagline {
+    margin-bottom: 12px;
+  }
+
+  .dd-install-card {
+    padding-block: 10px;
+    margin-bottom: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dd-contributors-track {
+    animation: none;
+  }
+
+  .dd-install-card,
+  .dd-landing-btn {
+    transition: none;
+  }
+}
