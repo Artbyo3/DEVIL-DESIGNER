@@ -35,11 +35,12 @@ def position_panel(context,pattern,obj,center):
     unit=garment.metres_per_unit(context.scene)
     avatar=context.scene.dd_avatar
     warning=''
+    has_folds = any(feature.get('type') == 'FOLD' for feature in pattern.features)
     if pattern.arrangement:
         try:
             frame,resolved=point_frame(context,pattern.arrangement)
             radius=resolved['radius']
-            if not pattern.arrangement['flat']:
+            if not pattern.arrangement['flat'] and not has_folds:
                 clearance=context.scene.dd_clearance/unit
                 left=min(point[0] for point in pattern.points);right=max(point[0] for point in pattern.points)
                 if pattern.panel_origin:left,_,right,_=pattern.panel_origin['bounds']
@@ -63,7 +64,7 @@ def position_panel(context,pattern,obj,center):
             obj.matrix_world=frame @ delta
             obj['dd_arrangement_base']=json.dumps([list(row) for row in frame])
             obj['dd_arrangement_key']=pattern.arrangement['volume']+'\n'+pattern.arrangement['point']
-            return ''
+            return pattern.name + ': Folded panels use flat placement to preserve their creases.' if has_folds and not pattern.arrangement['flat'] else ''
         except ValueError as failure:
             warning=pattern.name+': '+str(failure)+' Using the 2D layout position.'
     if avatar is not None:

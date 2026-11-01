@@ -155,5 +155,6 @@ report = dict(blender=bpy.app.version_string,checks=checks,initial_seam_gap=init
               final_seam_gap=final,unclosed_pairs=unclosed,vertices=len(coords))
 (ROOT/'scratch'/'garment-report.json').write_text(json.dumps(report,indent=2))
 runpy.run_path(str(ROOT/'tests'/'blender_seam_shrink.py'))['run'](check)
+runpy.run_path(str(ROOT/'tests'/'blender_folding.py'))['run'](check)
 devil_designer.unregister()
 print('ALL GARMENT CHECKS PASSED',flush=True)

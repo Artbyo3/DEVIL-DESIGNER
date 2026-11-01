@@ -30,7 +30,7 @@ def run(check):
     garment.build_panels(bpy.context)
     source = inspect.getsource(garment.compile_garment)
     hook = "    if any(seam.shrink for seam in doc.seams):\n        seam_shrink.apply(doc,obj,cloth,maps,plan)\n"
-    scoped = "(.001 if any(seam.shrink for seam in doc.seams) else .003)/metres_per_unit(scene)"
+    scoped = "(.001 if any(seam.shrink for seam in doc.seams) or any(feature.get('type') == 'FOLD' for pattern in doc.patterns for feature in pattern.features) else .003)/metres_per_unit(scene)"
     if source.count(hook) != 1 or source.count(scoped) != 1:
         raise AssertionError("Approved hook or collision scope changed.")
     baseline_source = source.replace(hook, "").replace(scoped, ".003/metres_per_unit(scene)").replace("def compile_garment(", "def baseline_compile(", 1)

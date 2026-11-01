@@ -68,6 +68,13 @@ def _mirror(document,pair,source_id):
         return result
     target.vertices=vertices(source.vertices)
     target.paths=[Path(path.name,vertices(path.vertices),path.closed,path.role,identity(path.id)) for path in source.paths]
+    target.features = [feature for feature in target.features if feature.get('type') != 'FOLD']
+    for feature in source.features:
+        if feature.get('type') == 'FOLD':
+            record = copy.deepcopy(feature)
+            record['id'] = identity(feature['id'])
+            record['apex'] = identity(feature['apex'])
+            target.features.append(record)
     pair['mapping']=mapping if forward else {value:key for key,value in mapping.items()}
 
 
@@ -78,17 +85,20 @@ def synchronize(document,before,selected):
         if not pair['enabled'] or previous is None or not previous['enabled']:continue
         patterns=[document.find(member) for member in pair['members']]
         originals=[before.find(member) for member in pair['members']]
-        changed=[_geometry(old)!=_geometry(new) for old,new in zip(originals,patterns)]
+        changed=[_geometry(old)!=_geometry(new) or [feature for feature in old.features if feature.get('type') == 'FOLD'] != [feature for feature in new.features if feature.get('type') == 'FOLD'] for old,new in zip(originals,patterns)]
         if not any(changed):continue
         translations=[_translation(old,new) for old,new in zip(originals,patterns)]
         for index,delta in enumerate(translations):
             if delta is not None:
                 pair['transform'][0]+=delta[0]
                 pair['transform'][1]+=delta[1]*(1 if index else -1)
-        shaped=[index for index in range(2) if changed[index] and translations[index] is None]
+        shaped=[index for index in range(2) if changed[index] and (translations[index] is None or [feature for feature in originals[index].features if feature.get('type') == 'FOLD'] != [feature for feature in patterns[index].features if feature.get('type') == 'FOLD'])]
         if shaped:
             source=next((index for index in shaped if patterns[index].id==selected),shaped[0])
             _mirror(document,pair,patterns[source].id)
+    from .folding import fold_records
+    for pattern in document.patterns:
+        fold_records(pattern)
 
 
 def split_partner(document,edge,fraction,vertex):
@@ -142,7 +152,8 @@ def clone_twin(session,as_back=False):
         if previous:session.document.linked_pairs.remove(previous)
         session.document.patterns.append(target)
         mapping={key:value for key,value in target._id_map.items() if key!=source.id}
-        _new_pair(session.document,source,target,mapping)
+        pair = _new_pair(session.document,source,target,mapping)
+        _mirror(session.document, pair, source.id)
     session.commit(apply)
     session.clear_selection();session.selected=target.id
     return target

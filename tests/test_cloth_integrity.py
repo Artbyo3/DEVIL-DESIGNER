@@ -32,7 +32,7 @@ class ClothIntegrityTests(unittest.TestCase):
                 shrink_hook='    if any(seam.shrink for seam in doc.seams):\n        seam_shrink.apply(doc,obj,cloth,maps,plan)\n'
                 self.assertEqual(segment.count(shrink_hook),1)
                 segment=segment.replace(shrink_hook,'',1)
-                scoped='(.001 if any(seam.shrink for seam in doc.seams) else .003)/metres_per_unit(scene)'
+                scoped="(.001 if any(seam.shrink for seam in doc.seams) or any(feature.get('type') == 'FOLD' for pattern in doc.patterns for feature in pattern.features) else .003)/metres_per_unit(scene)"
                 self.assertEqual(segment.count(scoped),1)
                 segment=segment.replace(scoped,'.003/metres_per_unit(scene)',1)
             actual[node.name]=hashlib.sha256(segment.encode()).hexdigest()

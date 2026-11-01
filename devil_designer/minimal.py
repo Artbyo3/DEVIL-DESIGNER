@@ -373,9 +373,30 @@ class MinimalCards:
             title = 'Internal edge'
             rows = [('SLIDER', 'dd_segment_length', 'Exact length'),
                     ('SPLIT', 'Split edge', ''),
+                    ('MENU', 'FOLD_MENU', 'Fold or pleat', 'Straight boundary-to-boundary path'),
                     ('CUT', 'Cut along path', '')]
             if pattern and pattern.path(self.session.path).closed:
                 rows.append(('TRACE', 'Trace as piece', ''))
+        elif kind == 'FOLD':
+            title = 'Fold or pleat'
+            from .folding import fold_records
+            records = fold_records(pattern) if pattern else []
+            feature = next((feature for path, feature in records if path.id == self.session.path), None)
+            if feature:
+                rows = [('INFO', 'Direction', 'Mountain' if feature['angle'] > 0 else 'Valley'),
+                        ('FOLD_EDIT_REVERSE', 'Reverse direction', 'Entire pleat'),
+                        ('PAIR_ACTIONS', 'FOLD_EDIT_60', 'FOLD_EDIT_120', '60 degrees', '120 degrees'),
+                        ('FOLD_EDIT_150', 'Sharp fold', '150 degrees'),
+                        ('FOLD_EDIT_REMOVE', 'Remove fold or pleat', 'Keep internal paths'),
+                        ('INFO', '1 mm self-collision', 'Shared by every piece in this garment')]
+            else:
+                rows = [('PAIR_ACTIONS', 'FOLD_ADD_MOUNTAIN_2', 'FOLD_ADD_VALLEY_2', 'Mountain', 'Valley'),
+                        ('INFO', 'Pleat depth', 'Distance between fold lines'),
+                        ('PAIR_ACTIONS', 'FOLD_ADD_KNIFE_1', 'FOLD_ADD_BOX_1', 'Knife 1 cm', 'Box 1 cm'),
+                        ('PAIR_ACTIONS', 'FOLD_ADD_KNIFE_2', 'FOLD_ADD_BOX_2', 'Knife 2 cm', 'Box 2 cm'),
+                        ('PAIR_ACTIONS', 'FOLD_ADD_KNIFE_4', 'FOLD_ADD_BOX_4', 'Knife 4 cm', 'Box 4 cm'),
+                        ('INFO', 'Straight lines across fabric', 'Parallel folds per piece'),
+                        ('INFO', '1 mm self-collision', 'Shared by every piece in this garment')]
         elif kind == 'EDIT':
             title = pattern.name if pattern else 'Edit piece'
             rows = [('DUPLICATE', 'Duplicate', ''),
@@ -685,7 +706,19 @@ class MinimalCards:
 
     def minimal_action(self, key):
         scene = self._scene
-        if key == 'PIECE_SIMULATION_MENU':
+        if key == 'FOLD_MENU':
+            self.card_kind = 'FOLD'
+        elif key.startswith('FOLD_ADD_'):
+            from .folding import author_fold
+            style, depth = key.removeprefix('FOLD_ADD_').rsplit('_', 1)
+            self.run_edit(lambda: author_fold(self.session, style, int(depth) / 100),
+                          'Fold added. Mountain and valley arrows show the direction before Simulate.')
+            self.card_kind = None
+        elif key.startswith('FOLD_EDIT_'):
+            from .folding import edit_fold
+            self.run_edit(lambda: edit_fold(self.session, key.removeprefix('FOLD_EDIT_')), 'Fold updated.')
+            self.card_kind = None
+        elif key == 'PIECE_SIMULATION_MENU':
             self.card_kind = 'PIECE_SIMULATION'
         elif key.startswith('TOGGLE_STATE_'):
             from .piece_states import toggle

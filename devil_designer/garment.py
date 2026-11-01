@@ -145,7 +145,9 @@ def build_panels(context, force_rebuild=False):
     input_keys = {}
     reused = set()
     def prepare_mesh(p, piece_index):
+        from .folding import folded_positions
         coords,faces,boundaries = fabric_mesh(doc,p,effective_spacing(p,scene.dd_spacing),counts)
+        folded = folded_positions(p, coords)
         cx = (min(v[0] for v in p.points)+max(v[0] for v in p.points))/2
         cy = (min(v[1] for v in p.points)+max(v[1] for v in p.points))/2
         if p.panel_origin and (p.placement_mode=='LEGACY' or p.arrangement):
@@ -158,7 +160,8 @@ def build_panels(context, force_rebuild=False):
                 angle=x/p.wrap_radius
                 return (math.sin(angle)*p.wrap_radius/unit,y/unit,(1-math.cos(angle))*p.wrap_radius/unit)
             return (x/unit,y/unit,0)
-        mesh.from_pydata([position(x,y) for x,y in coords],[],faces)
+        positions = [((x-cx)/unit, (y-cy)/unit, z/unit) for x,y,z in folded] if folded is not None else [position(x,y) for x,y in coords]
+        mesh.from_pydata(positions,[],faces)
         uv = mesh.uv_layers.new(name='Pattern UV')
         for loop in mesh.loops:
             x,y = coords[loop.vertex_index]
@@ -421,7 +424,7 @@ def compile_garment(context):
     cloth.collision_settings.use_collision = True
     cloth.collision_settings.distance_min = .003/metres_per_unit(scene)
     cloth.collision_settings.use_self_collision = scene.dd_self_collision
-    cloth.collision_settings.self_distance_min = (.001 if any(seam.shrink for seam in doc.seams) else .003)/metres_per_unit(scene)
+    cloth.collision_settings.self_distance_min = (.001 if any(seam.shrink for seam in doc.seams) or any(feature.get('type') == 'FOLD' for pattern in doc.patterns for feature in pattern.features) else .003)/metres_per_unit(scene)
     cloth.collision_settings.collision_quality = 4
     cloth.point_cache.frame_start = scene.frame_start
     cloth.point_cache.frame_end = scene.frame_start+scene.dd_frames
