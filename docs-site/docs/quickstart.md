@@ -21,6 +21,11 @@ On an empty canvas, choose **Create panel** for a starter rectangle. To draw you
 
 For a matching left and right piece, right-click a piece and choose **Clone as linked twin**. Changes to its outline and internal lines are copied to the twin.
 
+<figure class="dd-shot" id="shot-quickstart-mirrored-twin" data-shot='{"action":"Create a mirrored linked twin of a pattern piece","ui_state":"Two pattern pieces with linked twin on minimal canvas","framing":"full-editor","aspect_ratio":"16:9"}' data-shot-framing="full-editor" aria-labelledby="shot-quickstart-mirrored-twin-caption">
+  <div class="dd-shot__frame"><span class="dd-shot__icon" aria-hidden="true"></span><span class="dd-shot__label">Screenshot coming soon</span></div>
+  <figcaption id="shot-quickstart-mirrored-twin-caption">Full-editor view showing two pattern pieces on the minimal canvas with an active linked twin reflecting outline edits.</figcaption>
+</figure>
+
 ## Step 4: Arrange Panels Around the Body (Optional)
 
 Panels can drape without being arranged first. To place them around the avatar:
@@ -39,6 +44,11 @@ Panels can drape without being arranged first. To place them around the avatar:
 
 **Pass** means the edge lengths match closely. **Gather warning** means they differ, but you can still simulate the garment.
 
+<figure class="dd-shot" id="shot-quickstart-seam-mismatch" data-shot='{"action":"Inspect seam connection and mismatch status between pattern panels","ui_state":"Paired seam directional arrows and status badges joining two pieces","framing":"full-editor","aspect_ratio":"16:9"}' data-shot-framing="full-editor" aria-labelledby="shot-quickstart-seam-mismatch-caption">
+  <div class="dd-shot__frame"><span class="dd-shot__icon" aria-hidden="true"></span><span class="dd-shot__label">Screenshot coming soon</span></div>
+  <figcaption id="shot-quickstart-seam-mismatch-caption">Full-editor view showing paired seam directional arrows and alignment badges connecting two pattern pieces across the canvas.</figcaption>
+</figure>
+
 ## Step 6: Simulate the Drape
 
 1. Click **Simulate** in the bottom bar.
@@ -52,6 +62,11 @@ Panels can drape without being arranged first. To place them around the avatar:
 3. Click **Keep mesh**.
 
 The finished mesh is editable in Blender. Its UVs are the flat map used to place textures on the garment and follow the pattern pieces.
+
+<figure class="dd-shot" id="shot-quickstart-mesh-keep" data-shot='{"action":"Keep final simulated garment mesh in Blender","ui_state":"Kept garment mesh selected in Blender 3D Viewport after Keep mesh","framing":"full-editor","aspect_ratio":"16:9"}' data-shot-framing="full-editor" aria-labelledby="shot-quickstart-mesh-keep-caption">
+  <div class="dd-shot__frame"><span class="dd-shot__icon" aria-hidden="true"></span><span class="dd-shot__label">Screenshot coming soon</span></div>
+  <figcaption id="shot-quickstart-mesh-keep-caption">Full-editor view showing the finished cloth mesh selected around the avatar in the Blender 3D Viewport after clicking Keep mesh.</figcaption>
+</figure>
 
 ## Step 8: Save Your Work
 

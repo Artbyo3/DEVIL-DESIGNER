@@ -22,6 +22,11 @@ The Blender Extensions listing is awaiting approval, so use this direct download
 
 Find **Devil Designer** in the add-on list and check its box to enable it.
 
+<figure class="dd-shot" id="shot-install-enable-addon" data-shot='{"action":"Enable the Devil Designer add-on in Blender Preferences","ui_state":"Add-ons Preferences tab filtered to Devil Designer with enabled checkbox","framing":"close-up","aspect_ratio":"4:3"}' data-shot-framing="close-up" aria-labelledby="shot-install-enable-addon-caption">
+  <div class="dd-shot__frame"><span class="dd-shot__icon" aria-hidden="true"></span><span class="dd-shot__label">Screenshot coming soon</span></div>
+  <figcaption id="shot-install-enable-addon-caption">Close-up view of the Blender Preferences Add-ons tab filtered to Devil Designer, showing the checkbox enabled after installation.</figcaption>
+</figure>
+
 ## Open the Editor
 
 From a 3D Viewport, use any of these options:
@@ -29,6 +34,11 @@ From a 3D Viewport, use any of these options:
 - Press <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>D</kbd>.
 - Press <kbd>F3</kbd>, search for **Devil Designer**, and press <kbd>Enter</kbd>.
 - Choose **View > Devil Designer** from the 3D Viewport menu.
+
+<figure class="dd-shot" id="shot-install-editor-view" data-shot='{"action":"Open the Devil Designer workspace in Blender","ui_state":"Empty minimal editor with left tool dock, canvas, and bottom workflow controls; no sidebars or docked inspectors","framing":"full-editor","aspect_ratio":"16:9"}' data-shot-framing="full-editor" aria-labelledby="shot-install-editor-view-caption">
+  <div class="dd-shot__frame"><span class="dd-shot__icon" aria-hidden="true"></span><span class="dd-shot__label">Screenshot coming soon</span></div>
+  <figcaption id="shot-install-editor-view-caption">Full-editor view of the empty minimal canvas, left tool dock, and bottom workflow controls, with no sidebars or docked inspectors.</figcaption>
+</figure>
 
 ## Upgrade or Reinstall
 

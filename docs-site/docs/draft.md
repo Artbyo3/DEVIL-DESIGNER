@@ -42,6 +42,11 @@ Use these tools to create and edit garment pattern pieces. A Bezier curve is a s
 
 Select a point and press <kbd>C</kbd> to make it a smooth curve. Drag its handles to change the shape. Right-click a point or edge to enter an exact position or length in centimetres.
 
+<figure class="dd-shot" id="shot-draft-bezier-editing" data-shot='{"action":"Edit Bezier curve handles and enter numeric coordinates","ui_state":"Smooth curve point with two control handles and open right-click coordinate menu","framing":"close-up","aspect_ratio":"4:3"}' data-shot-framing="close-up" aria-labelledby="shot-draft-bezier-editing-caption">
+  <div class="dd-shot__frame"><span class="dd-shot__icon" aria-hidden="true"></span><span class="dd-shot__label">Screenshot coming soon</span></div>
+  <figcaption id="shot-draft-bezier-editing-caption">Close-up view of a smooth curve control point with dual handles and the right-click numeric coordinate popup menu.</figcaption>
+</figure>
+
 ## Outline Transformations
 
 ### Unfold (<kbd>U</kbd>)
@@ -51,6 +56,11 @@ Select a straight edge and press <kbd>U</kbd> to mirror the piece across that ed
 ### Mirror with Seam (<kbd>Shift</kbd> + <kbd>U</kbd>)
 
 Select a straight edge and press <kbd>Shift</kbd> + <kbd>U</kbd> to make a separate mirrored piece with the matching edges already sewn.
+
+<figure class="dd-shot" id="shot-draft-mirror-with-seam" data-shot='{"action":"Generate a mirrored piece connected with a sewn seam","ui_state":"Mirrored separate pattern pieces with matching boundary edges joined by an active seam","framing":"full-editor","aspect_ratio":"16:9"}' data-shot-framing="full-editor" aria-labelledby="shot-draft-mirror-with-seam-caption">
+  <div class="dd-shot__frame"><span class="dd-shot__icon" aria-hidden="true"></span><span class="dd-shot__label">Screenshot coming soon</span></div>
+  <figcaption id="shot-draft-mirror-with-seam-caption">Full-editor view showing separate mirrored pattern pieces created across an axis with matching seam connections already established.</figcaption>
+</figure>
 
 ## Linked Editing
 
@@ -92,6 +102,11 @@ To adjust a fold, right-click one of its internal edges and open **Fold or pleat
 
 Continue with sewing, arrangement, simulation, and keeping the mesh. Fold settings are saved with the pattern in the garment library and Blender file, and are included in undo and redo.
 
+<figure class="dd-shot" id="shot-draft-fold-pleats" data-shot='{"action":"Configure internal fold lines and pleat directions","ui_state":"Parallel pleat lines with Mountain and Valley arrows and labels across valid boundary path","framing":"close-up","aspect_ratio":"4:3"}' data-shot-framing="close-up" aria-labelledby="shot-draft-fold-pleats-caption">
+  <div class="dd-shot__frame"><span class="dd-shot__icon" aria-hidden="true"></span><span class="dd-shot__label">Screenshot coming soon</span></div>
+  <figcaption id="shot-draft-fold-pleats-caption">Close-up view of parallel pleat paths displaying Mountain and Valley directional indicators, angle settings, and valid boundary-to-boundary lines.</figcaption>
+</figure>
+
 #### Current Limits
 
 Only straight, open, boundary-to-boundary fold paths are supported. All folds on a piece must be parallel. Curved, partial, crossing, and hole-crossing folds are not supported; a fold also cannot cross a gap in a concave piece. Folded pieces use flat placement at arrangement points rather than automatic wrapping around the body.
@@ -110,3 +125,8 @@ Fold settings do not change how darts are made or add a dart-depth cap. A deep d
 2. Place the image and adjust its opacity.
 3. Open **Set measured scale** and set **Known length** in centimetres.
 4. Choose **Pick length endpoints**, then click two known points to set the image scale.
+
+<figure class="dd-shot" id="shot-draft-trace-reference" data-shot='{"action":"Calibrate reference image scale with known-length endpoints","ui_state":"Loaded trace image with calibration endpoints and scale numeric input controls","framing":"close-up","aspect_ratio":"4:3"}' data-shot-framing="close-up" aria-labelledby="shot-draft-trace-reference-caption">
+  <div class="dd-shot__frame"><span class="dd-shot__icon" aria-hidden="true"></span><span class="dd-shot__label">Screenshot coming soon</span></div>
+  <figcaption id="shot-draft-trace-reference-caption">Close-up view of the loaded reference image overlay showing picked calibration endpoints and measured scale dimension inputs.</figcaption>
+</figure>
