@@ -55,6 +55,8 @@ def _snapshot(raw):
         for path in pattern.paths:
             if not isinstance(path.name, str) or type(path.closed) is not bool:
                 raise ValueError("A saved snapshot has invalid path metadata.")
+        from .folding import fold_records
+        fold_records(pattern)
     return document.dumps()
 
 

@@ -452,6 +452,20 @@ class Renderer:
                         active = selected and ed.session.path == path
                         line_color = ACCENT if active else (0.9, 0.48, 0.48, 0.9) if role in {'HOLE', 'SLIT'} else (*ACCENT[:3], 0.55) if (partner_selected and path == 'OUTER') else (*color, 0.95)
                         self.lines(screen + (screen[:1] if closed else []), line_color, 2.2 if (active or selected) else 1.5, True)
+                        fold = next((feature for feature in pat.features if feature.get('type') == 'FOLD' and nodes and feature.get('apex') == nodes[0].id), None)
+                        if fold and len(screen) >= 2:
+                            start, end = screen[0], screen[-1]
+                            length = math.dist(start, end)
+                            if length > 1:
+                                sign = 1 if fold.get('angle', 0) > 0 else -1
+                                normal = (-(end[1]-start[1])/length*sign, (end[0]-start[0])/length*sign)
+                                middle = ((start[0]+end[0])/2, (start[1]+end[1])/2)
+                                tip = (middle[0]+normal[0]*18*s, middle[1]+normal[1]*18*s)
+                                self.lines([middle, tip], ACCENT, 2)
+                                for side in (-1, 1):
+                                    self.lines([tip, (tip[0]-normal[0]*6*s-normal[1]*side*4*s, tip[1]-normal[1]*6*s+normal[0]*side*4*s)], ACCENT, 2)
+                                label = ('Mountain' if sign > 0 else 'Valley') + f" {abs(fold.get('angle', 0)):g} deg"
+                                self.text(tip[0]+5*s, tip[1]+5*s, label, 9, TEXT)
 
                         if hovered_edge and hovered_edge.pattern == source.id and hovered_edge.path == path and hovered_edge != ed.session.segment:
                             hv_a = next((v for v in nodes if v.id == hovered_edge.start), None)

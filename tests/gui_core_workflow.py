@@ -65,6 +65,8 @@ def run():
                 rect = workspace.canvas_layout.buttons[key][0]
                 click((rect.x + rect.w / 2, rect.y + rect.h / 2))
 
+            from tests.gui_folding import run as run_folds
+            run_folds(workspace, event, click, button, check, cleanup_garments)
             workspace.session = Session(Document())
             workspace.persist()
             workspace.perform_action('START_PANEL')
