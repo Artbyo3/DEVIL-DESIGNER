@@ -13,7 +13,7 @@ Use these tools to create and edit garment pattern pieces. A Bezier curve is a s
 
 | Tool / Action | Shortcut | Description |
 | :--- | :--- | :--- |
-| **Select** | <kbd>V</kbd> | Select and move pieces, points, handles, seams, and internal lines. |
+| **Select** | <kbd>V</kbd> | Select seams; select and move pieces, points, handles, and internal lines. |
 | **Polygon** | <kbd>P</kbd> | Click outline points; press <kbd>Enter</kbd> or click the first point to close. |
 | **Rectangle** | <kbd>R</kbd> | Click and drag to create a rectangular piece. |
 | **Ellipse** | <kbd>E</kbd> | Click and drag to create an oval piece. |
@@ -21,15 +21,15 @@ Use these tools to create and edit garment pattern pieces. A Bezier curve is a s
 | **Cut Knife** | <kbd>N</kbd> | Cut a piece, with or without a seam along the cut. |
 | **Dart** | <kbd>D</kbd> | Add a tapered dart to a piece. |
 | **Sew** | <kbd>J</kbd> | Connect complete edges. |
-| **Free Sewing** | <kbd>Shift</kbd> + <kbd>J</kbd> | Connect part of an edge. |
+| **Free Sewing** | <kbd>Shift</kbd> + <kbd>J</kbd> in 3D | Connect part of an edge in the revealed 3D Viewport. |
 | **Pin / Tack** | <kbd>K</kbd> / <kbd>T</kbd> | Hold a piece in place or attach it to the avatar. |
-| **Corner / Curve** | <kbd>C</kbd> | Change a point between a sharp corner and a smooth curve. |
+| **Corner / Curve** | <kbd>C</kbd> | Cycle Corner, Smooth, and Auto. |
 | **Split Segment** | <kbd>Q</kbd> | Add a point on an edge. |
 | **Merge Points** | <kbd>M</kbd> | Join two neighboring selected points. |
 | **Unfold** | <kbd>U</kbd> | Mirror a piece across a straight edge. |
 | **Mirror with Seam** | <kbd>Shift</kbd> + <kbd>U</kbd> | Make a separate mirrored piece and connect the edges. |
 | **Lengths Toggle** | <kbd>L</kbd> | Show or hide edge lengths in centimetres. |
-| **Duplicate** | <kbd>Shift</kbd> + <kbd>D</kbd> | Copy selected points, lines, or pieces. |
+| **Duplicate** | <kbd>Shift</kbd> + <kbd>D</kbd> | Copy selected pieces or the active piece. |
 | **Delete** | <kbd>X</kbd> or <kbd>Del</kbd> | Remove the selected item. |
 | **Grid Snapping** | <kbd>S</kbd> | Turn grid snapping on or off. Hold <kbd>Ctrl</kbd> to reverse it temporarily. |
 | **Axis Constraint** | Hold <kbd>Shift</kbd> | Keep movement horizontal or vertical. |
@@ -44,17 +44,13 @@ Select a point and press <kbd>C</kbd> to make it a smooth curve. Drag its handle
 
 ## Outline Transformations
 
-### Offset Outline Copy
-
-Right-click a piece and choose the outline-copy action to make a second outline at a chosen distance. The original piece stays in place.
-
 ### Unfold (<kbd>U</kbd>)
 
 Select a straight edge and press <kbd>U</kbd> to mirror the piece across that edge.
 
 ### Mirror with Seam (<kbd>Shift</kbd> + <kbd>U</kbd>)
 
-Select a straight edge and press <kbd>Shift</kbd> + <kbd>U</kbd> to make a separate mirrored piece with matching edges ready to sew.
+Select a straight edge and press <kbd>Shift</kbd> + <kbd>U</kbd> to make a separate mirrored piece with the matching edges already sewn.
 
 ## Linked Editing
 
@@ -62,27 +58,27 @@ Right-click a piece and choose **Clone as linked twin** to make a mirrored copy.
 
 ## Internal Lines, Cuts, Slits, & Darts
 
-Press <kbd>I</kbd> to draw inside a selected piece. Closed shapes can be cut out or traced as a separate piece. Lines that reach the outer edge can split a piece; lines that stop inside make a slit.
+Press <kbd>I</kbd> to draw inside a selected piece. Closed shapes can be cut out or traced as a separate piece. Use **Cut along path** on a line to split the piece or make a slit.
 
 ### Internal Shapes & Holes
 
-Draw a closed shape inside a piece. Right-click it and choose **Cut selected internal path** to make a hole, or choose **Trace** to make it a separate piece.
+Draw a closed shape inside a piece. Right-click it and choose **Cut along path** to make a hole, or **Trace as piece** to make a separate piece.
 
 ### Cut Knife (<kbd>N</kbd>)
 
-Click points across a piece, crossing its outline twice, then press <kbd>Enter</kbd> to finish. Choose **Cut & Sew** to connect the new edges, or **Cut only** to leave them separate. Press <kbd>Escape</kbd> to cancel.
+In the Internal tool menu, choose **Cut & Sew** or **Cut only** first. Click points across a piece, crossing its outline twice, then press <kbd>Enter</kbd> to cut. Press <kbd>Escape</kbd> to cancel.
 
 ### Princess Seams & Slits
 
-Draw a line from one edge of a piece to another to create a split. A line that ends inside the piece creates a slit.
+Draw a line, then right-click it and choose **Cut along path**. An edge-to-edge line splits the piece; a line ending inside makes a slit.
 
 ### Darts (<kbd>D</kbd>)
 
-Click two points on the outer edge for the dart opening, then click inside the piece for the dart point.
+Click two points on the same outer segment for the dart opening, then click inside the piece for the dart point.
 
 ## Tracing Reference Images
 
-1. Right-click the canvas and choose **Garment > Reference image > Load image**.
+1. Right-click the canvas, open **Garment settings > Trace image**, then choose **Load image**.
 2. Place the image and adjust its opacity.
-3. Choose **Set measured scale > Pick length endpoints**.
-4. Click two known points, enter their real distance in centimetres, and use the image as a scale reference.
+3. Open **Set measured scale** and set **Known length** in centimetres.
+4. Choose **Pick length endpoints**, then click two known points to set the image scale.

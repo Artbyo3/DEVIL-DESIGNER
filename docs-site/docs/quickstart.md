@@ -9,8 +9,8 @@ This guide takes a simple garment from pattern pieces to a finished mesh.
 
 ## Step 2: Select the Avatar Reference
 
-1. Right-click an empty area of the canvas and open **Garment & View > Body**.
-2. Choose your avatar, or select it in the 3D Viewport and click **Use selected body**.
+1. Click **Garment** and switch to the **Body** tab.
+2. Choose your avatar from the list.
 3. Press <kbd>H</kbd> to show or hide the avatar guide.
 
 ## Step 3: Create Pattern Panels
@@ -37,7 +37,7 @@ Panels can drape without being arranged first. To place them around the avatar:
 3. Repeat for the remaining edges.
 4. Follow the arrows to check seam direction. If needed, reverse a seam from its right-click menu.
 
-A green **Pass** means the edge lengths match closely. An amber **Gather warning** means they differ, but you can still simulate the garment.
+**Pass** means the edge lengths match closely. **Gather warning** means they differ, but you can still simulate the garment.
 
 ## Step 6: Simulate the Drape
 
@@ -48,8 +48,8 @@ A green **Pass** means the edge lengths match closely. An amber **Gather warning
 ## Step 7: Keep the Final Mesh
 
 1. Pause on the frame you want to keep.
-2. Click **Keep mesh**.
-3. Optionally choose **Auto weld** to join matching seam edges, or choose a **Thickness** option to add thickness to the garment.
+2. Open the **Keep mesh** arrow to choose **Weld: Auto/Manual** and **Thickness**.
+3. Click **Keep mesh**.
 
 The finished mesh is editable in Blender. Its UVs are the flat map used to place textures on the garment and follow the pattern pieces.
 

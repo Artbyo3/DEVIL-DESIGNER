@@ -8,7 +8,7 @@ Closing a pattern shape creates a matching 3D panel. Changes to the shape update
 
 ## Choose the Avatar
 
-1. Right-click empty canvas and choose **Garment & View > Body**, or select the character in the 3D Viewport and click **Use selected body**.
+1. Click **Garment**, switch to the **Body** tab, and choose your avatar from the list.
 2. Press <kbd>H</kbd> to show or hide the avatar guide and placement points.
 
 ## Wrap a Panel Around the Body
@@ -22,7 +22,7 @@ If the body placement point you need is unavailable, choose another visible poin
 
 ### Fine-Tune Placement
 
-Use Blender's <kbd>G</kbd> to move a panel or <kbd>R</kbd> to rotate it. Right-click a placement point for options such as **Arrange flat** or **Reset to 2D layout**.
+Use Blender's <kbd>G</kbd> to move a panel or <kbd>R</kbd> to rotate it. Right-click a placement point for **Arrange flat**, or a piece for **Reset to 2D layout**.
 
 ## Pin Pieces in Place
 
@@ -38,4 +38,4 @@ Press <kbd>T</kbd>, click a point on the fabric, then click a point on the avata
 
 ### Remove Pins & Tacks
 
-Right-click a pin or tack and choose **Remove pin / tack**, or select it and press <kbd>Delete</kbd>.
+Right-click a pin or tack and choose **Remove pin** or **Remove tack**, or select it and press <kbd>Delete</kbd>.

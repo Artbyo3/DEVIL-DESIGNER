@@ -4,7 +4,7 @@
 
 - Click **Simulate** to start the drape.
 - Click **Pause** to inspect it.
-- Click **Reset** on the garment card to return to the starting arrangement. Reset does not delete finished meshes.
+- Click **Reset drape** on the garment card to restore the starting arrangement. Reset does not delete finished meshes.
 
 ## Choose Fabric and Mesh Detail
 
@@ -37,7 +37,7 @@ Press <kbd>F</kbd> to show or hide the **Fit Map**, a color guide that shows whe
 ## Simulate Clothing in Layers
 
 1. Keep the inner garment as a mesh.
-2. Open the arrow beside **Simulate** and choose **Wear over**.
+2. Open **Simulate**'s arrow; turn the inner garment **On** in **Wear over**.
 3. Position the outer garment around the inner garment.
 4. Choose **High** quality for layered clothing.
 
@@ -51,7 +51,7 @@ Press <kbd>F</kbd> to show or hide the **Fit Map**, a color guide that shows whe
 ## Keep the Finished Mesh
 
 1. Pause on the frame you want.
-2. Click **Keep mesh**.
-3. Optionally choose **Auto weld** to join seam edges or choose **Thickness** to add thickness.
+2. Use the **Keep mesh** arrow for **Weld: Auto/Manual** and **Thickness**.
+3. Click **Keep mesh**.
 
 The finished mesh is editable in Blender. Its UVs are the flat map used to place textures on the garment and follow the pattern pieces.

@@ -4,19 +4,18 @@ The Library saves editable garment designs so you can use them again or fit them
 
 ## Save a Garment
 
-1. Open the **Library** view.
-2. Click **Save garment**.
-3. Enter a name and confirm.
+1. Rename the design in **Garment**.
+2. Open the **Library** view.
+3. Click **Save current garment**; confirm overwrites.
 
 Saved designs live in the Devil Designer folder in Blender's user settings on this computer. To back them up, copy that folder to a safe place. Saving a Blender project does not include a separate copy of the local Library folder.
 
 ## Load a Garment on Another Avatar
 
 1. Select the new character in the 3D Viewport.
-2. In Devil Designer, choose **Garment > Body** or click **Use selected body**.
-3. Open **Library** and select a saved design.
-4. Optionally choose **Scale by body height** to resize it to the new character.
-5. Click **Load**.
+2. Click **Garment**, switch to **Body**, and choose the new avatar.
+3. Open **Library** and click a saved design to load it.
+4. Confirm if replacing the open design. Body-height refitting is automatic.
 
 The design is placed using matching points on the new avatar when available. If a matching point is not available, the piece returns to its flat layout and a message appears. Tacks are moved to the new avatar.
 
