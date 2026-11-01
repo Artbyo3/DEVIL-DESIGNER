@@ -3,7 +3,7 @@ site_url = "https://artbyo3.github.io/DEVIL-DESIGNER/"
 site_name = "Devil Designer"
 site_description = "A movable 2D clothing-pattern editor and cloth authoring tool for Blender."
 site_author = "Artbyo3"
-extra_css = ["stylesheets/extra.css", "stylesheets/landing.css"]
+extra_css = ["stylesheets/extra.css", "stylesheets/landing.css", "stylesheets/guides.css"]
 
 nav = [
   { "Install" = "install.md" },
