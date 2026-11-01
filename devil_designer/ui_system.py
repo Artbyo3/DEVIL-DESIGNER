@@ -7,6 +7,11 @@ except ImportError:
     blf = None
 
 try:
+    import bpy
+except ImportError:
+    bpy = None
+
+try:
     from .canvas import Rect
 except ImportError:
     @dataclass(frozen=True)
@@ -41,11 +46,37 @@ TEXT_ON_ACCENT = (.047, .145, .137, 1.0)
 
 RADIUS_WINDOW = 4.0
 RADIUS_DOCK = 4.0
-RADIUS_DOCK_ITEM = 3.0
+RADIUS_DOCK_ITEM = 4.0
 RADIUS_CARD = 4.0
-RADIUS_CONTROL = 3.0
+RADIUS_CONTROL = 4.0
 RADIUS_BADGE = 2.0
 RADIUS_DEFAULT = RADIUS_CONTROL
+
+
+@dataclass
+class MinimalMetrics:
+    toolbar_item: float = 4.0
+    regular: float = 4.0
+    menu_back: float = 4.0
+    menu_item: float = 4.0
+    text: float = 4.0
+    box: float = 4.0
+    tooltip: float = 4.0
+
+    @classmethod
+    def resolve(cls):
+        m = cls()
+        if bpy is not None:
+            try:
+                ui = bpy.context.preferences.themes[0].user_interface
+                roles = ('toolbar_item', 'regular', 'menu_back', 'menu_item', 'text', 'box', 'tooltip')
+                for role in roles:
+                    wcol = getattr(ui, 'wcol_' + role, None)
+                    if wcol is not None and hasattr(wcol, 'roundness'):
+                        setattr(m, role, 0.5 * float(wcol.roundness) * 20.0)
+            except Exception:
+                pass
+        return m
 
 
 @dataclass
@@ -59,7 +90,7 @@ class Tooltip:
 class ComponentRenderer:
 
     @staticmethod
-    def draw_tooltip(draw_ctx, tooltip: Tooltip, scale: float):
+    def draw_tooltip(draw_ctx, tooltip: Tooltip, scale: float, metrics=None):
         if not tooltip.visible or not tooltip.text:
             return
         s = scale
@@ -75,11 +106,11 @@ class ComponentRenderer:
         h = 24 * s
 
         r = Rect(x + 10 * s, y - h / 2, w, h)
-        draw_ctx.round_rect(r, (0.08, 0.10, 0.12, 0.95), radius=RADIUS_CONTROL)
-        draw_ctx.round_rect_outline(r, BORDER_SUBTLE, radius=RADIUS_CONTROL, width=1.0)
+        draw_ctx.round_rect(r, (0.08, 0.10, 0.12, 0.95), radius=metrics.tooltip if metrics else RADIUS_CONTROL)
+        draw_ctx.round_rect_outline(r, BORDER_SUBTLE, radius=metrics.tooltip if metrics else RADIUS_CONTROL, width=1.0)
         draw_ctx.text(r.x + 8 * s, r.y + 6 * s, tooltip.text, 10, TEXT_PRIMARY)
 
         if tooltip.shortcut:
             pill_r = Rect(r.x + r.w - sw - 4 * s, r.y + 3 * s, sw, 18 * s)
-            draw_ctx.round_rect(pill_r, BG_ELEVATED, radius=RADIUS_BADGE)
+            draw_ctx.round_rect(pill_r, BG_ELEVATED, radius=metrics.box if metrics else RADIUS_BADGE)
             draw_ctx.text(pill_r.x + pill_r.w / 2, pill_r.y + 4 * s, tooltip.shortcut, 9, ACCENT, center=True)

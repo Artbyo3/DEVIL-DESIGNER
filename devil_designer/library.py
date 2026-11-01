@@ -2,6 +2,7 @@ from pathlib import Path
 import json
 import re
 import math
+from datetime import datetime, timezone
 import bpy
 from mathutils import Matrix
 from .core import Document
@@ -19,6 +20,7 @@ def directory(scene,create=False):
 
 def entries(scene):
     path=directory(scene)
+    if path.exists() and not path.is_dir():raise NotADirectoryError('Choose a folder for the garment library, not a file.')
     return sorted(path.glob('*.garment.json'),key=lambda p:p.name.casefold()) if path.exists() else []
 
 
@@ -39,13 +41,54 @@ def scale_document(doc,factor):
     doc.validate()
 
 
-def save(context,name):
+def preview(path):
+    result=dict(name=path.name.removesuffix('.garment.json'),loops=[],pieces=0,seams=0,body='Unspecified body',date='',tags=[],error='')
+    try:
+        if path.stat().st_size>10_000_000:raise ValueError('Design exceeds the 10 MB limit.')
+        data=json.loads(path.read_text(encoding='utf-8'))
+        if not isinstance(data,dict) or data.get('format')!='devil-designer-garment' or type(data.get('version')) is not int or data['version'] not in (1,2):
+            raise ValueError('Unsupported garment library format.')
+        document=Document.loads(json.dumps(data['document']))
+        if not document.patterns:raise ValueError('Design has no pattern pieces.')
+        metadata=data.get('library',{})
+        if not isinstance(metadata,dict):metadata={}
+        name=data.get('name',result['name'])
+        tags=metadata.get('tags',[])
+        height=data.get('body_height_m',0)
+        body=metadata.get('body','')
+        if not isinstance(body,str):body=''
+        if type(height) in (int,float) and math.isfinite(height) and height>0:
+            body=(body or 'Body')+f' | {height*100:.0f} cm'
+        result.update(name=name if isinstance(name,str) else result['name'],
+                      loops=[pattern.outline() for pattern in document.patterns],
+                      pieces=len(document.patterns),seams=len(document.seams),body=body or result['body'],
+                      date=datetime.fromtimestamp(path.stat().st_mtime,timezone.utc).strftime('%Y-%m-%d'),
+                      tags=[tag for tag in tags if isinstance(tag,str)][:20] if isinstance(tags,list) else [])
+        timestamp=metadata.get('saved_at')
+        if isinstance(timestamp,str):
+            try:result['date']=datetime.fromisoformat(timestamp).strftime('%Y-%m-%d')
+            except ValueError:pass
+        captured=metadata.get('thumbnail')
+        if isinstance(captured,list) and len(captured)==len(document.patterns) and all(
+                isinstance(loop,list) and len(loop)>=3 and all(isinstance(point,list) and len(point)==2 and
+                all(type(value) in (int,float) and math.isfinite(value) for value in point) for point in loop) for loop in captured):
+            result['loops']=captured
+    except (OSError,ValueError,TypeError,KeyError,AttributeError,OverflowError) as exc:
+        result['error']='Cannot preview: '+str(exc)
+    return result
+
+
+def save(context,name,tags=()):
     scene=context.scene
     safe=re.sub(r'[^A-Za-z0-9_-]+','-',name.strip()).strip('-')[:80]
     if not safe:raise ValueError('Enter a garment name using letters or numbers.')
     doc=live_panels.capture(context);doc.validate()
     if not doc.patterns:raise ValueError('Create a garment before saving it to the library.')
     data=dict(format='devil-designer-garment',version=2,name=name.strip(),document=json.loads(doc.dumps()),panels=[])
+    data['library']=dict(saved_at=datetime.now(timezone.utc).isoformat(),
+                         body=scene.dd_avatar.name if scene.dd_avatar else '',
+                         tags=list(dict.fromkeys(tag.strip()[:40] for tag in tags if tag.strip()))[:20],
+                         thumbnail=[pattern.outline() for pattern in doc.patterns])
     if scene.dd_avatar:
         low,high=garment.bounds(scene.dd_avatar)
         data['body_height_m']=(high.z-low.z)*garment.metres_per_unit(scene)
