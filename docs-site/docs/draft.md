@@ -76,6 +76,34 @@ Draw a line, then right-click it and choose **Cut along path**. An edge-to-edge 
 
 Click two points on the same outer segment for the dart opening, then click inside the piece for the dart point.
 
+### Fold Lines & Pleats
+
+1. Select a pattern piece and press <kbd>I</kbd> for **Internal path**.
+2. Click the start and end of a straight line, from one boundary of the piece to the other, then press <kbd>Enter</kbd> to finish the path.
+3. Right-click the internal edge and choose **Fold or pleat**.
+4. Choose **Mountain** or **Valley** for a single fold. For a pleat, choose **Knife 1 cm**, **Knife 2 cm**, or **Knife 4 cm**, or **Box 1 cm**, **Box 2 cm**, or **Box 4 cm**. The spacing is the distance between paired fold lines, not the width of the finished pleat. Leave enough fabric beside the path for the added lines.
+5. Check the arrows and Mountain or Valley labels on the canvas before simulation. They show the fold direction and angle.
+
+To adjust a fold, right-click one of its internal edges and open **Fold or pleat** again:
+
+- **Reverse direction** reverses the entire fold or pleat, not just the selected line.
+- **60 degrees** or **120 degrees** changes the fold angle; **Sharp fold** sets it to 150 degrees. These choices apply to the entire pleat and preserve each line's Mountain or Valley direction.
+- **Remove fold or pleat** removes the settings for the entire fold or pleat but keeps its internal paths.
+
+Continue with sewing, arrangement, simulation, and keeping the mesh. Fold settings are saved with the pattern in the garment library and Blender file, and are included in undo and redo.
+
+#### Current Limits
+
+Only straight, open, boundary-to-boundary fold paths are supported. All folds on a piece must be parallel. Curved, partial, crossing, and hole-crossing folds are not supported; a fold also cannot cross a gap in a concave piece. Folded pieces use flat placement at arrangement points rather than automatic wrapping around the body.
+
+When self-collision is enabled, a garment containing any folds uses **1 mm clearance for every piece in that simulation**, including pieces without folds. Garments without folds use **3 mm**, unless a nonzero seam shrink setting already requires 1 mm. The smaller clearance allows closer layers, so inspect the whole garment, not just its pleats.
+
+Folds can relax under load during cloth simulation. Fabric, mesh density, pins or tacks, and simulation duration still affect the result; folds use the same cloth simulation as the rest of the garment.
+
+#### Darts & Fold Lines
+
+Fold settings do not change how darts are made or add a dart-depth cap. A deep dart can approach the opposite edge, but its point must stay inside the fabric. Do not pin both ends of the dart opening apart if you want it to close during simulation.
+
 ## Tracing Reference Images
 
 1. Right-click the canvas, open **Garment settings > Trace image**, then choose **Load image**.
