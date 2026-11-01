@@ -1,4 +1,5 @@
 import math
+import traceback
 import bpy
 from .core import Document, Session, Vertex
 from . import curves
@@ -484,6 +485,7 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                 self.show_card('ARRANGEMENT')
                 self.message = 'Choose a named starting layout; adjust placements before simulation.'
                 return True
+            self._scene.pop('dd_last_error', None)
             op = getattr(bpy.ops.devil_designer, names[button])
             result = op('EXEC_DEFAULT')
             if 'FINISHED' in result:
@@ -506,9 +508,16 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                 if button in {'BUILD','SIMULATE'} and self._scene.get('dd_arrangement_message'):
                     self.message+=' '+self._scene['dd_arrangement_message']
                 return True
-            self.message = 'Action could not finish. Check the Blender report and try again.'
+            err = self._scene.pop('dd_last_error', None)
+            self.message = err or 'Action could not finish. Check the Blender report and try again.'
         except (RuntimeError, ValueError) as exc:
-            self.message = str(exc).replace('Error: ', '').strip()
+            err = self._scene.pop('dd_last_error', None)
+            self.message = err or str(exc).replace('Error: ', '').strip() or 'Action could not finish.'
+        except Exception as exc:
+            traceback.print_exc()
+            clean = str(exc).replace('Error: ', '').strip()
+            label = f'{type(exc).__name__}: {clean}' if clean else type(exc).__name__
+            self.message = f'Unexpected error: {label}'
         return False
 
     def finish_polygon(self, closed=True):

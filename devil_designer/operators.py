@@ -1,3 +1,4 @@
+import traceback
 import bpy
 from . import garment,layering
 from .core import Session
@@ -8,7 +9,23 @@ def run(operator, action):
         return action()
     except (ValueError,RuntimeError) as exc:
         operator.report({'ERROR'},str(exc))
+        try:
+            bpy.context.scene['dd_last_error'] = str(exc)
+        except Exception:
+            pass
         return {'CANCELLED'}
+    except Exception as exc:
+        traceback.print_exc()
+        message = str(exc).strip()
+        label = f'{type(exc).__name__}: {message}' if message else type(exc).__name__
+        err = f'Unexpected error: {label}'
+        operator.report({'ERROR'},err)
+        try:
+            bpy.context.scene['dd_last_error'] = err
+        except Exception:
+            pass
+        return {'CANCELLED'}
+
 
 
 class DD_OT_build_panels(bpy.types.Operator):
@@ -65,8 +82,10 @@ class DD_OT_stop(bpy.types.Operator):
     bl_label = 'Stop'
     bl_description = 'Pause playback without discarding the current draped shape'
     def execute(self,context):
-        garment.stop(context)
-        return {'FINISHED'}
+        def action():
+            garment.stop(context)
+            return {'FINISHED'}
+        return run(self,action)
 
 
 class DD_OT_reset(bpy.types.Operator):
@@ -75,8 +94,10 @@ class DD_OT_reset(bpy.types.Operator):
     bl_description = 'Discard the simulation cache and show the original positioned panels'
     bl_options = {'REGISTER','UNDO'}
     def execute(self,context):
-        garment.reset(context)
-        return {'FINISHED'}
+        def action():
+            garment.reset(context)
+            return {'FINISHED'}
+        return run(self,action)
 
 
 class DD_OT_keep_drape(bpy.types.Operator):
@@ -85,15 +106,27 @@ class DD_OT_keep_drape(bpy.types.Operator):
     bl_description = 'Copy the current cloth shape, remove sewing springs, and weld matched seam vertices within tolerance'
     bl_options = {'REGISTER','UNDO'}
     def execute(self,context):
-        def action():
-            obj,open_seams = garment.keep_drape(context)
-            context.scene['dd_unwelded_seams'] = open_seams
-            if open_seams:
-                self.report({'WARNING'},f'Kept {obj.name}; {open_seams} seam pairs remain open. Simulate longer or adjust weld distance.')
-            else:
-                self.report({'INFO'},'Kept draped mesh with pattern UVs. Ready for mesh cleanup and rigging.')
-            return {'FINISHED'}
-        return run(self,action)
+        try:
+            def action():
+                obj,open_seams = garment.keep_drape(context)
+                context.scene['dd_unwelded_seams'] = open_seams
+                if open_seams:
+                    self.report({'WARNING'},f'Kept {obj.name}; {open_seams} seam pairs remain open. Simulate longer or adjust weld distance.')
+                else:
+                    self.report({'INFO'},'Kept draped mesh with pattern UVs. Ready for mesh cleanup and rigging.')
+                return {'FINISHED'}
+            return run(self,action)
+        except Exception as exc:
+            traceback.print_exc()
+            message = str(exc).strip()
+            label = f'{type(exc).__name__}: {message}' if message else type(exc).__name__
+            err = f'Unexpected error: {label}'
+            self.report({'ERROR'},err)
+            try:
+                context.scene['dd_last_error'] = err
+            except Exception:
+                pass
+            return {'CANCELLED'}
 
 
 class DD_OT_seam(bpy.types.Operator):
