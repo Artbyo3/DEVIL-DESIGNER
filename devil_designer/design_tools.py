@@ -108,8 +108,24 @@ class DesignTools:
 
     def refresh_library(self):
         from . import library
+        self.library_error=''
         try:self.library_items=library.entries(self._scene)
-        except OSError as exc:self.library_items=[];self.message='Library unavailable: '+str(exc)
+        except OSError as exc:
+            self.library_items=[];self.library_error=str(exc);self.message='Library unavailable: '+str(exc)
+        if getattr(self,'minimal_ui',False):
+            previous=self.library_previews
+            updated={}
+            for path in self.library_items:
+                try:
+                    stat=path.stat()
+                    signature=(stat.st_mtime_ns,stat.st_size)
+                except OSError:
+                    signature=None
+                cached=previous.get(path)
+                if not cached or cached['signature']!=signature:
+                    cached=dict(signature=signature,**library.preview(path))
+                updated[path]=cached
+            self.library_previews=updated
         self._scene.dd_library_selected=min(self._scene.dd_library_selected,max(0,len(self.library_items)-1))
 
     def design_action(self,action):
@@ -267,13 +283,26 @@ class DesignTools:
             elif action.startswith('LIBRARY_'):
                 from . import library
                 self.refresh_library()
-                if action=='LIBRARY_SAVE':library.save(bpy.context,scene.dd_library_name);self.refresh_library()
+                if action=='LIBRARY_SAVE':
+                    library.save(bpy.context,scene.dd_library_name,getattr(self,'library_tags','').split(','))
+                    if getattr(self,'minimal_ui',False):self.library_previews={}
+                    self.refresh_library()
                 elif action in {'LIBRARY_PREV','LIBRARY_NEXT'} and self.library_items:
                     scene.dd_library_selected=(scene.dd_library_selected+(1 if action=='LIBRARY_NEXT' else -1))%len(self.library_items)
                 elif action=='LIBRARY_LOAD':
+                    chosen=getattr(self,'library_load_path',None)
+                    if chosen is not None:
+                        if chosen not in self.library_items:raise ValueError('This garment is no longer available.')
+                        if self.library_previews[chosen]['signature']!=self.library_load_signature:
+                            raise ValueError('This saved design changed. Preview it again before loading.')
+                        scene.dd_library_selected=self.library_items.index(chosen)
                     before=scene.dd_document
                     scene['dd_backup_document']=before
                     loaded=library.load(bpy.context,scene.dd_library_selected)
+                    if getattr(self,'minimal_ui',False):
+                        metadata=self.library_previews[self.library_items[scene.dd_library_selected]]
+                        self.library_tags=', '.join(metadata['tags'])
+                        self.library_load_path=None
                     self.clear_interaction_references()
                     self.session.undo_stack.append(before);self.session.redo_stack.clear()
                     self.session.document=loaded;self.session.selected=loaded.patterns[0].id if loaded.patterns else None

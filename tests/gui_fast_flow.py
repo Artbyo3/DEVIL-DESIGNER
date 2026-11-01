@@ -228,6 +228,9 @@ def check_interaction_regressions(workspace, event, point, check):
             workspace.library_items = [Path('regression.garment.json')]
             with patch.object(library, 'load') as load:
                 workspace.minimal_action('LOAD_0')
+                check(workspace.card_kind=='LIBRARY_PREVIEW' and not load.called,
+                      'selecting a library tile opens a preview without loading')
+                workspace.perform_action('LIBRARY_LOAD')
                 check(workspace.confirm_action == 'LIBRARY_LOAD' and not load.called and
                       all(getattr(workspace._scene, key) == value for key, value in before_load.items()),
                       'requesting a library load never changes settings before confirmation')
@@ -875,8 +878,8 @@ def run():
             for kind in ('KEEP', 'GARMENT', 'BODY', 'LIBRARY', 'POINT', 'EDGE', 'EDIT', 'CUT_RECOVERY'):
                 workspace.show_card(kind)
                 card = workspace.minimal_card()
-                check(card is None or sum(row[0] != 'INFO' for rect, row in card[2]) <= 5,
-                      kind + ' card stays within the five-control cap')
+                check(card is None or sum(row[0] != 'INFO' for rect, row in card[2]) <= (8 if kind=='LIBRARY' else 5),
+                      kind + ' card stays within its compact control budget')
             workspace.show_card('GARMENT')
             g_card = workspace.minimal_card()
             m_rects = workspace.card_mode_rects(g_card[0])

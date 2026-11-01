@@ -17,8 +17,9 @@ from .ui_system import (
     TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED,
     ACCENT, ACCENT_BG, ACCENT_BORDER, ACCENT_HOVER,
     BORDER, BORDER_SUBTLE,
-    RADIUS_WINDOW, RADIUS_DOCK, RADIUS_DOCK_ITEM, RADIUS_CARD, RADIUS_CONTROL, RADIUS_BADGE, RADIUS_DEFAULT,
-    Tooltip, ComponentRenderer, SURFACE_FLOATING, SURFACE_OUTLINE, SELECTION, TEXT_ON_ACCENT
+    RADIUS_WINDOW, RADIUS_BADGE, RADIUS_DEFAULT,
+    Tooltip, ComponentRenderer, SURFACE_FLOATING, SURFACE_OUTLINE, SELECTION, TEXT_ON_ACCENT,
+    MinimalMetrics
 )
 from .canvas import ALL_TOOLS
 
@@ -371,6 +372,7 @@ class Renderer:
     def draw(self, ed):
         self.s = s = ed.canvas_layout.scale
         l, view = ed.canvas_layout, ed.view
+        metrics = l.metrics if ed.minimal_ui else None
         p, c = l.panel, l.canvas
         blend = gpu.state.blend_get()
         depth = gpu.state.depth_test_get()
@@ -383,10 +385,10 @@ class Renderer:
 
         try:
             self.clip(p)
-            self.round_rect(p, SHELL, radius=RADIUS_WINDOW)
-            self.round_rect_outline(p, BORDER, radius=RADIUS_WINDOW, width=1.0)
+            self.round_rect(p, SHELL, radius=metrics.box if metrics else RADIUS_WINDOW)
+            self.round_rect_outline(p, BORDER, radius=metrics.box if metrics else RADIUS_WINDOW, width=1.0)
 
-            self.round_rect(c, BG, radius=8)
+            self.round_rect(c, BG, radius=0 if metrics else 8)
             self.clip(c)
             try:
                 from . import tracing
@@ -427,6 +429,17 @@ class Renderer:
                 from .linked_editing import pair_for
                 hovered_edge = ed.design_hit_edge() if ed.tool == 'SELECT' and not ed.gesture and not ed.card_kind else None
                 twin_pairs = list(getattr(ed.session.document, 'linked_pairs', []))
+                piece_labels=[]
+                pointer_world=view.world(ed.pointer,c)
+                hovered_piece=next((pattern for pattern in reversed(ed.session.document.patterns) if pattern.contains(pointer_world)),None) if ed.minimal_ui and not ed.card_kind and not ed.gesture else None
+                ed.twin_tethers=[]
+                for pair in twin_pairs:
+                    if not pair['enabled']:continue
+                    outlines=[ed.preview_pattern(ed.session.document.find(identity)).outline() for identity in pair['members']]
+                    centers=[view.screen(((min(point[0] for point in outline)+max(point[0] for point in outline))/2,
+                                          (min(point[1] for point in outline)+max(point[1] for point in outline))/2),c) for outline in outlines]
+                    ed.twin_tethers.append(centers)
+                    self.lines(centers,(*ACCENT[:3],.25),1/max(1,s))
                 for index, source in enumerate(ed.session.document.patterns):
                     pat = ed.preview_pattern(source)
                     selected = (pat.id in ed.session.selected_patterns) if ed.session.selected_patterns else (ed.session.selected == pat.id)
@@ -527,8 +540,8 @@ class Renderer:
                                 dw, dh = blf.dimensions(0, dim_str)
                                 dim_r = Rect(mid[0] + 4 * s, mid[1] + 4 * s, dw + 6 * s, dh + 4 * s)
                                 ed.measurement_rects.append(dim_r)
-                                self.round_rect(dim_r, (0.08, 0.10, 0.13, 0.88), radius=RADIUS_BADGE)
-                                self.round_rect_outline(dim_r, BORDER_SUBTLE, radius=RADIUS_BADGE, width=0.8)
+                                self.round_rect(dim_r, (0.08, 0.10, 0.13, 0.88), radius=metrics.box if metrics else RADIUS_BADGE)
+                                self.round_rect_outline(dim_r, BORDER_SUBTLE, radius=metrics.box if metrics else RADIUS_BADGE, width=0.8)
                                 self.text(dim_r.x + 3 * s, dim_r.y + 2 * s, dim_str, 10, TEXT_SUB)
 
                     xs, ys = [pt[0] for pt in outline], [pt[1] for pt in outline]
@@ -537,26 +550,13 @@ class Renderer:
                     state_label = label(pat)
                     if state_label:
                         label_txt += ' · ' + state_label
-                    blf.size(0, 11 * s)
-                    lw, dh = blf.dimensions(0, label_txt)
-                    lx = (min(xs) + max(xs)) / 2
-                    ly = max(ys) + 14 * s
-                    lbl_r = Rect(lx - lw / 2 - 6 * s, ly - 2 * s, lw + 12 * s, dh + 6 * s)
-                    self.round_rect(lbl_r, (0.08, 0.10, 0.13, 0.88), radius=RADIUS_BADGE)
-                    if selected:
-                        self.round_rect_outline(lbl_r, ACCENT_BORDER if ed.minimal_ui else (*color[:3], 0.6), radius=RADIUS_BADGE, width=1.0)
-                    else:
-                        self.round_rect_outline(lbl_r, BORDER_SUBTLE, radius=RADIUS_BADGE, width=0.8)
-                    self.text(lx, ly + 2 * s, label_txt, 11, TEXT if selected else MUTED, True)
-                    if is_twin:
+                    show_twin=is_twin and (selected or partner_selected or hovered_piece and hovered_piece.id in pair['members'])
+                    if show_twin:
                         p_idx = next((idx for idx, lp in enumerate(twin_pairs) if lp is pair), 0)
-                        twin_txt = f"⌯ Twin {chr(65 + (p_idx % 26))}"
-                        blf.size(0, 10 * s)
-                        tw, th = blf.dimensions(0, twin_txt)
-                        twin_r = Rect(lbl_r.x + lbl_r.w + 4 * s, lbl_r.y, tw + 10 * s, lbl_r.h)
-                        self.round_rect(twin_r, ACCENT_BG, radius=RADIUS_BADGE)
-                        self.round_rect_outline(twin_r, ACCENT_BORDER, radius=RADIUS_BADGE, width=1.0)
-                        self.text(twin_r.x + 5 * s, twin_r.y + 2 * s, twin_txt, 10, ACCENT)
+                        label_txt+=f" | Twin {chr(65+(p_idx%26))}"
+                    piece_labels.append((min(xs),max(xs),min(ys),max(ys),label_txt,selected,source.id,bool(show_twin)))
+
+                self.piece_labels(ed,piece_labels)
 
                 for anchor in ed.session.document.anchors:
                     point = view.screen((anchor.x, anchor.y), c)
@@ -574,8 +574,8 @@ class Renderer:
                     rw, rh = abs(p1[0] - p0[0]), abs(p1[1] - p0[1])
                     if rw > 1 and rh > 1:
                         box_rect = Rect(rx, ry, rw, rh)
-                        self.round_rect(box_rect, (*ACCENT[:3], 0.12), radius=3)
-                        self.round_rect_outline(box_rect, (*ACCENT[:3], 0.55), radius=3, width=1.0)
+                        self.round_rect(box_rect, (*ACCENT[:3], 0.12), radius=0 if metrics else 3)
+                        self.round_rect_outline(box_rect, (*ACCENT[:3], 0.55), radius=0 if metrics else 3, width=1.0)
 
                 if ed.tool == 'SEW' and ed.pending_edge:
                     doc = ed.session.document
@@ -598,8 +598,8 @@ class Renderer:
                             hud_box = Rect(min(c.x + c.w - bw - 20 * s, max(c.x + 10 * s, px + 14 * s)),
                                            min(c.y + c.h - 32 * s, max(c.y + 10 * s, py - 14 * s)),
                                            bw + 16 * s, 26 * s)
-                            self.round_rect(hud_box, badge_bg, radius=5)
-                            self.round_rect_outline(hud_box, badge_border, radius=5, width=1.0)
+                            self.round_rect(hud_box, badge_bg, radius=metrics.tooltip if metrics else 5)
+                            self.round_rect_outline(hud_box, badge_border, radius=metrics.tooltip if metrics else 5, width=1.0)
                             self.text(hud_box.x + 8 * s, hud_box.y + 7 * s, msg, 10, (1, 1, 1, 1))
                     except Exception:
                         pass
@@ -880,13 +880,46 @@ class Renderer:
             gpu.state.depth_test_set(depth)
             gpu.state.blend_set(blend)
 
+    def piece_labels(self,ed,labels):
+        scale=self.s
+        radius=ed.canvas_layout.metrics.box if ed.minimal_ui else RADIUS_BADGE
+        canvas=ed.canvas_layout.canvas
+        reserved=list(ed.measurement_rects)
+        ed.piece_label_rects=[]
+        ed.twin_label_ids=[]
+        for low_x,high_x,low_y,high_y,text,selected,identity,twin in labels:
+            blf.size(0,11*scale)
+            maximum=min(240*scale,canvas.w-16*scale)
+            if twin and blf.dimensions(0,text)[0]>maximum-12*scale:
+                base,marker=text.rsplit(' | Twin ',1)
+                while len(base)>1 and blf.dimensions(0,base+'... | Twin '+marker)[0]>maximum-12*scale:base=base[:-1]
+                text=base+'... | Twin '+marker
+            measured_width,height=blf.dimensions(0,text)
+            width=min(measured_width+12*scale,maximum)
+            left=max(canvas.x+8*scale,min((low_x+high_x-width)/2,canvas.x+canvas.w-width-8*scale))
+            positions=[high_y+22*scale+step*22*scale for step in range(8)]
+            positions.extend(low_y-(height+18*scale)-step*22*scale for step in range(8))
+            for bottom in positions:
+                bounds=Rect(left,bottom,width,height+8*scale)
+                if bounds.y<canvas.y+8*scale or bounds.y+bounds.h>canvas.y+canvas.h-40*scale:continue
+                if any(bounds.x<other.x+other.w+6*scale and bounds.x+bounds.w>other.x-6*scale and
+                       bounds.y<other.y+other.h+6*scale and bounds.y+bounds.h>other.y-6*scale for other in reserved):continue
+                self.round_rect(bounds,BG_WELL,radius=radius)
+                self.round_rect_outline(bounds,ACCENT_BORDER if selected else BORDER_SUBTLE,radius=radius,width=1)
+                self.text(bounds.x+6*scale,bounds.y+4*scale,text,11,TEXT if selected else MUTED,max_width=width-12*scale)
+                reserved.append(bounds)
+                ed.piece_label_rects.append(bounds)
+                if twin:ed.twin_label_ids.append(identity)
+                break
+
     def minimal_workspace(self, ed):
         layout = ed.canvas_layout
         scale = self.s
+        metrics = getattr(layout, 'metrics', None) or MinimalMetrics.resolve()
         self.clip(layout.panel)
-        self.round_rect(layout.rail, SURFACE_FLOATING, radius=RADIUS_DOCK)
-        self.round_rect_outline(layout.rail, SURFACE_OUTLINE, radius=RADIUS_DOCK)
-        icons = {'LIBRARY': 'GRID', 'DRAW': 'RECTANGLE', 'INTERNAL': 'INTERNAL', 'PIN': 'PIN',
+        self.round_rect(layout.rail, SURFACE_FLOATING, radius=metrics.menu_back)
+        self.round_rect_outline(layout.rail, SURFACE_OUTLINE, radius=metrics.menu_back)
+        icons = {'LIBRARY': 'LIBRARY', 'DRAW': 'RECTANGLE', 'INTERNAL': 'INTERNAL', 'PIN': 'PIN',
                  'SELECT': 'SELECT', 'SEW': 'SEW', 'UNDO': 'UNDO', 'REDO': 'REDO'}
         draw_shape = getattr(ed, 'draw_shape', 'RECTANGLE')
         icons['DRAW'] = 'POLYGON' if draw_shape == 'POLYGON' else 'ELLIPSE' if draw_shape == 'ELLIPSE' else 'RECTANGLE'
@@ -906,45 +939,50 @@ class Renderer:
                 primary = key in {'SIMULATE', 'FINISH_DRAFT', 'CONFIRM_ACTION'}
                 surface = SURFACE_FLOATING if blocker else ACCENT_HOVER if hover else ACCENT
                 joined = Rect(rect.x, rect.y, rect.w + (30 * scale if key+'_OPTIONS' in layout.buttons else 0), rect.h)
-                self.round_rect(joined, surface if primary else ELEVATED if hover else SURFACE_FLOATING, radius=RADIUS_CONTROL)
-                self.round_rect_outline(joined, ACCENT_BORDER if primary else SURFACE_OUTLINE, radius=RADIUS_CONTROL)
+                self.round_rect(joined, surface if primary else ELEVATED if hover else SURFACE_FLOATING, radius=metrics.regular)
+                self.round_rect_outline(joined, ACCENT_BORDER if primary else SURFACE_OUTLINE, radius=metrics.regular)
                 ink = MUTED if blocker else TEXT_ON_ACCENT if primary else TEXT
                 if key in {'SIMULATE', 'KEEP'}:
                     self.draw_icon('PAUSE' if label == 'Pause' else 'PLAY' if key == 'SIMULATE' else 'CHECK',
-                                   rect.x + 18 * scale, rect.y + rect.h / 2, 17, ink)
-                    self.text(rect.x + 34 * scale, rect.y + 14 * scale, label, 12, ink)
+                                   rect.x + 18 * scale, rect.y + rect.h / 2, 16, ink)
+                    self.text(rect.x + 34 * scale, rect.y + (rect.h-11*scale)/2, label, 11, ink)
                 else:
-                    self.text(rect.x + rect.w / 2, rect.y + 14 * scale, label, 12, ink, True)
+                    self.text(rect.x + rect.w / 2, rect.y + (rect.h-11*scale)/2, label, 11, ink, True)
             elif key == 'INSPECTOR_TOGGLE':
-                self.round_rect(rect, ELEVATED if hover else FIELD_BG, radius=RADIUS_CONTROL)
+                self.round_rect(rect, ELEVATED if hover else FIELD_BG, radius=metrics.regular)
                 self.text(rect.x + rect.w / 2, rect.y + 8 * scale, label, 10, TEXT_SUB, True)
             elif key == 'INSPECTOR_COLLAPSE':
                 pass
             elif key == 'RESTORE_CANVAS':
-                self.round_rect(rect, ELEVATED if hover else FIELD_BG, radius=RADIUS_CONTROL)
+                self.round_rect(rect, ELEVATED if hover else FIELD_BG, radius=metrics.regular)
                 self.text(rect.x + rect.w / 2, rect.y + 8 * scale, label, 10, TEXT_SUB, True)
             elif key.startswith('TOGGLE_'):
                 active = ed.snap if key == 'TOGGLE_SNAP' else ed._scene.dd_reference_visible if key == 'TOGGLE_GUIDE' else ed.fit_overlay.enabled if key == 'TOGGLE_FIT_MAP' else ed._scene.dd_lengths_visible
-                self.round_rect(rect, ACCENT_BG if active else (ELEVATED if hover else BG_WELL), radius=RADIUS_BADGE)
-                char = 'S' if key == 'TOGGLE_SNAP' else 'H' if key == 'TOGGLE_GUIDE' else 'F' if key == 'TOGGLE_FIT_MAP' else 'L'
-                self.text(rect.x + rect.w / 2, rect.y + (rect.h - 9 * scale) / 2, char, 9, ACCENT if active else TEXT_SUB, True)
+                self.round_rect(rect, ACCENT_BG if active else (ELEVATED if hover else BG_WELL), radius=metrics.toolbar_item)
+                if key == 'TOGGLE_SNAP':
+                    self.draw_icon('SNAP_ON' if ed.snap else 'SNAP_OFF', rect.x + rect.w / 2, rect.y + rect.h / 2, 12, ACCENT if active else TEXT_SUB)
+                elif key == 'TOGGLE_GUIDE':
+                    self.draw_icon('HIDE_OFF' if ed._scene.dd_reference_visible else 'HIDE_ON', rect.x + rect.w / 2, rect.y + rect.h / 2, 12, ACCENT if active else TEXT_SUB)
+                elif key == 'TOGGLE_LENGTHS':
+                    self.draw_icon('RULER', rect.x + rect.w / 2, rect.y + rect.h / 2, 12, ACCENT if active else TEXT_SUB)
+                elif key == 'TOGGLE_FIT_MAP':
+                    self.text(rect.x + rect.w / 2, rect.y + (rect.h - 9 * scale) / 2, 'F', 9, ACCENT if active else TEXT_SUB, True)
             elif key.endswith('_OPTIONS'):
                 self.lines([(rect.x, rect.y + 10 * scale), (rect.x, rect.y + rect.h - 10 * scale)], SURFACE_OUTLINE, 1.0 / max(1.0, scale))
                 self.draw_icon('CHEVRON', rect.x + rect.w / 2, rect.y + rect.h / 2, 12,
                                TEXT_ON_ACCENT if key=='SIMULATE_OPTIONS' else TEXT_SUB)
             elif key == 'GARMENT':
                 is_open = ed.card_kind in {'GARMENT', 'BODY'}
-                self.round_rect(rect, ACCENT_BG if is_open else (ELEVATED if hover else BG_WELL), radius=RADIUS_DOCK_ITEM)
+                self.round_rect(rect, ACCENT_BG if is_open else (ELEVATED if hover else BG_WELL), radius=metrics.toolbar_item)
                 self.draw_icon('GARMENT', rect.x + rect.w / 2, rect.y + rect.h / 2, 18, ACCENT if is_open else TEXT_SUB)
             else:
                 is_active = (key == ed.tool or
                              (key == 'DRAW' and ed.tool in {'RECTANGLE', 'POLYGON', 'ELLIPSE'}) or
                              (key == 'INTERNAL' and ed.tool in {'INTERNAL', 'DART', 'KNIFE'}) or
                              (key == 'PIN' and ed.tool in {'PIN', 'TACK'}))
-                btn_rad = RADIUS_DOCK_ITEM
                 if is_active or hover:
-                    self.round_rect(rect, ACCENT_BG if is_active else ELEVATED, radius=btn_rad)
-                self.draw_icon(icons.get(key, key), rect.x + rect.w / 2, rect.y + rect.h / 2, 18, ACCENT if is_active else TEXT_SUB)
+                    self.round_rect(rect, ACCENT_BG if is_active else ELEVATED, radius=metrics.toolbar_item)
+                self.draw_icon(icons.get(key, key), rect.x + rect.w / 2, rect.y + rect.h / 2, min(rect.w/scale*.8,rect.h/scale-1), ACCENT if is_active else TEXT_SUB)
             if hover and key != 'INSPECTOR_COLLAPSE':
                 position = (rect.x + rect.w + 8 * scale, rect.y + rect.h / 2)
                 if key in {'SIMULATE', 'KEEP'}:
@@ -968,51 +1006,68 @@ class Renderer:
             bg_col = (*tone, 0.42) if active_badge else (*tone, 0.18)
             border_col = (*tone, 0.92) if active_badge else (*tone, 0.48)
             text_col = TEXT
-            self.round_rect(rect, bg_col, radius=RADIUS_BADGE)
-            self.round_rect_outline(rect, border_col, radius=RADIUS_BADGE)
+            self.round_rect(rect, bg_col, radius=metrics.box)
+            self.round_rect_outline(rect, border_col, radius=metrics.box)
             self.text(rect.x + rect.w / 2, rect.y + 5 * scale, label, 10, text_col, True)
         cards = ed.visible_cards()
         card_tooltip = None
         for card in cards:
             rect, title, controls = card
-            self.round_rect(rect, SURFACE_FLOATING, radius=RADIUS_CARD)
-            self.round_rect_outline(rect, SURFACE_OUTLINE, radius=RADIUS_CARD)
+            is_menu = ed.card_kind in {'CANVAS_MENU', 'DRAW_CHOOSER', 'INTERNAL_CHOOSER', 'PIN_CHOOSER', 'PIECE_SIMULATION', 'PIECE_DENSITY', 'LIBRARY_TAGS', 'EDIT'} or (bool(ed.card_kind) and ed.card_kind.endswith('_MENU'))
+            self.round_rect(rect, SURFACE_FLOATING, radius=metrics.menu_back)
+            self.round_rect_outline(rect, SURFACE_OUTLINE, radius=metrics.menu_back)
             mode_rects = ed.card_mode_rects(rect)
             mode_items = list(mode_rects.items()) if isinstance(mode_rects, dict) else [(k, r) for k, _, r in mode_rects]
             if not mode_items:
-                self.text(rect.x + 14 * scale, rect.y + rect.h - 26 * scale, title, 13, TEXT, max_width=rect.w - 52 * scale)
+                self.text(rect.x + (8 if is_menu else 14) * scale, rect.y + rect.h - (19 if is_menu else 26) * scale, title, 11 if is_menu else 13, TEXT, max_width=rect.w - 52 * scale)
             if mode_items:
                 m_first = mode_items[0][1]
                 m_last = mode_items[-1][1]
                 m_track = Rect(m_first.x - 2 * scale, m_first.y - 2 * scale, (m_last.x + m_last.w - m_first.x) + 4 * scale, m_first.h + 4 * scale)
-                self.round_rect(m_track, BG_WELL, radius=RADIUS_BADGE + 1)
+                self.round_rect(m_track, BG_WELL, radius=metrics.box)
                 for m_kind, m_rect in mode_items:
                     m_active = ed.card_kind == m_kind
                     m_hover = m_rect.contains(*ed.pointer)
                     if m_active:
-                        self.round_rect(m_rect, ACCENT_BG, radius=RADIUS_BADGE)
+                        self.round_rect(m_rect, ACCENT_BG, radius=metrics.regular)
                     elif m_hover:
-                        self.round_rect(m_rect, ELEVATED, radius=RADIUS_BADGE)
+                        self.round_rect(m_rect, ELEVATED, radius=metrics.regular)
                     self.text(m_rect.x + m_rect.w / 2, m_rect.y + 5 * scale, m_kind.title(), 9,
                               ACCENT if m_active else (TEXT if m_hover else TEXT_SUB), True)
-            self.lines([(rect.x + 12 * scale, rect.y + rect.h - 38 * scale),
-                        (rect.x + rect.w - 12 * scale, rect.y + rect.h - 38 * scale)],
+            self.lines([(rect.x + (4 if is_menu else 12) * scale, rect.y + rect.h - (28 if is_menu else 38) * scale),
+                        (rect.x + rect.w - (4 if is_menu else 12) * scale, rect.y + rect.h - (28 if is_menu else 38) * scale)],
                        BORDER_SUBTLE, 1.0 / max(1.0, scale))
             close = ed.card_close_rect(rect)
             if close.contains(*ed.pointer):
-                self.round_rect(close, ELEVATED, radius=RADIUS_BADGE)
+                self.round_rect(close, ELEVATED, radius=metrics.regular)
                 card_tooltip = Tooltip(text='Close card', pos=(rect.x, close.y - 18 * scale), visible=True)
             self.draw_icon('CLOSE', close.x + close.w / 2, close.y + close.h / 2, 12, TEXT_SUB)
             for control, row in controls:
                 key = row[0]
                 hover = control.contains(*ed.pointer)
-                if key in {'CHOICES', 'CHOICES_FABRIC'}:
+                if key in {'LIBRARY_SEARCH', 'LIBRARY_NAME', 'LIBRARY_TAG_EDIT'}:
+                    field = {'LIBRARY_SEARCH': 'library_query', 'LIBRARY_NAME': 'dd_library_name', 'LIBRARY_TAG_EDIT': 'library_tags'}[key]
+                    editing = ed.library_edit and ed.library_edit['key'] == field
+                    if editing:
+                        cursor = ed.library_edit['cursor']
+                        value = ed.library_edit['text'][:cursor] + '|' + ed.library_edit['text'][cursor:]
+                    else:
+                        value = row[2]
+                    self.round_rect(control, BG_WELL, radius=metrics.text)
+                    self.round_rect_outline(control, ACCENT_BORDER if editing else BORDER_SUBTLE, radius=metrics.text)
+                    if key == 'LIBRARY_SEARCH':
+                        self.text(control.x + 8 * scale, control.y + 10 * scale, 'Search', 10, TEXT_SUB)
+                        self.text(control.x + 62 * scale, control.y + 10 * scale, value or 'Name, tag or body', 10, TEXT if value else MUTED, max_width=control.w - 72 * scale)
+                    else:
+                        self.text(control.x + 8 * scale, control.y + control.h - 15 * scale, row[1], 9, TEXT_SUB)
+                        self.text(control.x + 8 * scale, control.y + 8 * scale, value, 11, TEXT, max_width=control.w - 16 * scale)
+                elif key in {'CHOICES', 'CHOICES_FABRIC'}:
                     label, value = row[1], row[2]
                     prefix, choices, active = value
                     self.text(control.x + 4 * scale, control.y + control.h - 14 * scale, label, 10, TEXT_SUB)
                     choices_list = list(choices)
                     track_rect = Rect(control.x, control.y + 2 * scale, control.w, control.h - 19 * scale)
-                    self.round_rect(track_rect, BG_WELL, radius=RADIUS_CONTROL + 1)
+                    self.round_rect(track_rect, BG_WELL, radius=metrics.box)
                     if len(choices_list) <= 4:
                         choice_width = (control.w - 4 * scale) / max(1, len(choices_list))
                         for index, choice in enumerate(choices_list):
@@ -1020,9 +1075,9 @@ class Renderer:
                             c_active = choice == active
                             c_hover = chip.contains(*ed.pointer)
                             if c_active:
-                                self.round_rect(chip, ACCENT_BG, radius=RADIUS_CONTROL)
+                                self.round_rect(chip, ACCENT_BG, radius=metrics.regular)
                             elif c_hover:
-                                self.round_rect(chip, ELEVATED, radius=RADIUS_CONTROL)
+                                self.round_rect(chip, ELEVATED, radius=metrics.regular)
                             disp = choice.title() if (key == 'CHOICES_FABRIC' and str(choice).isupper()) else str(choice)
                             self.text(chip.x + chip.w / 2, chip.y + 6 * scale, disp, 10, ACCENT if c_active else (TEXT if c_hover else TEXT_SUB), True, max_width=chip.w - 4 * scale)
                     else:
@@ -1037,9 +1092,9 @@ class Renderer:
                             c_active = choice == active
                             c_hover = chip.contains(*ed.pointer)
                             if c_active:
-                                self.round_rect(chip, ACCENT_BG, radius=RADIUS_CONTROL)
+                                self.round_rect(chip, ACCENT_BG, radius=metrics.regular)
                             elif c_hover:
-                                self.round_rect(chip, ELEVATED, radius=RADIUS_CONTROL)
+                                self.round_rect(chip, ELEVATED, radius=metrics.regular)
                             disp = choice.title() if (key == 'CHOICES_FABRIC' and str(choice).isupper()) else str(choice)
                             self.text(chip.x + chip.w / 2, chip.y + 5 * scale, disp, 9, ACCENT if c_active else (TEXT if c_hover else TEXT_SUB), True, max_width=chip.w - 4 * scale)
                 elif key == 'PAIR_ACTIONS':
@@ -1053,20 +1108,22 @@ class Renderer:
                     dest2 = action2 in {'DELETE_PIECE', 'REMOVE_SEAM', 'REMOVE_ANCHOR'}
                     ink1 = (1, .55, .49, 1) if dest1 else ACCENT if h1 else TEXT
                     ink2 = (1, .55, .49, 1) if dest2 else ACCENT if h2 else TEXT
-                    self.round_rect(r1, ACCENT_BG if h1 else ELEVATED, radius=RADIUS_CONTROL)
-                    self.round_rect(r2, ACCENT_BG if h2 else ELEVATED, radius=RADIUS_CONTROL)
+                    self.round_rect(r1, ACCENT_BG if h1 else ELEVATED, radius=metrics.menu_item if is_menu else metrics.regular)
+                    self.round_rect(r2, ACCENT_BG if h2 else ELEVATED, radius=metrics.menu_item if is_menu else metrics.regular)
                     self.text(r1.x + r1.w / 2, r1.y + 7 * scale, label1, 10, ink1, True, max_width=r1.w - 8 * scale)
                     self.text(r2.x + r2.w / 2, r2.y + 7 * scale, label2, 10, ink2, True, max_width=r2.w - 8 * scale)
-                elif key.startswith('LOAD_'):
-                    idx_key = key[5:]
+                elif key.startswith(('LOAD_', 'PREVIEW_')):
+                    preview_only = key.startswith('PREVIEW_')
+                    idx_key = key.split('_', 1)[1]
                     display_name = row[1] if len(row) > 1 and row[1] else idx_key
-                    self.round_rect(control, ACCENT_BG if hover else BG_WELL, radius=RADIUS_CONTROL)
+                    self.round_rect(control, ACCENT_BG if hover else BG_WELL, radius=metrics.box)
                     thumb_pad = 6 * scale
-                    thumb_h = 52 * scale
+                    compact_tile = control.h < 84 * scale
+                    thumb_h = control.h - 12 * scale if preview_only else max(8 * scale, control.h - (30 if compact_tile else 48) * scale)
                     thumb = Rect(control.x + thumb_pad, control.y + control.h - thumb_h - thumb_pad,
                                  control.w - 2 * thumb_pad, thumb_h)
-                    self.round_rect(thumb, ELEVATED if hover else BG_BASE, radius=RADIUS_BADGE)
-                    meta = getattr(ed, 'library_previews', {}).get(idx_key) or getattr(ed, 'library_previews', {}).get(display_name) or {}
+                    self.round_rect(thumb, ELEVATED if hover else BG_BASE, radius=metrics.box)
+                    meta = ed.library_previews[ed.library_items[int(idx_key)]]
                     previews = meta.get('loops', meta.get('polys', [])) if isinstance(meta, dict) else (meta or [])
                     if previews:
                         all_x = [pt[0] for poly in previews for pt in poly]
@@ -1076,7 +1133,8 @@ class Renderer:
                             min_y, max_y = min(all_y), max(all_y)
                             span_x = max(1e-4, max_x - min_x)
                             span_y = max(1e-4, max_y - min_y)
-                            fit_scale = min((thumb.w - 8 * scale) / span_x, (thumb.h - 8 * scale) / span_y)
+                            preview_pad = min(4 * scale, thumb.h * .15)
+                            fit_scale = min((thumb.w - 2 * preview_pad) / span_x, (thumb.h - 2 * preview_pad) / span_y)
                             off_x = thumb.x + (thumb.w - span_x * fit_scale) / 2 - min_x * fit_scale
                             off_y = thumb.y + (thumb.h - span_y * fit_scale) / 2 - min_y * fit_scale
                             for poly in previews:
@@ -1090,19 +1148,17 @@ class Renderer:
                     else:
                         self.draw_icon('GARMENT', thumb.x + thumb.w / 2, thumb.y + thumb.h / 2, 20, MUTED)
                     name_max_w = control.w - 12 * scale
-                    self.text(control.x + 6 * scale, control.y + 20 * scale, display_name, 11, ACCENT if hover else TEXT, max_width=name_max_w)
-                    if isinstance(meta, dict) and 'seams' in meta:
-                        p_cnt = meta.get('pieces', len(previews))
-                        s_cnt = meta.get('seams', 0)
-                        sub = f"{p_cnt} pc{'s' if p_cnt != 1 else ''} · {s_cnt} seam{'s' if s_cnt != 1 else ''}"
-                    else:
-                        p_cnt = len(previews)
-                        sub = f"{p_cnt} piece{'s' if p_cnt != 1 else ''}"
-                    self.text(control.x + 6 * scale, control.y + 7 * scale, sub, 9, TEXT_MUTED, max_width=name_max_w)
+                    if preview_only:
+                        continue
+                    self.text(control.x + 6 * scale, control.y + (8 if compact_tile else 20) * scale, display_name, 11, ACCENT if hover else TEXT, max_width=name_max_w)
+                    p_cnt = meta['pieces']
+                    if not compact_tile:
+                        self.text(control.x + 6 * scale, control.y + 6 * scale, f"{p_cnt} {'piece' if p_cnt == 1 else 'pieces'} \u00b7 {meta['body']}", 9, TEXT_MUTED, max_width=name_max_w)
                 elif key == 'MENU':
                     menu_key, label = row[1], row[2]
                     value = row[3] if len(row) > 3 else ''
-                    self.round_rect(control, ACCENT_BG if hover else ELEVATED, radius=RADIUS_CONTROL)
+                    if hover or not is_menu:
+                        self.round_rect(control, ACCENT_BG if hover else ELEVATED, radius=metrics.menu_item if is_menu else metrics.regular)
                     val_str = str(value) if value else ''
                     blf.size(0, 10 * scale)
                     val_w = blf.dimensions(0, val_str)[0] if val_str else 0
@@ -1118,7 +1174,7 @@ class Renderer:
                     spec = SETTINGS[label]
                     editing = bool(ed.numeric and ed.numeric['key'] == label)
                     text = (ed.numeric['text'] + '|') if editing else (spec.display(getattr(ed._scene, label)) + ' ' + spec.unit)
-                    self.round_rect(control, ELEVATED, radius=RADIUS_CONTROL)
+                    self.round_rect(control, ELEVATED, radius=metrics.regular)
                     blf.size(0, 11 * scale)
                     val_w = blf.dimensions(0, text)[0]
                     val_x = control.x + control.w - 10 * scale - val_w
@@ -1143,14 +1199,15 @@ class Renderer:
                     reason = ed.action_blocker(key) if key not in {'INFO', 'NAME'} else ''
                     if hover and reason:
                         card_tooltip = Tooltip(text=reason, pos=(max(layout.panel.x + 10 * scale, rect.x - 180 * scale), control.y - 18 * scale), visible=True)
-                    if key != 'INFO':
-                        self.round_rect(control, ACCENT_BG if active else ELEVATED, radius=RADIUS_CONTROL)
+                    if key != 'INFO' and (not is_menu or active or hover):
+                        self.round_rect(control, ACCENT_BG if active or (is_menu and hover) else ELEVATED, radius=metrics.menu_item if is_menu else metrics.regular)
                     text = label
                     if key == 'NAME' and ed.numeric and ed.numeric['key'] == 'dd_library_name':
                         text = ed.numeric['text'] + '|'
                     destructive = key in {'DELETE', 'REMOVE_SEAM', 'REMOVE_ANCHOR', 'RESET', 'DELETE_PIECE'}
                     ink = MUTED if reason else (1, .55, .49, 1) if destructive else TEXT_MUTED if key == 'INFO' else (ACCENT if (active or hover) else TEXT)
-                    has_icon = active or key not in {'INFO', 'CUT', 'TRACE', 'SPLIT', 'CURVE', 'MERGE', 'DELETE', 'REMOVE_SEAM', 'REMOVE_ANCHOR', 'RESET', 'DELETE_PIECE', 'INSP_FIT', 'DUPLICATE', 'MIRROR_SEW', 'UNFOLD', 'FLIP_H', 'FLIP_V', 'ROTATE_CW', 'ROTATE_CCW', 'CLONE_LINKED', 'CLONE_BACK', 'TOGGLE_LINKED', 'BODY_CLEAR', 'REGENERATE_VOLUMES', 'SAVE_GARMENT_CUSTOM_PRESET', 'SAVE_PIECE_CUSTOM_PRESET', 'DELETE_CUSTOM_PRESET'}
+                    is_nav = key == 'MENU' or key.endswith('_MENU') or key.startswith('PAGE_') or key in {'LIBRARY_SAVE', 'LIBRARY_TAGS', 'MENU_LIBRARY', 'MENU_GARMENT'}
+                    has_icon = active or is_nav
                     icon_w = 22 * scale if has_icon else 10 * scale
                     val_str = str(value) if value and not active else ''
                     if control.h >= 38 * scale and val_str and not active:
@@ -1158,7 +1215,7 @@ class Renderer:
                         self.text(control.x + 8 * scale, control.y + 7 * scale, val_str, 9, TEXT_MUTED, max_width=control.w - 16 * scale)
                     else:
                         blf.size(0, 10 * scale)
-                        val_w = blf.dimensions(0, val_str)[0] if val_str else 0
+                        val_w = min(control.w * .62, blf.dimensions(0, val_str)[0]) if val_str else 0
                         val_x = control.x + control.w - icon_w - val_w
                         lbl_max = max(40 * scale, val_x - control.x - 8 * scale) if val_str else control.w - icon_w
                         row_y = control.y + (control.h - 10 * scale) / 2
@@ -1166,8 +1223,8 @@ class Renderer:
                         if active:
                             self.draw_icon('CHECK', control.x + control.w - 16 * scale, control.y + control.h / 2, 16, ACCENT)
                         elif val_str:
-                            self.text(val_x, row_y, val_str, 10, TEXT_SECONDARY if key == 'INFO' else TEXT_MUTED)
-                        elif has_icon:
+                            self.text(val_x, row_y, val_str, 10, TEXT_SECONDARY if key == 'INFO' else TEXT_MUTED, max_width=val_w)
+                        elif is_nav:
                             self.draw_icon('DISCLOSURE', control.x + control.w - 14 * scale, control.y + control.h / 2, 14, MUTED)
         if ed.confirm_action or ed.pending_edge or ed.chain_stage or ed.pending_place or ed.pending_tack or ed.dart_base:
             panel = layout.panel
@@ -1177,7 +1234,7 @@ class Renderer:
             panel = layout.panel
             width = min(460 * scale, max(120 * scale, panel.w - 360 * scale))
             toast = Rect(panel.x + 76 * scale, panel.y + 15 * scale, width, 30 * scale)
-            self.round_rect(toast, (.45, .12, .12, .96), radius=RADIUS_CONTROL)
+            self.round_rect(toast, (.45, .12, .12, .96), radius=metrics.tooltip)
             self.text(toast.x + 12 * scale, toast.y + 10 * scale, ed.error_message, 10, (1.0, .85, .85, 1.0), max_width=toast.w - 24 * scale)
         elif ed.message:
             if getattr(ed, 'toast_text', None) != ed.message:
@@ -1187,7 +1244,7 @@ class Renderer:
                 panel = layout.panel
                 width = min(420 * scale, max(80 * scale, panel.w - 390 * scale))
                 toast = Rect(panel.x + 76 * scale, panel.y + 15 * scale, width, 30 * scale)
-                self.round_rect(toast, (.105, .11, .115, .96), radius=RADIUS_CONTROL)
+                self.round_rect(toast, (.105, .11, .115, .96), radius=metrics.tooltip)
                 self.text(toast.x + 12 * scale, toast.y + 10 * scale, ed.toast_text, 10, TEXT_SUB, max_width=toast.w - 24 * scale)
         panel = layout.panel
         hint_clear = not any(rect.y <= panel.y + 78 * scale and rect.y + rect.h >= panel.y + 60 * scale
@@ -1196,9 +1253,9 @@ class Renderer:
             self.text(panel.x + 90 * scale, panel.y + 65 * scale, ed.tool_hint(), 11, MUTED,
                       max_width=panel.w - 440 * scale)
         if tooltip and not any(card[0].contains(*ed.pointer) for card in cards):
-            ComponentRenderer.draw_tooltip(self, Tooltip(text=tooltip[0], shortcut=tooltip[1], pos=tooltip[2], visible=True), scale)
+            ComponentRenderer.draw_tooltip(self, Tooltip(text=tooltip[0], shortcut=tooltip[1], pos=tooltip[2], visible=True), scale, metrics)
         if card_tooltip:
-            ComponentRenderer.draw_tooltip(self, card_tooltip, scale)
+            ComponentRenderer.draw_tooltip(self, card_tooltip, scale, metrics)
 
     def grid(self, view, c):
         step = grid_step(view.zoom)

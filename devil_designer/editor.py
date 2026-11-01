@@ -204,7 +204,10 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
             if r.type in {'ASSET_SHELF', 'ASSET_SHELF_HEADER'} and r.height > 1:
                 if region.y <= r.y < region.y + region.height / 2:
                     bottom = max(bottom, r.y + r.height - region.y)
-        scale = max(.5, bpy.context.preferences.system.ui_scale)
+        system_scale = getattr(bpy.context.preferences.system, 'ui_scale', 0.0)
+        if self.minimal_ui and system_scale <= 0.0:
+            system_scale = getattr(bpy.context.preferences.view, 'ui_scale', 1.0)
+        scale = max(.5, system_scale)
         position = tuple(v * scale for v in self.window_rect) if self.window_rect else None
         stage = getattr(self, 'stage', 'DRAFT')
         layout = Layout(region.width, region.height, scale, self.full, max(0, left), max(0, right), top, bottom,
@@ -615,6 +618,9 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                 return {'RUNNING_MODAL'}
         press = event.value == 'PRESS'
         if event.type == 'TIMER':
+            if self.minimal_ui and self.card_kind and self.card_kind.startswith('LIBRARY'):
+                self.refresh_library()
+                self._area.tag_redraw()
             self._timer_ticks = getattr(self, '_timer_ticks', 0) + 1
             if self._timer_ticks % 10 == 0 and self.update_reference(context):
                 self._area.tag_redraw()

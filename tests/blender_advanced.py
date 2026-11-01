@@ -81,7 +81,9 @@ check(len(result.vertex_groups)>=2,'finalize retains per-piece vertex groups')
 path=library.save(bpy.context,'Curve sample')
 data=json.loads(path.read_text())
 check('body_height_m' in data and 'document' in data,'portable garment contains design and refit metadata')
-check('Refit body' not in path.read_text(),'library does not bundle avatar names or meshes')
+check(data['library']['body']==body.name,'library records the chosen body label for visual browsing')
+check('Refit body' not in json.dumps({key:value for key,value in data.items() if key!='library'}) and
+      set(data['library'])=={'saved_at','body','tags','thumbnail'},'library stores only presentation metadata, never avatar objects or mesh data')
 old_height=garment.bounds(body)[1].z-garment.bounds(body)[0].z
 bpy.ops.mesh.primitive_uv_sphere_add(segments=16,ring_count=12,location=(2,0,1.8))
 new_body=bpy.context.object;new_body.name='Different refit body';new_body.scale=(.4,.2,.75)

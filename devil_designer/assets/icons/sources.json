@@ -1,28 +1,38 @@
 {
   "GRID": {
-    "collection": "Kenney Game Icons",
-    "file": "PNG/White/2x/menuGrid.png",
-    "sha256": "8afe8dea5bbc99f744482486a197983771afac1ef118aff0d9bd386d413a37c8"
+    "collection": "Blender built-in icons",
+    "icon": "ASSET_MANAGER",
+    "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880d3084d9d57c30031ed5df8b39dee/release/datafiles/icons_svg/asset_manager.svg",
+    "sha256": "1ddab43cf964ad15e91b0c5c04a55a0ddb10c24bf435473466caf21ed2bf7f02",
+    "license": "GPL-2.0-or-later"
   },
   "CLOSE": {
-    "collection": "Kenney Game Icons",
-    "file": "PNG/White/2x/cross.png",
-    "sha256": "8293e3758e7df2eb1c5bb8d6979cccc826e66c28f8c703e6cbb0a54a3c0efc33"
+    "collection": "Blender built-in icons",
+    "icon": "X",
+    "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880d3084d9d57c30031ed5df8b39dee/release/datafiles/icons_svg/x.svg",
+    "sha256": "7f0ae571ac217e45f033f8ac4fe46a499a521b6ca6e908ddb83ee3410a9f5c58",
+    "license": "GPL-2.0-or-later"
   },
   "PLAY": {
-    "collection": "Kenney Game Icons",
-    "file": "PNG/White/1x/forward.png",
-    "sha256": "c6cb584576c5a4638ad6f883ff14700071b56f0bb83980b15ffc1baf6576f03b"
+    "collection": "Blender built-in icons",
+    "icon": "PLAY",
+    "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880d3084d9d57c30031ed5df8b39dee/release/datafiles/icons_svg/play.svg",
+    "sha256": "354497080cdfdcc06206cf9dad004abc04530926e94da8f4c5ed77eae23fa5f4",
+    "license": "GPL-2.0-or-later"
   },
   "PAUSE": {
-    "collection": "Kenney Game Icons",
-    "file": "PNG/White/2x/pause.png",
-    "sha256": "5c940ad60dd46b3252d4f991f24e9c21865722fe401947830228629baed28774"
+    "collection": "Blender built-in icons",
+    "icon": "PAUSE",
+    "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880d3084d9d57c30031ed5df8b39dee/release/datafiles/icons_svg/pause.svg",
+    "sha256": "74e79096516749a8e486e47d102a7ed5097ed35d3b7891ef57d4c47f2b1c0db4",
+    "license": "GPL-2.0-or-later"
   },
   "FIT": {
-    "collection": "Kenney Game Icons",
-    "file": "PNG/White/2x/zoomDefault.png",
-    "sha256": "8fce35e732da436cda923853bcd01b63252e7caed8470055b8d5cf880f36a689"
+    "collection": "Blender built-in icons",
+    "icon": "ZOOM_SELECTED",
+    "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880d3084d9d57c30031ed5df8b39dee/release/datafiles/icons_svg/zoom_selected.svg",
+    "sha256": "2d70e3f1c7731f67b085e68c7a51a2fc1fcd9859c9c0f20d320ce0cb5fd153a7",
+    "license": "GPL-2.0-or-later"
   },
   "MORE": {
     "collection": "Kenney Game Icons",
@@ -30,69 +40,95 @@
     "sha256": "3b8529604d7c8a3a28aa39709b8838031c87062a8e5a5ee0087c7e9d0357a14d"
   },
   "SAVE": {
-    "collection": "Kenney Game Icons",
-    "file": "PNG/White/2x/save.png",
-    "sha256": "a8204ded82d12288c3510c8e0c0033e04f26958ef31aba3087f67288e3e1a7ed"
+    "collection": "Blender built-in icons",
+    "icon": "FILE_TICK",
+    "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880d3084d9d57c30031ed5df8b39dee/release/datafiles/icons_svg/file_tick.svg",
+    "sha256": "ee7b1058d51ba23378dbd25cb082ac1cff2f73c4bc2d3b3d7c886da0733e1d2e",
+    "license": "GPL-2.0-or-later"
   },
   "UNDO": {
-    "collection": "Kenney Game Icons",
-    "file": "PNG/White/2x/return.png",
-    "sha256": "99b425ec6d8e49633ddcea55e7485adf44a4ca8614abf39e59b7a83602ee3866"
+    "collection": "Blender built-in icons",
+    "icon": "LOOP_BACK",
+    "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880d3084d9d57c30031ed5df8b39dee/release/datafiles/icons_svg/loop_back.svg",
+    "sha256": "03c1f289ede0dbbde3fa5fecda293591180eb7216239ebaae2ecadbf15ed197e",
+    "license": "GPL-2.0-or-later"
   },
   "CHEVRON": {
-    "collection": "Kenney Game Icons",
-    "file": "PNG/White/2x/up.png",
-    "sha256": "04c1cf09316420b11cc6ca49950df43dc22be2bd4736ec897e1e102ed7e9edc0"
+    "collection": "Blender built-in icons",
+    "icon": "TRIA_UP",
+    "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880d3084d9d57c30031ed5df8b39dee/release/datafiles/icons_svg/tria_up.svg",
+    "sha256": "4e5adaf285c163f10aedc12c80c82e51828f7aed214b185f0c5b72b15557fe82",
+    "license": "GPL-2.0-or-later"
   },
   "DISCLOSURE": {
-    "collection": "Kenney Game Icons",
-    "file": "PNG/White/2x/arrowRight.png",
-    "sha256": "768d7d882448f78554b4a379b2e8f217403e073c9b1735744a8c92ba7d31005f"
+    "collection": "Blender built-in icons",
+    "icon": "DISCLOSURE_TRI_RIGHT",
+    "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880d3084d9d57c30031ed5df8b39dee/release/datafiles/icons_svg/disclosure_tri_right.svg",
+    "sha256": "fc578b2fa85b886f78fea7a60f30d15fc79351ff0e8d9162224086b62e98838a",
+    "license": "GPL-2.0-or-later"
   },
   "EXPAND": {
-    "collection": "Kenney Game Icons",
-    "file": "PNG/White/2x/larger.png",
-    "sha256": "6c4c23f0323d8a373c41be300d7ab59f82d35e1b1c3f2025e6cc20d71a624fac"
+    "collection": "Blender built-in icons",
+    "icon": "FULLSCREEN_ENTER",
+    "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880d3084d9d57c30031ed5df8b39dee/release/datafiles/icons_svg/fullscreen_enter.svg",
+    "sha256": "d921422d7c90088d549d2c2e7b546251ff53932faa07c8f805e90890f4d19cc4",
+    "license": "GPL-2.0-or-later"
   },
   "DOWN": {
-    "collection": "Kenney Game Icons",
-    "file": "PNG/White/2x/arrowDown.png",
-    "sha256": "187df6603922dbde3db15f0f28033e2f7e74435a017095d56cf617bf4eee6c59"
+    "collection": "Blender built-in icons",
+    "icon": "TRIA_DOWN",
+    "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880d3084d9d57c30031ed5df8b39dee/release/datafiles/icons_svg/tria_down.svg",
+    "sha256": "55cc02eb89143156100e074788e8313a69bff1ca1bc33675f77428b32dd3f483",
+    "license": "GPL-2.0-or-later"
   },
   "SETTINGS": {
-    "collection": "Kenney Game Icons",
-    "file": "PNG/White/2x/gear.png",
-    "sha256": "50b313ffe97db1733e529d5b0f5ac91eed5c0c8ffee1034bbb7766508e4f720c"
+    "collection": "Blender built-in icons",
+    "icon": "SETTINGS",
+    "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880d3084d9d57c30031ed5df8b39dee/release/datafiles/icons_svg/settings.svg",
+    "sha256": "57a0ec7ef8fca5d32d49ece992c220930b8c8fa7978bd4cc846521405d11a85a",
+    "license": "GPL-2.0-or-later"
   },
   "CHECK": {
-    "collection": "Kenney Game Icons",
-    "file": "PNG/White/2x/checkmark.png",
-    "sha256": "00e3025322ddb4948598b7fb8d385762073de7b2b534d2cfd44372072608a92a"
+    "collection": "Blender built-in icons",
+    "icon": "CHECKMARK",
+    "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880d3084d9d57c30031ed5df8b39dee/release/datafiles/icons_svg/checkmark.svg",
+    "sha256": "a9192f3d01de6e583476a3ce72668dd0b67e946a0b641b03c9499ce7f52b1dfa",
+    "license": "GPL-2.0-or-later"
   },
   "SELECT": {
-    "collection": "Kenney Game Icons Expansion",
-    "file": "PNG/White/2x/pointer.png",
-    "sha256": "dceca1a96ba7165cab435af0c834fa990f5440e9f53c67b315c87f84c6cb3a44"
+    "collection": "Blender built-in icons",
+    "icon": "OPS.GENERIC.SELECT",
+    "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880d3084d9d57c30031ed5df8b39dee/release/datafiles/icons/ops.generic.select.dat",
+    "sha256": "3f09dda7752731609385ee216288cc0ed416a0ee174efa34117130dd53fd7900",
+    "license": "GPL-2.0-or-later"
   },
   "POLYGON": {
-    "collection": "Kenney Game Icons Expansion",
-    "file": "PNG/White/2x/toolPencil.png",
-    "sha256": "0fc7ae86cf0782017a88e9fcec345b1c3f7a76ffb25455589deaaa30de999146"
+    "collection": "Blender built-in icons",
+    "icon": "OPS.GPENCIL.PRIMITIVE_POLYLINE",
+    "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880d3084d9d57c30031ed5df8b39dee/release/datafiles/icons/ops.gpencil.primitive_polyline.dat",
+    "sha256": "d071717a9bfe74e3737979ac8619f051d1658a56b8b9d28e1a2d1dc9500e08ef",
+    "license": "GPL-2.0-or-later"
   },
   "INTERNAL": {
-    "collection": "Kenney Game Icons Expansion",
-    "file": "PNG/White/2x/toolBrush.png",
-    "sha256": "48365f808b0e459889a77f6c3a13910e0b07d6f0f97ca072ea7e29b736faae0a"
+    "collection": "Blender built-in icons",
+    "icon": "OPS.CURVE.DRAW",
+    "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880d3084d9d57c30031ed5df8b39dee/release/datafiles/icons/ops.curve.draw.dat",
+    "sha256": "eb8572b4837645a62f714e13b12d80351a5418c9b729089b4f2dc297b1106d4d",
+    "license": "GPL-2.0-or-later"
   },
   "RECTANGLE": {
-    "collection": "mapbox/maki",
-    "url": "https://raw.githubusercontent.com/mapbox/maki/28e2a3602e4bde033a1dd388e86e9c117b425e34/icons/square-stroked.svg",
-    "sha256": "4ac4ed9f0683dbe9be370c0c19a9f87ae6006d74a04b79672991d92ae6774131"
+    "collection": "Blender built-in icons",
+    "icon": "OPS.GPENCIL.PRIMITIVE_BOX",
+    "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880d3084d9d57c30031ed5df8b39dee/release/datafiles/icons/ops.gpencil.primitive_box.dat",
+    "sha256": "11487a34115e894cc370f0f932d8dbab7d72ddd66d3404a9df0c79cc153f3cfa",
+    "license": "GPL-2.0-or-later"
   },
   "ELLIPSE": {
-    "collection": "mapbox/maki",
-    "url": "https://raw.githubusercontent.com/mapbox/maki/28e2a3602e4bde033a1dd388e86e9c117b425e34/icons/circle-stroked.svg",
-    "sha256": "c85d14562018b1a8ca39fe6ee83ce89a73834c02f8906bb029b5b38f4ab2262f"
+    "collection": "Blender built-in icons",
+    "icon": "OPS.GPENCIL.PRIMITIVE_CIRCLE",
+    "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880d3084d9d57c30031ed5df8b39dee/release/datafiles/icons/ops.gpencil.primitive_circle.dat",
+    "sha256": "22a9bcf107bc051100c8e635d4380c90024a166779f21845eaf858caa114e5e7",
+    "license": "GPL-2.0-or-later"
   },
   "DART": {
     "collection": "mapbox/maki",
@@ -110,14 +146,66 @@
     "sha256": "a60bc14c7aecbeca1380961599640a50c169a60e87de6fbd75f741962ce0adbe"
   },
   "PIN": {
-    "collection": "rapideditor/temaki",
-    "url": "https://raw.githubusercontent.com/rapideditor/temaki/6d9ac860d1d615d4449aab049f630d25d036c19e/icons/pin.svg",
-    "sha256": "09fc21ead99f63d2afd46c85ba56724adbf288258072699ab148d52c8659d2e0"
+    "collection": "Blender built-in icons",
+    "icon": "PINNED",
+    "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880d3084d9d57c30031ed5df8b39dee/release/datafiles/icons_svg/pinned.svg",
+    "sha256": "34b03f9436a3eb6e3e0dc6e1d8af06a01dbbda93f3d79906a3d36982aa485263",
+    "license": "GPL-2.0-or-later"
   },
   "REDO": {
-    "collection": "Kenney Game Icons",
-    "file": "PNG/White/2x/return.png",
-    "sha256": "99b425ec6d8e49633ddcea55e7485adf44a4ca8614abf39e59b7a83602ee3866",
-    "transform": "horizontal reflection"
+    "collection": "Blender built-in icons",
+    "icon": "LOOP_FORWARDS",
+    "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880d3084d9d57c30031ed5df8b39dee/release/datafiles/icons_svg/loop_forwards.svg",
+    "sha256": "e68758e7ae73abc7be363aba01e85f15df1488063134d452caf36de25f725a6f",
+    "license": "GPL-2.0-or-later"
+  },
+  "LIBRARY": {
+    "collection": "Blender built-in icons",
+    "icon": "ASSET_MANAGER",
+    "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880d3084d9d57c30031ed5df8b39dee/release/datafiles/icons_svg/asset_manager.svg",
+    "sha256": "1ddab43cf964ad15e91b0c5c04a55a0ddb10c24bf435473466caf21ed2bf7f02",
+    "license": "GPL-2.0-or-later"
+  },
+  "SNAP_ON": {
+    "collection": "Blender built-in icons",
+    "icon": "SNAP_ON",
+    "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880d3084d9d57c30031ed5df8b39dee/release/datafiles/icons_svg/snap_on.svg",
+    "sha256": "7d1b26c4dc296bf4e016b3e8b824014c3efdb11d511dd1c6630a0bc68966bcd8",
+    "license": "GPL-2.0-or-later"
+  },
+  "SNAP_OFF": {
+    "collection": "Blender built-in icons",
+    "icon": "SNAP_OFF",
+    "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880d3084d9d57c30031ed5df8b39dee/release/datafiles/icons_svg/snap_off.svg",
+    "sha256": "6e5682e8e3f9e2e46ed8512bc449a1d94742fca9d2c0ccc29963613758c5ccb8",
+    "license": "GPL-2.0-or-later"
+  },
+  "HIDE_OFF": {
+    "collection": "Blender built-in icons",
+    "icon": "HIDE_OFF",
+    "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880d3084d9d57c30031ed5df8b39dee/release/datafiles/icons_svg/hide_off.svg",
+    "sha256": "2b7b6445b7ea9d3a524351501d09f471540f223d8d3d35b485de3517b250de83",
+    "license": "GPL-2.0-or-later"
+  },
+  "HIDE_ON": {
+    "collection": "Blender built-in icons",
+    "icon": "HIDE_ON",
+    "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880d3084d9d57c30031ed5df8b39dee/release/datafiles/icons_svg/hide_on.svg",
+    "sha256": "8fd39f0bb7e0b43005b5dcd3dbd9afaec43acc8b7eaae6ef9050717de240559a",
+    "license": "GPL-2.0-or-later"
+  },
+  "KNIFE": {
+    "collection": "Blender built-in icons",
+    "icon": "OPS.MESH.KNIFE_TOOL",
+    "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880d3084d9d57c30031ed5df8b39dee/release/datafiles/icons/ops.mesh.knife_tool.dat",
+    "sha256": "8fec9a897bb43f07ec691f0aaffcc9943884250cf2d98f44db68872fc9e95e20",
+    "license": "GPL-2.0-or-later"
+  },
+  "RULER": {
+    "collection": "Blender built-in icons",
+    "icon": "OPS.VIEW3D.RULER",
+    "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880d3084d9d57c30031ed5df8b39dee/release/datafiles/icons/ops.view3d.ruler.dat",
+    "sha256": "c3cc4544b73d8546460457fe157cb079a77af16bfbb27f84d2360772fcb99570",
+    "license": "GPL-2.0-or-later"
   }
 }

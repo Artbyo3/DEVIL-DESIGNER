@@ -80,6 +80,8 @@ def prepare():
         content = urllib.request.urlopen('https://raw.githubusercontent.com/' + repository + '/main/' + filename).read()
         (destination / (repository.split('/')[1].upper() + '-LICENSE.txt')).write_bytes(content)
     print('Prepared', len(geometry), 'sourced CC0 icons')
+    from prepare_blender_icons import prepare as prepare_blender
+    prepare_blender()
 
 
 if __name__ == '__main__':

@@ -1,7 +1,25 @@
 import math
+try:
+    import blf
+except ImportError:
+    blf = None
 import bpy
 from .canvas import Rect
 from . import layering
+from .ui_system import MinimalMetrics
+from .controls import CONTROL_SETTINGS
+
+
+def text_unscaled_width(text, size=11):
+    if not text:
+        return 0.0
+    if blf:
+        try:
+            blf.size(0, size)
+            return blf.dimensions(0, str(text))[0]
+        except Exception:
+            pass
+    return len(str(text)) * (size * 0.6)
 
 
 DENSITY = {'Coarse': .04, 'Standard': .02, 'Fine': .01}
@@ -18,41 +36,45 @@ def minimal_layout(layout, pending=False, confirmation=False, playing=False, kep
     layout.minimal = True
     layout.inspector = None
     layout.inspector_collapsed = True
+    layout.metrics = MinimalMetrics.resolve()
     layout.header = Rect(round(panel.x), round(panel.y + panel.h - 32 * scale), round(panel.w), round(32 * scale))
     layout.footer = Rect(round(panel.x), round(panel.y), round(panel.w), 0)
-    dock_height = round(min(328 * scale, panel.h - 112 * scale))
-    dock_width = round(44 * scale)
-    dock_x = round(panel.x + 14 * scale)
+    tool_pitch = min(35, max(24, (panel.h / scale - 156) / 8))
+    dock_height = round((8 * tool_pitch + 50) * scale)
+    dock_width = round(56 * scale)
+    dock_x = round(panel.x + 6 * scale)
     dock_y = round(panel.y + (panel.h - dock_height) / 2)
     layout.rail = Rect(dock_x, dock_y, dock_width, dock_height)
     layout.buttons = {}
     tools = [('SELECT', 'Select'), ('DRAW', 'Draw'), ('INTERNAL', 'Internal'), ('SEW', 'Sew'),
              ('PIN', 'Pin'), ('UNDO', 'Undo'), ('REDO', 'Redo'), ('LIBRARY', 'Library')]
-    ind_w = round((dock_width - 8 * scale - 2 * scale) / 2)
+    col_w = round(40 * scale)
+    col_pad = round(8 * scale)
+    tool_x = round(layout.rail.x + col_pad)
+    ind_w = round((col_w - 2 * scale) / 2)
     ind_h = round(16 * scale)
     cluster_gap = round(6 * scale)
     top_pad = round(4 * scale)
     bottom_pad = round(4 * scale)
-    btn_h = round(32 * scale)
+    btn_h = round(tool_pitch * scale)
     tools_top = layout.rail.y + dock_height - top_pad
     for index, (key, label) in enumerate(tools):
         gap_offset = cluster_gap if index >= 5 else 0
         btn_y = round(tools_top - (index + 1) * btn_h - gap_offset)
-        layout.buttons[key] = (Rect(round(layout.rail.x + 4 * scale), btn_y,
-            round(dock_width - 8 * scale), round(btn_h - 2 * scale)), label)
+        layout.buttons[key] = (Rect(tool_x, btn_y, col_w, round(btn_h - 2 * scale)), label)
     chip_y1 = round(layout.rail.y + bottom_pad + ind_h + 2 * scale)
     chip_y0 = round(layout.rail.y + bottom_pad)
-    layout.buttons['TOGGLE_SNAP'] = (Rect(round(layout.rail.x + 4 * scale), chip_y1, ind_w, ind_h), 'Snap')
-    layout.buttons['TOGGLE_GUIDE'] = (Rect(round(layout.rail.x + 4 * scale + ind_w + 2 * scale), chip_y1, ind_w, ind_h), 'Guide')
-    layout.buttons['TOGGLE_LENGTHS'] = (Rect(round(layout.rail.x + 4 * scale), chip_y0, ind_w, ind_h), 'Lengths')
-    layout.buttons['TOGGLE_FIT_MAP'] = (Rect(round(layout.rail.x + 4 * scale + ind_w + 2 * scale), chip_y0, ind_w, ind_h), 'Fit map')
+    layout.buttons['TOGGLE_SNAP'] = (Rect(tool_x, chip_y1, ind_w, ind_h), 'Snap')
+    layout.buttons['TOGGLE_GUIDE'] = (Rect(round(tool_x + ind_w + 2 * scale), chip_y1, ind_w, ind_h), 'Guide')
+    layout.buttons['TOGGLE_LENGTHS'] = (Rect(tool_x, chip_y0, ind_w, ind_h), 'Lengths')
+    layout.buttons['TOGGLE_FIT_MAP'] = (Rect(round(tool_x + ind_w + 2 * scale), chip_y0, ind_w, ind_h), 'Fit map')
     right = round(panel.x + panel.w - 14 * scale)
     layout.buttons['CLOSE'] = (Rect(round(right - 24 * scale), round(panel.y + panel.h - 30 * scale), round(24 * scale), round(24 * scale)), 'Close')
     right -= round(28 * scale)
     if not layout.full:
         right -= round(88 * scale)
         layout.buttons['RESTORE_CANVAS'] = (Rect(right, round(panel.y + panel.h - 30 * scale), round(82 * scale), round(24 * scale)), 'Full canvas')
-    layout.buttons['GARMENT'] = (Rect(round(panel.x + 14 * scale), round(panel.y + panel.h - 36 * scale), dock_width, round(30 * scale)), 'Garment')
+    layout.buttons['GARMENT'] = (Rect(tool_x, round(panel.y + panel.h - 36 * scale), col_w, round(30 * scale)), 'Garment')
     layout.canvas = Rect(round(panel.x + 4 * scale), round(panel.y + 4 * scale), round(panel.w - 8 * scale), round(panel.h - 8 * scale))
     bottom = round(panel.y + 14 * scale)
     right = round(panel.x + panel.w - 14 * scale)
@@ -60,17 +82,17 @@ def minimal_layout(layout, pending=False, confirmation=False, playing=False, kep
     if pending:
         specs = [('FINISH_DRAFT', 'Finish'), ('CANCEL_DRAFT', 'Cancel')]
     if confirmation:
-        specs = [('CONFIRM_ACTION', 'Confirm'), ('CANCEL_ACTION', 'Go back')]
+        specs = [('CONFIRM_ACTION', 'Confirm'), ('CANCEL_ACTION', 'Cancel')]
     for key, label in specs:
         width = round(142 * scale)
         right -= width
-        layout.buttons[key] = (Rect(right, bottom, width, round(40 * scale)), label)
+        layout.buttons[key] = (Rect(right, bottom, width, round(28 * scale)), label)
         if key == 'KEEP':
-            layout.buttons['KEEP_OPTIONS'] = (Rect(right + 112 * scale, bottom, 30 * scale, 40 * scale), 'Options')
-            layout.buttons['KEEP'] = (Rect(right, bottom, 112 * scale, 40 * scale), label)
+            layout.buttons['KEEP_OPTIONS'] = (Rect(right + 112 * scale, bottom, 30 * scale, 28 * scale), 'Options')
+            layout.buttons['KEEP'] = (Rect(right, bottom, 112 * scale, 28 * scale), label)
         elif key == 'SIMULATE' and kept:
-            layout.buttons['SIMULATE_OPTIONS'] = (Rect(right + 112 * scale, bottom, 30 * scale, 40 * scale), 'Wear over')
-            layout.buttons['SIMULATE'] = (Rect(right, bottom, 112 * scale, 40 * scale), label)
+            layout.buttons['SIMULATE_OPTIONS'] = (Rect(right + 112 * scale, bottom, 30 * scale, 28 * scale), 'Wear over')
+            layout.buttons['SIMULATE'] = (Rect(right, bottom, 112 * scale, 28 * scale), label)
         right -= 8 * scale
 
 
@@ -86,6 +108,14 @@ class MinimalCards:
         self.card_models = []
         self.library_items = []
         self.library_previews = {}
+        self.library_query = ''
+        self.library_filter = ''
+        self.library_tags = ''
+        self.library_edit = None
+        self.library_preview_path = None
+        self.library_load_path = None
+        self.library_load_signature = None
+        self.library_error = ''
         self.toast_message = ''
         self.toast_until = 0
         self._scene.dd_reference_visible = False
@@ -141,6 +171,7 @@ class MinimalCards:
         return badges
 
     def show_card(self, kind, anchor=None):
+        self.library_edit = None
         self.card_kind = kind
         self.card_anchor = anchor or self.pointer
         self.card_page = 0
@@ -148,8 +179,50 @@ class MinimalCards:
         self.search_active = False
         self.context_anchor = None
         self.settings_open = False
-        if kind == 'LIBRARY':
+        if kind.startswith('LIBRARY'):
             self.refresh_library()
+
+    def library_matches(self):
+        query=self.library_query.casefold().strip()
+        return [(index,path) for index,path in enumerate(self.library_items)
+                if (not self.library_filter or self.library_filter in self.library_previews[path]['tags']) and
+                (not query or query in ' '.join([self.library_previews[path]['name'],
+                    self.library_previews[path]['body'],*self.library_previews[path]['tags']]).casefold())]
+
+    def library_page_size(self):
+        return 4 if self.canvas_layout.panel.h/self.canvas_layout.scale>=560 else 2
+
+    def library_text_event(self,event):
+        edit=self.library_edit
+        if not edit:return None
+        if event.value!='PRESS':return None
+        if event.type in {'ESC','RIGHTMOUSE'}:
+            if edit['key']=='library_query':self.library_query=edit['original']
+            self.library_edit=None
+            return {'RUNNING_MODAL'}
+        if event.type in {'RET','NUMPAD_ENTER','LEFTMOUSE'}:
+            target=self._scene if edit['key']=='dd_library_name' else self
+            setattr(target,edit['key'],edit['text'])
+            self.library_edit=None
+            self.card_page=0
+            return None if event.type=='LEFTMOUSE' else {'RUNNING_MODAL'}
+        if event.ctrl and event.type=='A':edit['selected']=True
+        elif event.type in {'LEFT_ARROW','RIGHT_ARROW','HOME','END'}:
+            edit['cursor']=0 if event.type=='HOME' else len(edit['text']) if event.type=='END' else max(0,min(len(edit['text']),edit['cursor']+(-1 if event.type=='LEFT_ARROW' else 1)))
+            edit['selected']=False
+        elif event.type in {'BACK_SPACE','DEL'}:
+            text,cursor=edit['text'],edit['cursor']
+            if edit['selected']:text='';cursor=0
+            elif event.type=='BACK_SPACE' and cursor>0:text=text[:cursor-1]+text[cursor:];cursor-=1
+            elif event.type=='DEL':text=text[:cursor]+text[cursor+1:]
+            edit.update(text=text,cursor=cursor)
+            edit['selected']=False
+        elif getattr(event,'unicode','') and not event.ctrl and not event.alt:
+            text,cursor=('',0) if edit['selected'] else (edit['text'],edit['cursor'])
+            edit.update(text=(text[:cursor]+event.unicode+text[cursor:])[:160],cursor=min(160,cursor+len(event.unicode)),selected=False)
+        if edit['key']=='library_query':
+            self.library_query=edit['text'];self.card_page=0
+        return {'RUNNING_MODAL'}
 
     def body_page_size(self):
         has_regen = self._scene.dd_avatar is not None and not self.pending_simulation
@@ -177,9 +250,9 @@ class MinimalCards:
             if not doc.patterns:
                 rows.append(('PAIR_ACTIONS', 'STARTER_TEE', 'REFERENCE_IMAGE', 'Tee starter', 'Trace image'))
             elif has_sim:
-                rows.append(('PAIR_ACTIONS', 'LIBRARY_SAVE', 'RESET', 'Save garment', 'Reset drape'))
+                rows.append(('PAIR_ACTIONS', 'LIBRARY_SAVE', 'RESET', 'Save As...', 'Reset drape'))
             else:
-                rows.append(('PAIR_ACTIONS', 'LIBRARY_SAVE', 'REFERENCE_IMAGE', 'Save garment', 'Trace image'))
+                rows.append(('PAIR_ACTIONS', 'LIBRARY_SAVE', 'REFERENCE_IMAGE', 'Save As...', 'Trace image'))
         elif kind == 'BODY':
             title = 'Body'
             self.card_models = sorted((obj for obj in scene.objects if obj.type == 'MESH' and not obj.get('dd_kind')), key=lambda obj: obj.name.casefold())
@@ -213,32 +286,44 @@ class MinimalCards:
                 rows.append(('REGENERATE_VOLUMES', 'Regenerate body volumes', 'Resets point edits'))
         elif kind == 'LIBRARY':
             title = 'Garment library'
-            import json
-            from .core import Document
-            for idx, item in enumerate(self.library_items):
-                if item not in self.library_previews:
-                    try:
-                        data = json.loads(item.read_text(encoding='utf-8'))
-                        doc_data = data.get('document', {})
-                        loaded = Document.loads(json.dumps(doc_data))
-                        loops = [pat.outline() for pat in loaded.patterns if pat.outline()]
-                        self.library_previews[item] = dict(
-                            loops=loops,
-                            pieces=len(loaded.patterns),
-                            seams=len(loaded.seams),
-                            fabric=getattr(loaded, 'preset', 'COTTON').title(),
-                        )
-                    except Exception:
-                        self.library_previews[item] = dict(loops=[], pieces=0, seams=0, fabric='Cotton')
-                self.library_previews[str(idx)] = self.library_previews[item]
-            max_pages = max(1, math.ceil(len(self.library_items) / 4))
+            matches=self.library_matches()
+            page_size=self.library_page_size()
+            max_pages = max(1, math.ceil(len(matches) / page_size))
             self.card_page = max(0, min(self.card_page, max_pages - 1))
-            rows = [('LOAD_' + str(index), item.stem.replace('.garment', ''), 'Load')
-                    for index, item in enumerate(self.library_items)
-                    if self.card_page * 4 <= index < (self.card_page + 1) * 4]
-            if len(self.library_items) > 4:
-                rows.append(('PAGE_LIBRARY', f'More garments ({self.card_page + 1}/{max_pages})', 'Next'))
-            rows.append(('LIBRARY_SAVE', 'Save current garment', ''))
+            rows=[('LIBRARY_SEARCH','Search',self.library_query),
+                  ('MENU','LIBRARY_TAGS','Tags',self.library_filter or 'All tags')]
+            rows.extend(('LOAD_'+str(index),self.library_previews[path]['name'],'Preview')
+                        for index,path in matches[self.card_page*page_size:(self.card_page+1)*page_size])
+            if not matches:rows.append(('INFO','Library unavailable' if self.library_error else 'No matching garments' if self.library_items else 'No saved garments',self.library_error or 'Clear search or save a design'))
+            if max_pages>1:rows.append(('PAGE_LIBRARY',f'Page {self.card_page+1} of {max_pages}','Next'))
+            rows.append(('LIBRARY_SAVE','Save As...','Choose a name and tags'))
+        elif kind == 'LIBRARY_TAGS':
+            title='Filter by tag'
+            tags=sorted({tag for metadata in self.library_previews.values() for tag in metadata['tags']},key=str.casefold)
+            rows=[('LIBRARY_TAG_ALL','All tags','')]
+            start=self.card_page*6
+            rows.extend(('LIBRARY_TAG_'+str(index),tag,'Selected' if tag==self.library_filter else '')
+                        for index,tag in enumerate(tags) if start<=index<start+6)
+            if len(tags)>6:rows.append(('PAGE_LIBRARY_TAGS','More tags','Next'))
+        elif kind == 'LIBRARY_SAVE':
+            title = 'Save garment'
+            rows = [('LIBRARY_NAME', 'Garment name', scene.dd_library_name),
+                    ('LIBRARY_TAG_EDIT', 'Tags', self.library_tags or 'Comma separated'),
+                    ('LIBRARY_WRITE', 'Save', ''),
+                    ('MENU_LIBRARY', 'Cancel', '')]
+        elif kind == 'LIBRARY_PREVIEW':
+            metadata=self.library_previews.get(self.library_preview_path)
+            title='Garment preview'
+            if metadata:
+                index=self.library_items.index(self.library_preview_path)
+                rows=[('PREVIEW_'+str(index),metadata['name'],''),
+                      ('INFO',metadata['name'],f"{metadata['pieces']} pieces | {metadata['seams']} seams"),
+                      ('INFO','Body',metadata['body']),('INFO','Saved',metadata['date']),
+                      ('INFO','Tags',', '.join(metadata['tags']) or 'No tags')]
+                if metadata['error']:rows.append(('INFO','Cannot load',metadata['error']))
+                else:rows.append(('LIBRARY_ACCEPT_LOAD','Load garment','Refit to current body height' if scene.dd_library_refit else 'Keep saved size'))
+            else:rows=[('INFO','Garment no longer available','Choose another design')]
+            rows.append(('MENU_LIBRARY','Back to library',''))
         elif kind == 'SIMULATE':
             title = 'Wear over'
             self.card_models = layering.kept_garments(scene)
@@ -486,40 +571,98 @@ class MinimalCards:
             return None
 
         scale = self.canvas_layout.scale
+        is_menu = kind in {'CANVAS_MENU', 'DRAW_CHOOSER', 'INTERNAL_CHOOSER', 'PIN_CHOOSER',
+                           'PIECE_SIMULATION', 'PIECE_DENSITY', 'LIBRARY_TAGS', 'EDIT'} or kind.endswith('_MENU')
+        row_widths = []
+        for r in rows:
+            r_key = r[0]
+            label = r[1] if len(r) > 1 else ''
+            val = r[2] if len(r) > 2 else ''
+            if r_key == 'MENU':
+                label = r[2]
+                val = r[3] if len(r) > 3 else ''
+            elif r_key == 'SLIDER':
+                spec = CONTROL_SETTINGS[r[1]]
+                label = r[2]
+                val = spec.display(getattr(scene, r[1])) + ' ' + spec.unit
+            val_str = str(val) if val and val != 'Selected' and not isinstance(val, tuple) else ''
+            if r_key == 'CHOICES_FABRIC' and isinstance(val, tuple) and len(val) >= 2:
+                row_widths.append(sum(text_unscaled_width(str(c), 10) + 16 for c in val[1][:4]) + 30)
+            elif r_key == 'CHOICES' and isinstance(val, tuple) and len(val) >= 2:
+                row_widths.append(sum(text_unscaled_width(str(c), 10) + 16 for c in val[1]) + 30)
+            elif r_key == 'PAIR_ACTIONS' and len(r) >= 5:
+                row_widths.append(text_unscaled_width(r[3], 10) + text_unscaled_width(r[4], 10) + 48)
+            elif r_key == 'SLIDER':
+                row_widths.append(text_unscaled_width(label, 10) + text_unscaled_width(val_str, 11) + 44)
+            elif r_key == 'MENU':
+                row_widths.append(text_unscaled_width(label, 11) + text_unscaled_width(val_str, 10) + 58)
+            else:
+                has_nav = r_key == 'MENU' or r_key.endswith('_MENU') or r_key.startswith('PAGE_') or r_key in {'LIBRARY_SAVE', 'LIBRARY_TAGS', 'MENU_LIBRARY', 'MENU_GARMENT'}
+                icon_w = 24 if (val == 'Selected' or has_nav) else 10
+                row_widths.append(text_unscaled_width(label, 11) + (text_unscaled_width(val_str, 10) + 16 if val_str else 0) + icon_w + 32)
+        if title:
+            row_widths.append(text_unscaled_width(title, 13) + 60)
+
         card_widths = {
             'GARMENT_FABRIC': 304,
             'PIECE_FABRIC': 304,
-            'LIBRARY': 380,
-            'GARMENT': 296,
-            'BODY': 296,
-            'PIECE': 286,
-            'CANVAS_MENU': 284,
-            'MULTI_SELECTION': 268,
+            'LIBRARY': 480,
+            'LIBRARY_PREVIEW': 420,
+            'LIBRARY_SAVE': 360,
         }
-        target_w = card_widths.get(kind, 256)
+        nominal = card_widths.get(kind, 180 if is_menu else 280)
+        target_w = max(nominal, max(row_widths) if row_widths else nominal)
         width = round(min(target_w * scale, self.canvas_layout.panel.w - 24 * scale))
+        bounds = self.canvas_layout.panel
+        max_card_h = max(1, math.floor(bounds.h - 16 * scale))
+        anchor_pt = self.card_anchor or (bounds.x + 80 * scale, bounds.y + bounds.h - 100 * scale)
+
+        def card_bounds(height):
+            bottom_pad, top_pad = (58, 34) if height <= bounds.h - 92 * scale else (8, 8)
+            card_x = round(max(bounds.x + 8 * scale, min(anchor_pt[0], bounds.x + bounds.w - width - 8 * scale)))
+            card_y = round(max(bounds.y + bottom_pad * scale, min(anchor_pt[1] - height, bounds.y + bounds.h - height - top_pad * scale)))
+            return Rect(card_x, card_y, width, height)
+
         row_heights = []
         row_gaps = []
         if kind == 'LIBRARY':
-            load_rows = [r for r in rows if r[0].startswith('LOAD_')]
-            other_rows = [r for r in rows if not r[0].startswith('LOAD_')]
-            grid_rows = math.ceil(len(load_rows) / 2)
-            grid_h = round(grid_rows * 96 * scale + (grid_rows - 1) * 6 * scale if grid_rows > 0 else 0)
-            other_h = round(sum(34 * scale for _ in other_rows))
-            height = round(48 * scale + grid_h + other_h)
-            if height > self.canvas_layout.panel.h - 50 * scale:
-                height = round(self.canvas_layout.panel.h - 50 * scale)
             bounds = self.canvas_layout.panel
-            anchor_pt = self.card_anchor or (bounds.x + 80 * scale, bounds.y + bounds.h - 100 * scale)
-            card_x = round(max(bounds.x + 8 * scale, min(anchor_pt[0], bounds.x + bounds.w - width - 8 * scale)))
-            card_y = round(max(bounds.y + 58 * scale, min(anchor_pt[1] - height, bounds.y + bounds.h - height - 34 * scale)))
-            rect = Rect(card_x, card_y, width, height)
+            load_rows = [r for r in rows if r[0].startswith('LOAD_')]
+            header_rows = rows[:2]
+            other_rows = [r for r in rows[2:] if not r[0].startswith('LOAD_')]
+            grid_rows = math.ceil(len(load_rows) / 2)
+            tile_nominal_h = 168
+            max_card_h = max(1, min(max_card_h, math.floor(bounds.h - 92 * scale)))
+            compact = max_card_h / scale < 380
+            row_pitch = 26 if compact else 34
+            other_h = round(sum(row_pitch * scale for _ in other_rows))
+            header_h = round(sum(row_pitch * scale for _ in header_rows))
+            fixed_h = round(48 * scale + header_h + other_h)
+            avail_grid_h = max(0, max_card_h - fixed_h)
+            if grid_rows > 0:
+                needed_grid_h = round(grid_rows * tile_nominal_h * scale + (grid_rows - 1) * 6 * scale)
+                if needed_grid_h > avail_grid_h:
+                    tile_h = max(1, int((avail_grid_h - (grid_rows - 1) * 6 * scale) / grid_rows))
+                    grid_h = round(grid_rows * tile_h + (grid_rows - 1) * 6 * scale)
+                else:
+                    tile_h = round(tile_nominal_h * scale)
+                    grid_h = needed_grid_h
+            else:
+                tile_h = round(tile_nominal_h * scale)
+                grid_h = 0
+            height = round(fixed_h + grid_h)
+            if height > max_card_h:
+                height = max_card_h
+            rect = card_bounds(height)
+            card_x, card_y = rect.x, rect.y
             controls = []
             top = round(card_y + height - 42 * scale)
             inner_w = round(width - 20 * scale)
+            for row in header_rows:
+                top -= round(row_pitch * scale)
+                controls.append((Rect(round(card_x + 10 * scale), top, inner_w, round((row_pitch - 4) * scale)), row))
             col_gap = round(8 * scale)
             col_w = round((inner_w - col_gap) / 2)
-            tile_h = round(96 * scale)
             for idx, r in enumerate(load_rows):
                 r_idx = idx // 2
                 c_idx = idx % 2
@@ -528,8 +671,27 @@ class MinimalCards:
                 controls.append((Rect(x, y, col_w, tile_h), r))
             top_other = round((top - grid_h - 6 * scale) if grid_rows > 0 else top)
             for r in other_rows:
-                top_other -= round(34 * scale)
-                controls.append((Rect(round(card_x + 10 * scale), top_other, inner_w, round(30 * scale)), r))
+                top_other -= round(row_pitch * scale)
+                controls.append((Rect(round(card_x + 10 * scale), top_other, inner_w, round((row_pitch - 4) * scale)), r))
+            return rect, title, controls
+        if is_menu:
+            menu_heights = [48 if row[0] == 'CHOICES' else 24 if row[0] == 'PAIR_ACTIONS' else 20 for row in rows]
+            gap = 2
+            inner_pad = round(4 * scale)
+            item_w = round(width - 2 * inner_pad)
+            title_h = round(32 * scale)
+            content_h = round((sum(menu_heights) + max(0, len(rows) - 1) * gap + 4) * scale)
+            height = round(title_h + content_h)
+            rect = card_bounds(height)
+            card_x, card_y = rect.x, rect.y
+            controls = []
+            top = round(card_y + height - title_h)
+            rg = round(gap * scale)
+            for row, row_h in zip(rows, menu_heights):
+                rh = round(row_h * scale)
+                top -= rh
+                controls.append((Rect(round(card_x + inner_pad), top, item_w, rh), row))
+                top -= rg
             return rect, title, controls
         for idx, row in enumerate(rows):
             r_key = row[0]
@@ -542,6 +704,10 @@ class MinimalCards:
                 row_heights.append(math.ceil(len(row[2][1]) / 3) * 24 + 22 if len(row[2][1]) > 4 else 42)
             elif r_key == 'CHOICES':
                 row_heights.append(48)
+            elif r_key.startswith('PREVIEW_'):
+                row_heights.append(180 if self.canvas_layout.panel.h / scale >= 560 else 130)
+            elif r_key in {'LIBRARY_NAME', 'LIBRARY_TAG_EDIT'}:
+                row_heights.append(46)
             elif r_key == 'INFO':
                 row_heights.append(22)
             elif r_key in {'REGENERATE_VOLUMES', 'TRACE_PICK'}:
@@ -552,14 +718,15 @@ class MinimalCards:
             avail = self.canvas_layout.panel.h / scale - 130 - sum(row_gaps)
             row_height = min(30, avail / max(1, len(rows)))
             row_heights = [22 if r[0] == 'INFO' else max(24, row_height) for r in rows]
+        excess = max(0, 48 + sum(row_heights) + sum(row_gaps) - max_card_h / scale)
+        for index, row in enumerate(rows):
+            if row[0].startswith('PREVIEW_'):
+                reduction = min(excess, max(0, row_heights[index] - 32))
+                row_heights[index] -= reduction
+                excess -= reduction
         height = round((48 + sum(row_heights) + sum(row_gaps)) * scale)
-        if height > self.canvas_layout.panel.h - 50 * scale:
-            height = round(self.canvas_layout.panel.h - 50 * scale)
-        bounds = self.canvas_layout.panel
-        anchor_pt = self.card_anchor or (bounds.x + 80 * scale, bounds.y + bounds.h - 100 * scale)
-        card_x = round(max(bounds.x + 8 * scale, min(anchor_pt[0], bounds.x + bounds.w - width - 8 * scale)))
-        card_y = round(max(bounds.y + 58 * scale, min(anchor_pt[1] - height, bounds.y + bounds.h - height - 34 * scale)))
-        rect = Rect(card_x, card_y, width, height)
+        rect = card_bounds(height)
+        card_x, card_y = rect.x, rect.y
         controls = []
         top = round(card_y + height - 42 * scale)
         for row, row_h, gap in zip(rows, row_heights, row_gaps):
@@ -574,6 +741,9 @@ class MinimalCards:
 
     def card_close_rect(self, rect):
         scale = self.canvas_layout.scale
+        is_menu = self.card_kind in {'CANVAS_MENU', 'DRAW_CHOOSER', 'INTERNAL_CHOOSER', 'PIN_CHOOSER', 'PIECE_SIMULATION', 'PIECE_DENSITY', 'LIBRARY_TAGS', 'EDIT'} or (bool(self.card_kind) and self.card_kind.endswith('_MENU'))
+        if is_menu:
+            return Rect(round(rect.x + rect.w - 24 * scale), round(rect.y + rect.h - 24 * scale), round(18 * scale), round(18 * scale))
         return Rect(round(rect.x + rect.w - 30 * scale), round(rect.y + rect.h - 30 * scale), round(22 * scale), round(22 * scale))
 
     def card_mode_rects(self, rect):
@@ -706,6 +876,9 @@ class MinimalCards:
 
     def minimal_action(self, key):
         scene = self._scene
+        if self.confirm_action and key.startswith(('LOAD_','LIBRARY_')):
+            self.message='Confirm the pending action or choose Cancel first.'
+            return
         if key == 'FOLD_MENU':
             self.card_kind = 'FOLD'
         elif key.startswith('FOLD_ADD_'):
@@ -961,22 +1134,47 @@ class MinimalCards:
         elif key.startswith('LOAD_'):
             idx = int(key.removeprefix('LOAD_'))
             if 0 <= idx < len(self.library_items):
-                scene.dd_library_selected = idx
+                self.library_preview_path=self.library_items[idx]
+                self.show_card('LIBRARY_PREVIEW',self.card_anchor)
+        elif key=='LIBRARY_ACCEPT_LOAD':
+            self.refresh_library()
+            if self.library_preview_path in self.library_items:
+                self.library_load_path=self.library_preview_path
+                self.library_load_signature=self.library_previews[self.library_load_path]['signature']
+                scene.dd_library_selected=self.library_items.index(self.library_load_path)
                 self.perform_action('LIBRARY_LOAD')
-            self.card_kind = None
+                self.card_kind=None
+            else:self.message='This garment is no longer available.'
+        elif key in {'LIBRARY_SEARCH','LIBRARY_NAME','LIBRARY_TAG_EDIT'}:
+            field={'LIBRARY_SEARCH':'library_query','LIBRARY_NAME':'dd_library_name','LIBRARY_TAG_EDIT':'library_tags'}[key]
+            text=getattr(scene,field) if field=='dd_library_name' else getattr(self,field)
+            self.library_edit=dict(key=field,text=text,original=text,cursor=len(text),selected=True)
+        elif key=='LIBRARY_TAGS':
+            self.show_card('LIBRARY_TAGS',self.card_anchor)
+        elif key.startswith('LIBRARY_TAG_'):
+            tags=sorted({tag for metadata in self.library_previews.values() for tag in metadata['tags']},key=str.casefold)
+            self.library_filter='' if key=='LIBRARY_TAG_ALL' else tags[int(key.removeprefix('LIBRARY_TAG_'))]
+            self.show_card('LIBRARY',self.card_anchor)
+        elif key=='PAGE_LIBRARY_TAGS':
+            count=len({tag for metadata in self.library_previews.values() for tag in metadata['tags']})
+            self.card_page=(self.card_page+1)%max(1,math.ceil(count/6))
         elif key == 'PAGE_BODY':
             b_size = self.body_page_size()
             self.card_page = (self.card_page + 1) % math.ceil(max(1, len(self.card_models)) / b_size)
         elif key == 'PAGE_LIBRARY':
-            self.card_page = (self.card_page + 1) % math.ceil(max(1, len(self.library_items)) / 4)
+            self.card_page = (self.card_page + 1) % max(1,math.ceil(len(self.library_matches()) / self.library_page_size()))
         elif key == 'LIBRARY_SAVE':
-            self.design_action('LIBRARY_SAVE')
-            self.card_kind = None
+            self.show_card('LIBRARY_SAVE',self.card_anchor)
+        elif key=='LIBRARY_WRITE':
+            if self.perform_action('LIBRARY_SAVE'):
+                self.library_query='';self.library_filter=''
+                self.show_card('LIBRARY',self.card_anchor)
+            elif self.confirm_action:self.card_kind=None
         elif key == 'RESET':
             self.workflow_action('RESET')
             self.card_kind = None
         elif key == 'NAME':
-            self.numeric = dict(key='dd_library_name', text=scene.dd_library_name)
+            self.numeric = dict(key='dd_library_name', text=scene.dd_library_name,cursor=len(scene.dd_library_name),selected=True)
         elif key == 'REFERENCE_IMAGE':
             self.show_card('REFERENCE_IMAGE', self.card_anchor)
         elif key == 'KEEP_RETRY':
@@ -984,6 +1182,9 @@ class MinimalCards:
             self.card_kind = None
 
     def minimal_event(self, context, event):
+        if self.library_edit:
+            result=self.library_text_event(event)
+            if result is not None:return result
         point = (event.mouse_x - self._region.x, event.mouse_y - self._region.y)
         layout = self.canvas_layout
         if self.numeric:
@@ -1019,8 +1220,8 @@ class MinimalCards:
             return {'RUNNING_MODAL'}
         if card and self.card_kind in {'BODY', 'LIBRARY'} and event.type in {'WHEELUPMOUSE', 'WHEELDOWNMOUSE'}:
             delta = -1 if event.type == 'WHEELUPMOUSE' else 1
-            p_size = self.body_page_size() if self.card_kind == 'BODY' else 4
-            items = self.card_models if self.card_kind == 'BODY' else self.library_items
+            p_size = self.body_page_size() if self.card_kind == 'BODY' else self.library_page_size()
+            items = self.card_models if self.card_kind == 'BODY' else self.library_matches()
             max_pages = math.ceil(len(items) / p_size)
             if max_pages > 1:
                 self.card_page = max(0, min(max_pages - 1, self.card_page + delta))
@@ -1120,7 +1321,7 @@ class MinimalCards:
                         action1, action2 = row[1], row[2]
                         chosen = action1 if point[0] < rect.x + rect.w / 2 else action2
                         self.minimal_action(chosen)
-                        if chosen not in {'REFERENCE_IMAGE', 'MENU_LIBRARY', 'BODY_CHANGE'}:
+                        if chosen not in {'REFERENCE_IMAGE', 'MENU_LIBRARY', 'BODY_CHANGE','LIBRARY_SAVE'}:
                             self.card_kind = None
                     elif key == 'SLIDER':
                         label = row[1]
@@ -1131,7 +1332,7 @@ class MinimalCards:
                     elif key != 'INFO':
                         action = row[1] if key == 'MENU' else key
                         self.minimal_action(action)
-                        if action not in {'BODY_CHANGE', 'GARMENT_FABRIC_MENU', 'PIECE_FABRIC_MENU', 'PIECE_DENSITY_MENU', 'PIECE_SIMULATION_MENU', 'EDIT_ACTIONS', 'SCROLL_WEAR_OVER', 'PAGE_BODY', 'PAGE_LIBRARY', 'NAME', 'REFERENCE_IMAGE', 'MENU_LIBRARY', 'MENU_GARMENT'}:
+                        if not action.startswith(('LOAD_','LIBRARY_','PAGE_LIBRARY')) and action not in {'BODY_CHANGE', 'GARMENT_FABRIC_MENU', 'PIECE_FABRIC_MENU', 'PIECE_DENSITY_MENU', 'PIECE_SIMULATION_MENU', 'EDIT_ACTIONS', 'SCROLL_WEAR_OVER', 'PAGE_BODY', 'NAME', 'REFERENCE_IMAGE', 'MENU_LIBRARY', 'MENU_GARMENT'}:
                             self.card_kind = None
                     break
             return {'RUNNING_MODAL'}

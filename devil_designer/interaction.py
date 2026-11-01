@@ -208,6 +208,7 @@ class OverlayControls:
 
     def perform_action(self, action, confirmed=False):
         if action == 'CANCEL_ACTION':
+            if self.minimal_ui:self.library_load_path=None
             self.confirm_action = None
             self.confirm_message = ''
             self.message = 'Action cancelled. Your work is unchanged.'
@@ -218,7 +219,11 @@ class OverlayControls:
             pending = self.confirm_action
             self.confirm_action = None
             self.confirm_message = ''
-            return self.perform_action(pending, confirmed=True) if pending else False
+            result=self.perform_action(pending, confirmed=True) if pending else False
+            if result and pending=='LIBRARY_SAVE' and self.minimal_ui:
+                self.library_query='';self.library_filter=''
+                self.show_card('LIBRARY')
+            return result
         blocker = self.action_blocker(action)
         if blocker:
             self.message = blocker
@@ -317,7 +322,7 @@ class OverlayControls:
         if action == 'STOP':
             return ''
         if self.confirm_action:
-            return 'Confirm the pending action or choose Go back first.'
+            return 'Confirm the pending action or choose Cancel first.'
         if self.gesture and action not in {'CANCEL_DRAFT', 'HELP'}:
             return 'Finish the current drag or press Escape before another edit.'
         if action == 'START_PANEL' and self.session.document.patterns:
