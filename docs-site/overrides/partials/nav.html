@@ -7,10 +7,17 @@
   {% set class = class ~ " md-nav--integrated" %}
 {% endif %}
 <nav class="{{ class }}" aria-label="{{ lang.t('nav') }}" data-md-level="0">
+  {% set hide_developer_link = false %}
+  {% if page is defined and page.meta is defined and page.meta.hide is defined %}
+    {% set hide_developer_link = 'navigation' in page.meta.hide %}
+  {% endif %}
   <ul class="md-nav__list" data-md-scrollfix>
     {% for nav_item in nav.items %}
       {% set path = "__nav_" ~ loop.index %}
-      {{ item.render(nav_item, path, 1) }}
+      {% set nav_url = nav_item.url | d('', true) %}
+      {% if not (hide_developer_link and nav_url == 'https://github.com/Artbyo3/DEVIL-DESIGNER') %}
+        {{ item.render(nav_item, path, 1) }}
+      {% endif %}
     {% endfor %}
   </ul>
 </nav>

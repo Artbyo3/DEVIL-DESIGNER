@@ -1,123 +1,88 @@
 # Drafting & Pattern Editing
 
-Devil Designer provides a dedicated 2D vector CAD drafting environment for garment patterns. The source patterns are stored as editable cubic Bezier paths, completely independent of the 3D simulation mesh.
+Use these tools to create and edit garment pattern pieces. A Bezier curve is a smooth line shaped by moving its points and handles.
 
----
+## Make Your First Pattern Piece
+
+1. Open an empty design and press <kbd>R</kbd> for the Rectangle tool.
+2. Click and drag to draw one simple piece.
+3. Press <kbd>V</kbd> to select it and move it into place.
+4. Save your Blender file when you are happy with the shape.
 
 ## Drafting Tools & Shortcuts
 
 | Tool / Action | Shortcut | Description |
 | :--- | :--- | :--- |
-| **Select** | <kbd>V</kbd> | Select pieces, points, handles, seam badges, and internal lines. Drag within a piece to move it. |
-| **Polygon** | <kbd>P</kbd> | Click sequential vertices to draft freeform outlines. Press <kbd>Enter</kbd> or click the starting point to close. |
-| **Rectangle** | <kbd>R</kbd> | Click and drag to create rectangular panels. |
-| **Ellipse** | <kbd>E</kbd> | Click and drag to draft elliptical panels (constructed with four Bezier anchors). |
-| **Internal Line** | <kbd>I</kbd> | Draw internal lines, holes, slits, or construction guides inside the selected piece. |
-| **Cut Knife** | <kbd>N</kbd> | Slice across pieces with **Cut & Sew** (default) or **Cut only**. |
-| **Dart** | <kbd>D</kbd> | Create self-closing V-darts on outer boundaries. |
-| **Sew** | <kbd>J</kbd> | Segment sewing in 2D or 3D. |
-| **Free Sewing** | <kbd>Shift</kbd> + <kbd>J</kbd> | 4-click partial range sewing. |
-| **Pin / Tack** | <kbd>K</kbd> / <kbd>T</kbd> | Add 3D static pins (<kbd>K</kbd>) or surface-following avatar tacks (<kbd>T</kbd>). |
-| **Corner / Curve** | <kbd>C</kbd> | Toggle selected anchor point between sharp corner and smooth Bezier curve. |
-| **Split Segment** | <kbd>Q</kbd> | Insert a new anchor point by dividing the selected edge segment. |
-| **Merge Points** | <kbd>M</kbd> | Merge two adjacent selected points into one. |
-| **Unfold** | <kbd>U</kbd> | Mirror and merge the piece along a selected straight edge without a seam. |
-| **Mirror with Seam**| <kbd>Shift</kbd> + <kbd>U</kbd>| Create a separate mirrored piece and generate a sewing connection. |
-| **Lengths Toggle** | <kbd>L</kbd> | Show/hide live numerical segment lengths (in cm). |
-| **Duplicate** | <kbd>Shift</kbd> + <kbd>D</kbd>| Duplicate selected points, paths, or pieces. |
-| **Delete** | <kbd>X</kbd> or <kbd>Del</kbd>| Delete selected points, edges, seams, or pieces. |
-| **Grid Snapping** | <kbd>S</kbd> | Toggle grid snapping. Hold <kbd>Ctrl</kbd> for temporary inversion. |
-| **Axis Constraint**| Hold <kbd>Shift</kbd> | Lock drafting movement to horizontal or vertical axes. |
-| **Pan / Zoom** | <kbd>MMB</kbd> / Wheel | Pan and zoom canvas. |
-| **Fit Design** | <kbd>Home</kbd> | Frame all patterns within view (or press <kbd>F</kbd> when Fit Map is off). |
-| **Avatar Guide** | <kbd>H</kbd> | Toggle the 2D background avatar silhouette guide. |
-| **Cancel / Exit** | <kbd>Escape</kbd> | Cancels active drawing/gesture &rarr; dismisses menu &rarr; exits editor. |
-
----
+| **Select** | <kbd>V</kbd> | Select and move pieces, points, handles, seams, and internal lines. |
+| **Polygon** | <kbd>P</kbd> | Click outline points; press <kbd>Enter</kbd> or click the first point to close. |
+| **Rectangle** | <kbd>R</kbd> | Click and drag to create a rectangular piece. |
+| **Ellipse** | <kbd>E</kbd> | Click and drag to create an oval piece. |
+| **Internal Line** | <kbd>I</kbd> | Draw lines, openings, or guides inside a piece. |
+| **Cut Knife** | <kbd>N</kbd> | Cut a piece, with or without a seam along the cut. |
+| **Dart** | <kbd>D</kbd> | Add a tapered dart to a piece. |
+| **Sew** | <kbd>J</kbd> | Connect complete edges. |
+| **Free Sewing** | <kbd>Shift</kbd> + <kbd>J</kbd> | Connect part of an edge. |
+| **Pin / Tack** | <kbd>K</kbd> / <kbd>T</kbd> | Hold a piece in place or attach it to the avatar. |
+| **Corner / Curve** | <kbd>C</kbd> | Change a point between a sharp corner and a smooth curve. |
+| **Split Segment** | <kbd>Q</kbd> | Add a point on an edge. |
+| **Merge Points** | <kbd>M</kbd> | Join two neighboring selected points. |
+| **Unfold** | <kbd>U</kbd> | Mirror a piece across a straight edge. |
+| **Mirror with Seam** | <kbd>Shift</kbd> + <kbd>U</kbd> | Make a separate mirrored piece and connect the edges. |
+| **Lengths Toggle** | <kbd>L</kbd> | Show or hide edge lengths in centimetres. |
+| **Duplicate** | <kbd>Shift</kbd> + <kbd>D</kbd> | Copy selected points, lines, or pieces. |
+| **Delete** | <kbd>X</kbd> or <kbd>Del</kbd> | Remove the selected item. |
+| **Grid Snapping** | <kbd>S</kbd> | Turn grid snapping on or off. Hold <kbd>Ctrl</kbd> to reverse it temporarily. |
+| **Axis Constraint** | Hold <kbd>Shift</kbd> | Keep movement horizontal or vertical. |
+| **Pan / Zoom** | <kbd>MMB</kbd> / Wheel | Move around or zoom the canvas. |
+| **Fit Design** | <kbd>Home</kbd> | Show all pattern pieces in the canvas. |
+| **Avatar Guide** | <kbd>H</kbd> | Show or hide the avatar guide. |
+| **Cancel / Exit** | <kbd>Escape</kbd> | Cancel the current action, close a menu, or exit the editor. |
 
 ## Bezier Curve Editing & Numeric Accuracy
 
-Devil Designer uses true cubic Bezier curves rather than faceted polylines:
-
-* **Anchor Points & Handles:** Click an anchor point to select it. When converted to a curve point (<kbd>C</kbd>), smooth gold Bezier handles appear. Drag either handle to adjust curvature.
-* **Exact Dimensions in Centimetres:** Dimensions and segment lengths are displayed in centimetres (while internal coordinates use metres).
-* **Live Arc-Length Integration:** Curve lengths are calculated using numerical Bezier arc-length integration, updating in real time as handles move.
-* **Exact Numeric Edits:** Right-click an anchor point or segment to enter exact numerical coordinates (**Point X/Y**) or define an **Exact length**. When setting an exact length, you choose which endpoint remains anchored and which side adjusts. Numeric point and edge edits apply on completion as one undoable action; pressing <kbd>Escape</kbd> cancels an in-progress value drag.
-* **Fit Design Framing:** Pressing <kbd>Home</kbd> (or <kbd>F</kbd> when Fit Map is disabled) frames all pattern pieces cleanly clear of the dock and pinned cards without shrinking the actual canvas.
-
----
+Select a point and press <kbd>C</kbd> to make it a smooth curve. Drag its handles to change the shape. Right-click a point or edge to enter an exact position or length in centimetres.
 
 ## Outline Transformations
 
 ### Offset Outline Copy
-Creates a concentric, editable outline offset at a specified distance from the original piece.
-* The original piece is preserved.
-* Concave corners and curved offsets are sampled and validated.
-* Self-intersecting or collapsed results are cleanly rejected without altering the pattern.
+
+Right-click a piece and choose the outline-copy action to make a second outline at a chosen distance. The original piece stays in place.
 
 ### Unfold (<kbd>U</kbd>)
-Select a straight boundary edge and press <kbd>U</kbd>. The piece is reflected across that edge and fused into a single seamless pattern island.
+
+Select a straight edge and press <kbd>U</kbd> to mirror the piece across that edge.
 
 ### Mirror with Seam (<kbd>Shift</kbd> + <kbd>U</kbd>)
-Select a straight boundary edge and press <kbd>Shift</kbd> + <kbd>U</kbd>. A separate mirrored piece is generated, and a matching sewing seam is automatically created between the mirroring edge and its counterpart. Any existing self-sewing darts are duplicated and preserved.
 
----
+Select a straight edge and press <kbd>Shift</kbd> + <kbd>U</kbd> to make a separate mirrored piece with matching edges ready to sew.
 
 ## Linked Editing
 
-For symmetrical pattern drafting (e.g. left and right sleeves, front panels), Devil Designer provides bidirectional **Linked Editing**:
-
-* **Clone as Linked Twin:** Right-click a piece and choose **Clone as linked twin**. A linked mirrored copy appears to the right of the pattern layout without overlapping existing islands.
-* **Clone as Back:** For pieces already placed at a front avatar arrangement point, choosing **Clone as Back** creates a linked copy and automatically assigns it to the corresponding back arrangement point on that same volume.
-* **Bidirectional Synchronization:** Edits made to either member immediately reflect on the other:
-    * Moving anchor points and Bezier handles
-    * Toggling corner vs curve (<kbd>C</kbd>)
-    * Adding (<kbd>Q</kbd>), merging (<kbd>M</kbd>), or deleting points
-    * Modifying internal paths and darts
-* **Independent Transforms:** 2D canvas placement and 3D avatar arrangement remain completely independent between twins.
-* **Managing Links:**
-    * **Linked twin Off:** Temporarily pause synchronization without altering either outline.
-    * **Linked twin On:** Re-apply synchronization from the active piece onto the twin.
-    * **Link Two Existing Pieces:** Select two unpaired pieces, right-click, and choose **Linked twin**. The active piece provides the master outline. Relinking is safely refused if it would invalidate existing sewing seams.
-    * **Linking never alters sewing:** Linking or unlinking twins never automatically creates, copies, or removes sewing seams.
-
----
+Right-click a piece and choose **Clone as linked twin** to make a mirrored copy. Changes to either linked piece are reflected in the other. Turn **Linked twin** off when you want to edit the pieces separately.
 
 ## Internal Lines, Cuts, Slits, & Darts
 
-Press <kbd>I</kbd> to activate the **Internal** tool on a selected piece.
+Press <kbd>I</kbd> to draw inside a selected piece. Closed shapes can be cut out or traced as a separate piece. Lines that reach the outer edge can split a piece; lines that stop inside make a slit.
 
 ### Internal Shapes & Holes
-* Draw closed shapes inside a pattern piece.
-* Right-click the closed internal path and choose **Cut selected internal path** to convert it into a through-hole.
-* Choose **Trace** to extract a closed internal shape into an independent pattern piece.
+
+Draw a closed shape inside a piece. Right-click it and choose **Cut selected internal path** to make a hole, or choose **Trace** to make it a separate piece.
 
 ### Cut Knife (<kbd>N</kbd>)
-The Cut tool allows splitting pieces directly across their surface:
-* **Modes:** **Cut & Sew** (default; creates matching seam across the cut) or **Cut only** (separates pieces without sewing).
-* **Usage:** Click two or more points across a pattern piece, crossing its outer boundary exactly twice. Press <kbd>Enter</kbd> or double-click to finish; <kbd>Escape</kbd> cancels. Hold <kbd>Shift</kbd> to constrain axes.
-* **Geometry Rules:** The cut line can begin and end outside the piece: only the interior section is cut. Each target piece must cross the outline exactly twice; tangencies, overlapping outline edges, self-crossings, and crossings through holes are safely refused without modifying the design.
-* **Targeting:** Selected pieces are the targets; with no selection, every fully crossed piece is cut. A cut crossing an existing internal path is refused (split that path first). Internal curve cuts, slits, and holes use **Cut along path**.
-* **Result:** Splits the piece into two halves named with the original name plus ` 1` and ` 2`. Both halves retain original fabric settings, mesh density, and their exact source-space UV layout. Outer-edge sewing is remapped with repair warnings if needed.
-* **Conflict Resolution:** If a straight cut crosses existing straight open internal lines, Devil Designer offers **Split and retry** to stage the split and cut cleanly as one undoable transaction, preserving supported sewing and anchors. Curved or closed crossing shapes, overlaps, or anchors on the cut require manual adjustment.
+
+Click points across a piece, crossing its outline twice, then press <kbd>Enter</kbd> to finish. Choose **Cut & Sew** to connect the new edges, or **Cut only** to leave them separate. Press <kbd>Escape</kbd> to cancel.
 
 ### Princess Seams & Slits
-* An open internal line that runs from boundary to boundary acts as a seam line for splitting (e.g. princess seams).
-* An internal line terminating inside the fabric forms a **slit**, generating separated mesh lips during cloth simulation.
+
+Draw a line from one edge of a piece to another to create a split. A line that ends inside the piece creates a slit.
 
 ### Darts (<kbd>D</kbd>)
-The dedicated Dart tool creates tailored tapering:
-1. Click two positions along an outer boundary segment to establish the dart mouth.
-2. Click an interior position to establish the dart apex.
-3. Devil Designer notches out the V-shape and automatically configures a same-piece self-closing seam pair along the legs. The common apex is mathematically handled to prevent degenerate zero-length simulation springs.
 
----
+Click two points on the outer edge for the dart opening, then click inside the piece for the dart point.
 
 ## Tracing Reference Images
 
-To draft from reference photographs or fashion flats:
-
 1. Right-click the canvas and choose **Garment > Reference image > Load image**.
-2. Position the image and adjust its opacity using its contextual card.
-3. Under **Set measured scale**, choose **Pick length endpoints**, then click two known points on the image (e.g., center-front length or ruler mark) and enter the physical distance in centimetres.
-4. The reference image scales precisely to real-world dimensions. Existing pattern geometry is never altered by scale calibration.
+2. Place the image and adjust its opacity.
+3. Choose **Set measured scale > Pick length endpoints**.
+4. Click two known points, enter their real distance in centimetres, and use the image as a scale reference.

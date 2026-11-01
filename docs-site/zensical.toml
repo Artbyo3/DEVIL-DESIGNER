@@ -5,19 +5,20 @@ site_description = "A movable 2D clothing-pattern editor and cloth authoring too
 site_author = "Artbyo3"
 extra_css = ["stylesheets/extra.css"]
 
-[project.extra]
-version = "v0.11.0"
-
 nav = [
-  { "Installation" = "install.md" },
+  { "Install" = "install.md" },
   { "Quickstart" = "quickstart.md" },
-  { "Drafting" = "draft.md" },
-  { "Sewing" = "sew.md" },
-  { "Arrangement" = "arrange.md" },
-  { "Simulation" = "simulate.md" },
+  { "Draft" = "draft.md" },
+  { "Sew" = "sew.md" },
+  { "Arrange" = "arrange.md" },
+  { "Simulate" = "simulate.md" },
   { "Library" = "library.md" },
   { "FAQ" = "faq.md" },
+  { "For developers" = "https://github.com/Artbyo3/DEVIL-DESIGNER" },
 ]
+
+[project.extra]
+version = "v0.11.0"
 
 [project.theme]
 language = "en"
@@ -25,7 +26,6 @@ custom_dir = "overrides"
 favicon = "assets/favicon.svg"
 features = [
   "content.code.copy",
-  "navigation.indexes",
   "navigation.instant",
   "navigation.instant.prefetch",
   "navigation.sections",
