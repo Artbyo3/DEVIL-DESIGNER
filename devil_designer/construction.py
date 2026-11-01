@@ -503,3 +503,15 @@ def path_range(document,start,end):
     while i!=ib:result.append(edges[i]);i=(i+1)%len(edges)
     result.append(EdgeRef(edge_b.pattern,edge_b.start,edge_b.end,0,t_b,edge_b.path))
     return [e for e in result if abs(e.t1-e.t0)>1e-8]
+
+
+def sew_reverse(document,chain_a,chain_b,scene_reverse=True):
+    side_a=[chain_a] if hasattr(chain_a,'full') else list(chain_a)
+    side_b=[chain_b] if hasattr(chain_b,'full') else list(chain_b)
+    if not side_a or not side_b:return bool(scene_reverse)
+    pa0=document.edge_point(side_a[0],side_a[0].t0)
+    pa1=document.edge_point(side_a[-1],side_a[-1].t1)
+    pb0=document.edge_point(side_b[0],side_b[0].t0)
+    pb1=document.edge_point(side_b[-1],side_b[-1].t1)
+    same_dir=((pa1[0]-pa0[0])*(pb1[0]-pb0[0])+(pa1[1]-pa0[1])*(pb1[1]-pb0[1]))>=0
+    return not scene_reverse if same_dir else bool(scene_reverse)

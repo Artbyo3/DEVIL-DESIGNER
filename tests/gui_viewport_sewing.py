@@ -17,7 +17,7 @@ sys.path.insert(0, str(ROOT))
 import devil_designer
 from devil_designer import arrangement, editor, garment, history, library, live_panels, piece_states, placement
 from devil_designer.core import Document, Session, arrangement_record
-from devil_designer.construction import path_range
+from devil_designer.construction import path_range, sew_reverse
 from devil_designer.viewport_sewing import PanelEdges, seam_hits
 
 
@@ -142,7 +142,7 @@ def run():
             check(len(active.session.document.seams) == 1, 'two viewport clicks create a normal segment seam')
             check(all(tuple(tuple(row) for row in panel.matrix_world) == poses[panel['dd_pattern_id']] for panel in garment.generated(scene, 'panel')), 'segment sewing preserves arranged poses exactly')
             reference = Session(initial)
-            reference.sew_chains([reference.document.edges(reference.document.patterns[0].id)[0]], [reference.document.edges(reference.document.patterns[1].id)[0]], scene.dd_sew_reverse)
+            reference.sew_chains([reference.document.edges(reference.document.patterns[0].id)[0]], [reference.document.edges(reference.document.patterns[1].id)[0]], sew_reverse(reference.document, [reference.document.edges(reference.document.patterns[0].id)[0]], [reference.document.edges(reference.document.patterns[1].id)[0]], scene.dd_sew_reverse))
             reference.document.seams[0].id = active.session.document.seams[0].id
             check(reference.document.dumps() == active.session.document.dumps(), 'segment seam is byte-identical to equivalent 2D records')
             preview = active.viewport_sewing
@@ -175,7 +175,7 @@ def run():
                 picks.append((edge, value))
                 active.handle_event(bpy.context, event('LEFTMOUSE', pointer))
             check(len(active.session.document.seams) == 2, 'four viewport clicks create free sewing across multiple edges')
-            reference.sew_chains(path_range(reference.document, *picks[:2]), path_range(reference.document, *picks[2:]), scene.dd_sew_reverse)
+            reference.sew_chains(path_range(reference.document, *picks[:2]), path_range(reference.document, *picks[2:]), sew_reverse(reference.document, path_range(reference.document, *picks[:2]), path_range(reference.document, *picks[2:]), scene.dd_sew_reverse))
             reference.document.seams[-1].id = active.session.document.seams[-1].id
             check(reference.document.dumps() == active.session.document.dumps(), 'free M:N ranges, direction and ratios match equivalent 2D records exactly')
             seam = active.session.document.seams[-1]

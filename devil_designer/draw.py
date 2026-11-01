@@ -10,6 +10,7 @@ from .core import area, triangulate, contains, Vertex
 from . import curves
 from .controls import CONTROL_SETTINGS as SETTINGS
 from .icons import icon_spans
+from .construction import sew_reverse
 
 from .ui_system import (
     BG_BASE, BG_PANEL, BG_ELEVATED, BG_WELL,
@@ -572,12 +573,7 @@ class Renderer:
                             diff = abs(len_a - len_b)
                             ratio = (min(len_a, len_b) / max(1e-5, max(len_a, len_b))) * 100
                             is_match = diff <= 0.6
-                            pa0 = doc.edge_point(ed.pending_edge, ed.pending_edge.t0)
-                            pa1 = doc.edge_point(ed.pending_edge, ed.pending_edge.t1)
-                            pb0 = doc.edge_point(h_edge, h_edge.t0)
-                            pb1 = doc.edge_point(h_edge, h_edge.t1)
-                            same_dir = ((pa1[0] - pa0[0]) * (pb1[0] - pb0[0]) + (pa1[1] - pa0[1]) * (pb1[1] - pb0[1])) >= 0
-                            rev = not ed._scene.dd_sew_reverse if same_dir else bool(ed._scene.dd_sew_reverse)
+                            rev = sew_reverse(doc, ed.pending_edge, h_edge, ed._scene.dd_sew_reverse)
                             rev_label = "rev" if rev else "direct"
                             msg = f"Match: {len_a:.1f} cm ↔ {len_b:.1f} cm ({ratio:.0f}%) [{rev_label}] · B flip" if is_match else f"Mismatch: {len_a:.1f} cm vs {len_b:.1f} cm (Δ {diff:.1f} cm) [{rev_label}] · B flip"
                             badge_bg = (0.08, 0.25, 0.16, 0.95) if is_match else (0.28, 0.18, 0.08, 0.95)
@@ -1344,10 +1340,7 @@ class Renderer:
                     prev_col = (0.22, 0.82, 0.48, 0.95) if is_match else (1.0, 0.65, 0.25, 0.95)
                     pts_b = [ed.view.screen(doc.edge_point(h_edge, h_edge.t0 + (h_edge.t1 - h_edge.t0) * i / 16), c) for i in range(17)]
                     self.lines(pts_b, prev_col, 3.2, True)
-                    va = (pts_a[-1][0] - pts_a[0][0], pts_a[-1][1] - pts_a[0][1])
-                    vb = (pts_b[-1][0] - pts_b[0][0], pts_b[-1][1] - pts_b[0][1])
-                    same_dir = (va[0] * vb[0] + va[1] * vb[1]) >= 0
-                    rev = not ed._scene.dd_sew_reverse if same_dir else bool(ed._scene.dd_sew_reverse)
+                    rev = sew_reverse(doc, edge_a, h_edge, ed._scene.dd_sew_reverse)
                     dot_b = pts_b[-1] if rev else pts_b[0]
                     self.dot(dot_b, 5.5, prev_col)
                     for s_idx in range(5):
