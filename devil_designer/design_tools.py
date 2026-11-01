@@ -3,7 +3,7 @@ import math
 import bpy
 from . import curves
 from .core import EdgeRef, update_auto_handles
-from .construction import chain_range,path_range
+from .construction import chain_range,path_range,sew_reverse
 from .presets import PRESETS
 
 class DesignTools:
@@ -260,7 +260,7 @@ class DesignTools:
                 if not self.chain_a or not self.chain_b:raise ValueError('Pick at least one edge on each side.')
                 a=chain_range(doc,self.chain_a,scene.dd_sew_a0,scene.dd_sew_a1)
                 b=chain_range(doc,self.chain_b,scene.dd_sew_b0,scene.dd_sew_b1)
-                self.session.sew_chains(a,b,scene.dd_sew_reverse);self.chain_stage=None;self.chain_a=[];self.chain_b=[]
+                self.session.sew_chains(a,b,sew_reverse(doc,a,b,scene.dd_sew_reverse));self.chain_stage=None;self.chain_a=[];self.chain_b=[]
                 self.seam_selected=doc.seams[-1].id
             elif action=='CHAIN_CLEAR':
                 self.chain_a=[];self.chain_b=[];self.free_clicks=[];self.pending_edge=None;self.chain_stage=None
@@ -316,7 +316,7 @@ class DesignTools:
             if len(self.free_clicks)==4:
                 try:
                     a=path_range(doc,*self.free_clicks[:2]);b=path_range(doc,*self.free_clicks[2:])
-                    self.session.sew_chains(a,b,scene.dd_sew_reverse);self.persist()
+                    self.session.sew_chains(a,b,sew_reverse(doc,a,b,scene.dd_sew_reverse));self.persist()
                     self.seam_selected=doc.seams[-1].id;self.message=self.sewing_message(doc.seams[-1])
                 except ValueError as exc:self.message=str(exc)
                 self.free_clicks=[]
@@ -333,7 +333,7 @@ class DesignTools:
         try:
             a=chain_range(doc,[self.pending_edge],scene.dd_sew_a0,scene.dd_sew_a1)
             b=chain_range(doc,[edge],scene.dd_sew_b0,scene.dd_sew_b1)
-            self.session.sew_chains(a,b,scene.dd_sew_reverse);self.persist()
+            self.session.sew_chains(a,b,sew_reverse(doc,a,b,scene.dd_sew_reverse));self.persist()
             self.pending_edge=None;self.seam_selected=doc.seams[-1].id;self.message=self.sewing_message(doc.seams[-1])
         except ValueError as exc:self.message=str(exc)
 
