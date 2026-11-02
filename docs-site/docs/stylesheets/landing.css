@@ -108,9 +108,10 @@ body:has(.dd-landing-container) .md-content__inner {
 }
 
 .dd-install-card {
-  display: flex;
-  justify-content: center;
-  align-items: center;
+  display: grid;
+  grid-template-areas: "install-card";
+  justify-items: center;
+  align-items: start;
   width: min(100%, 280px);
   min-width: 0;
   padding: 0;
@@ -119,6 +120,7 @@ body:has(.dd-landing-container) .md-content__inner {
   border-radius: 0;
   background: transparent;
   box-shadow: none;
+  position: relative;
   text-decoration: none !important;
 }
 
@@ -129,12 +131,40 @@ body:has(.dd-landing-container) .md-content__inner {
   box-shadow: none;
 }
 
+.dd-install-btn-primary,
+.dd-install-drag-group {
+  grid-area: install-card;
+  width: 100%;
+  transition: opacity 200ms cubic-bezier(0.16, 1, 0.3, 1), transform 200ms cubic-bezier(0.16, 1, 0.3, 1), visibility 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform;
+}
+
+.dd-install-card:not(.is-active) .dd-install-btn-primary {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
 .dd-install-card:not(.is-active) .dd-install-drag-group {
-  display: none !important;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(4px);
 }
 
 .dd-install-card.is-active .dd-install-btn-primary {
-  display: none !important;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(-4px);
+}
+
+.dd-install-card.is-active .dd-install-drag-group {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateY(0);
 }
 
 .dd-install-drag-group {
@@ -165,7 +195,7 @@ body:has(.dd-landing-container) .md-content__inner {
   text-decoration: none !important;
   cursor: pointer;
   user-select: none;
-  transition: background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+  transition: opacity 200ms cubic-bezier(0.16, 1, 0.3, 1), transform 200ms cubic-bezier(0.16, 1, 0.3, 1), visibility 200ms cubic-bezier(0.16, 1, 0.3, 1), background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
 }
 
 .dd-install-btn-primary:hover {
@@ -459,8 +489,9 @@ body:has(.dd-landing-container) a:focus-visible {
 
   .dd-install-card,
   .dd-install-btn-primary,
+  .dd-install-drag-group,
   .dd-install-drag-zone,
   .dd-landing-btn {
-    transition: none;
+    transition: none !important;
   }
 }

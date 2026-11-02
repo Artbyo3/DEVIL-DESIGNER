@@ -148,20 +148,50 @@ body:has(.dd-landing-container) .md-content__inner {
 
 /* Install Action Card: Single element with resting (button) and active (drag zone) states */
 .dd-install-card {
-  display: flex;
-  justify-content: center;
-  align-items: center;
+  display: grid;
+  grid-template-areas: "install-card";
+  justify-items: center;
+  align-items: start;
   width: min(100%, 280px);
   margin: 0 auto 1.5rem;
+  position: relative;
   text-decoration: none !important;
 }
 
+.dd-install-btn-primary,
+.dd-install-drag-group {
+  grid-area: install-card;
+  width: 100%;
+  transition: opacity 200ms cubic-bezier(0.16, 1, 0.3, 1), transform 200ms cubic-bezier(0.16, 1, 0.3, 1), visibility 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform;
+}
+
+.dd-install-card:not(.is-active) .dd-install-btn-primary {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
 .dd-install-card:not(.is-active) .dd-install-drag-group {
-  display: none !important;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(4px);
 }
 
 .dd-install-card.is-active .dd-install-btn-primary {
-  display: none !important;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(-4px);
+}
+
+.dd-install-card.is-active .dd-install-drag-group {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateY(0);
 }
 
 .dd-install-drag-group {
@@ -192,7 +222,7 @@ body:has(.dd-landing-container) .md-content__inner {
   text-decoration: none !important;
   cursor: pointer;
   user-select: none;
-  transition: all 0.16s ease;
+  transition: opacity 200ms cubic-bezier(0.16, 1, 0.3, 1), transform 200ms cubic-bezier(0.16, 1, 0.3, 1), visibility 200ms cubic-bezier(0.16, 1, 0.3, 1), background-color 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
 }
 
 .dd-install-btn-primary:hover {
