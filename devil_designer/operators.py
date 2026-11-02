@@ -183,5 +183,49 @@ class DD_OT_demo(bpy.types.Operator):
         return run(self,action)
 
 
+class DD_OT_shape_cloth(bpy.types.Operator):
+    bl_idname = 'devil_designer.shape_cloth'
+    bl_label = 'Shape cloth'
+    bl_description = 'Shape a settled drape along its normal; live retention is not supported'
+    finish: bpy.props.BoolProperty(default=False)
+
+    def execute(self, context):
+        def action():
+            from . import editor
+            workspace = editor._active
+            if workspace is None or not workspace.minimal_ui:
+                raise ValueError('Open the Devil Designer minimal workspace first.')
+            if self.finish:
+                workspace.choose_tool('SELECT')
+            else:
+                workspace.enable_shaping(context)
+            return {'FINISHED'}
+        return run(self, action)
+
+
+class DD_OT_reset_shaping(bpy.types.Operator):
+    bl_idname = 'devil_designer.reset_shaping'
+    bl_label = 'Reset shaping'
+    bl_description = 'Restore the captured plain drape; resets cloth velocity'
+
+    def execute(self, context):
+        def action():
+            from .cloth_shaping import ShapingSession
+            from . import editor
+            simulations = garment.generated(context.scene, 'simulation')
+            if not simulations:
+                raise ValueError('There is no drape to reset.')
+            garment.stop(context)
+            session = ShapingSession(simulations[0])
+            session.reset(context)
+            workspace = editor._active
+            if workspace is not None:
+                workspace.shaping = session
+                workspace.message = session.message
+                context.window.cursor_modal_set('HAND' if workspace.tool == 'SHAPE' else 'DEFAULT')
+            return {'FINISHED'}
+        return run(self, action)
+
+
 CLASSES = (DD_OT_build_panels,DD_OT_arrange,DD_OT_simulate,DD_OT_stop,DD_OT_reset,
-           DD_OT_keep_drape,DD_OT_seam,DD_OT_demo)
+           DD_OT_keep_drape,DD_OT_seam,DD_OT_demo,DD_OT_shape_cloth,DD_OT_reset_shaping)

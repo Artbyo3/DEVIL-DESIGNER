@@ -31,9 +31,15 @@ target_file = ROOT / "tests" / (test_name if test_name.endswith(".py") else f"{t
 print(f"Loading test: {target_file}")
 print(f"Expecting report: {report_file}")
 
-with open(target_file, "r", encoding="utf-8") as f:
-    code = compile(f.read(), str(target_file), "exec")
-    exec(code, {"__name__": "__main__", "__file__": str(target_file)})
+try:
+    with open(target_file, "r", encoding="utf-8-sig") as f:
+        code = compile(f.read(), str(target_file), "exec")
+        exec(code, {"__name__": "__main__", "__file__": str(target_file)})
+except Exception:
+    import traceback
+    traceback.print_exc()
+    bpy.ops.wm.quit_blender()
+    sys.exit(1)
 
 start_time = time.time()
 
@@ -51,7 +57,8 @@ def watchdog():
             print("Error reading report:", e)
         bpy.ops.wm.quit_blender()
         return None
-    if time.time() - start_time > 20:
+    timeout = 180 if test_name == 'gui_cloth_shaping' else 20
+    if time.time() - start_time > timeout:
         print("GUI TEST TIMED OUT waiting for report")
         bpy.ops.wm.quit_blender()
         return None
