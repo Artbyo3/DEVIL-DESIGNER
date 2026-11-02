@@ -5,6 +5,7 @@ name = "Devil Designer"
 tagline = "Draft, sew, and drape clothing patterns inside Blender"
 maintainer = "Artbyo3"
 type = "add-on"
+website = "https://artbyo3.github.io/DEVIL-DESIGNER/"
 tags = ["Modeling", "Mesh", "Physics"]
 license = ["SPDX:GPL-3.0-or-later"]
 blender_version_min = "5.2.0"
