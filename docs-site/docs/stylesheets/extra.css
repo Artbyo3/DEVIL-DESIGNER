@@ -156,12 +156,20 @@ body:has(.dd-landing-container) .md-content__inner {
   text-decoration: none !important;
 }
 
-.dd-install-card:not(.is-active) .dd-install-drag-zone {
+.dd-install-card:not(.is-active) .dd-install-drag-group {
   display: none !important;
 }
 
 .dd-install-card.is-active .dd-install-btn-primary {
   display: none !important;
+}
+
+.dd-install-drag-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  width: 100%;
 }
 
 .dd-install-btn-primary {
@@ -205,9 +213,9 @@ body:has(.dd-landing-container) .md-content__inner {
   justify-content: center;
   gap: 0.5rem;
   width: 100%;
-  min-height: 38px;
+  min-height: 44px;
   padding: 0 1rem;
-  background-color: rgba(112, 213, 197, 0.04);
+  background-color: rgba(112, 213, 197, 0.05);
   border: 1.5px dashed #49635F;
   border-radius: 8px;
   color: #CBD5E1 !important;
@@ -223,7 +231,7 @@ body:has(.dd-landing-container) .md-content__inner {
 
 .dd-install-drag-zone:hover {
   border-color: #70D5C5;
-  background-color: rgba(112, 213, 197, 0.09);
+  background-color: rgba(112, 213, 197, 0.1);
   color: #FFFFFF !important;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
 }
@@ -240,6 +248,26 @@ body:has(.dd-landing-container) .md-content__inner {
 
 .dd-install-drag-zone:hover .dd-install-drag-icon {
   transform: scale(1.1);
+}
+
+.dd-install-fallback {
+  font-size: 0.7rem;
+  line-height: 1.4;
+  color: #8E9BA8;
+  letter-spacing: 0.01em;
+  text-align: center;
+  user-select: none;
+}
+
+.dd-install-fallback-link {
+  color: #CBD5E1 !important;
+  text-decoration: underline !important;
+  text-underline-offset: 2px;
+  transition: color 0.14s ease;
+}
+
+.dd-install-fallback-link:hover {
+  color: #70D5C5 !important;
 }
 
 /* Navigation Buttons */

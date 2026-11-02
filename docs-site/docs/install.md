@@ -18,6 +18,7 @@ Alternatively, drag and drop into Blender:
 1. Open the [Devil Designer listing on Blender Extensions](https://extensions.blender.org/add-ons/devil-designer/).
 2. Drag the **Drag and Drop into Blender** button into any Blender window.
 
+<a id="install-from-disk"></a>
 ## Alternative: Install from GitHub Release ZIP
 
 If you prefer to install manually from a release archive:

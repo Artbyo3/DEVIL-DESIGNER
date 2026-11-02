@@ -14,7 +14,7 @@ hide:
     <h1 class="dd-landing-title">Devil Designer</h1>
     <p class="dd-landing-tagline">A movable 2D clothing-pattern editor and cloth authoring tool for Blender.</p>
     
-    <!-- Install action: single element with two states (resting: Get Add-on; clicked/active: Drag and Drop into Blender) -->
+    <!-- Install action: single element with two states (resting: Get Add-on; clicked/active: Drag and Drop into Blender + fallback) -->
     <div class="dd-install-card" id="dd-install-card">
       <button type="button"
               class="dd-install-btn-primary"
@@ -22,21 +22,26 @@ hide:
               aria-label="Get Add-on">
         Get Add-on
       </button>
-      <div class="dd-install-drag-zone"
-           id="dd-install-drag"
-           draggable="true"
-           role="button"
-           tabindex="0"
-           aria-label="Drag and Drop into Blender">
-        <svg class="dd-install-drag-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <polyline points="5 9 2 12 5 15"></polyline>
-          <polyline points="9 5 12 2 15 5"></polyline>
-          <polyline points="15 19 12 22 9 19"></polyline>
-          <polyline points="19 9 22 12 19 15"></polyline>
-          <line x1="2" y1="12" x2="22" y2="12"></line>
-          <line x1="12" y1="2" x2="12" y2="22"></line>
-        </svg>
-        <span>Drag and Drop into Blender</span>
+      <div class="dd-install-drag-group" id="dd-install-drag-group">
+        <div class="dd-install-drag-zone"
+             id="dd-install-drag"
+             draggable="true"
+             role="button"
+             tabindex="0"
+             aria-label="Drag and Drop into Blender">
+          <svg class="dd-install-drag-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="5 9 2 12 5 15"></polyline>
+            <polyline points="9 5 12 2 15 5"></polyline>
+            <polyline points="15 19 12 22 9 19"></polyline>
+            <polyline points="19 9 22 12 19 15"></polyline>
+            <line x1="2" y1="12" x2="22" y2="12"></line>
+            <line x1="12" y1="2" x2="12" y2="22"></line>
+          </svg>
+          <span>Drag and Drop into Blender</span>
+        </div>
+        <div class="dd-install-fallback">
+          ...or <a href="https://extensions.blender.org/download/sha256:96b820ec8a5ea15fc6ebf465c1a1c649ef68c075b122b79e1eac2b941b8fc37d/add-on-devil-designer-v0.11.0.zip?repository=%2Fapi%2Fv1%2Fextensions%2F&amp;blender_version_min=5.2.0" class="dd-install-fallback-link" download>download</a> and <a href="install/#alternative-install-from-github-release-zip" class="dd-install-fallback-link">Install from Disk</a>
+        </div>
       </div>
     </div>
 
@@ -76,6 +81,9 @@ hide:
   }
 
   function handleDragStart(e) {
+    if (e.target && e.target.closest && e.target.closest('.dd-install-fallback-link')) {
+      return;
+    }
     revealDrag();
     e.dataTransfer.setData('text/uri-list', installUrl);
     e.dataTransfer.setData('text/plain', installUrl);
