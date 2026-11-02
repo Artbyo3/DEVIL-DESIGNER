@@ -80,6 +80,9 @@ def tag(obj,kind):
 
 def remove_objects(objects):
     for obj in objects:
+        if obj.get('dd_shape_topology'):
+            from .cloth_shaping import forget
+            forget(obj)
         mesh = obj.data if obj.type=='MESH' else None
         bpy.data.objects.remove(obj,do_unlink=True)
         if mesh and mesh.users==0:
@@ -103,6 +106,31 @@ def reset(context):
 
 def metres_per_unit(scene):
     return max(1e-6,scene.unit_settings.scale_length)
+
+
+def shaping_configuration(cloth):
+    result = {}
+    owners = {'settings': cloth.settings, 'collision_settings': cloth.collision_settings,
+              'effector_weights': cloth.settings.effector_weights}
+    for name, owner in owners.items():
+        result[name] = {prop.identifier: list(getattr(owner, prop.identifier)) if getattr(prop, 'is_array', False) else getattr(owner, prop.identifier)
+                        for prop in owner.bl_rna.properties
+                        if not prop.is_readonly and prop.identifier != 'rna_type'
+                        and prop.type in {'BOOLEAN', 'INT', 'FLOAT', 'ENUM', 'STRING', 'POINTER'}}
+    result['cache'] = (cloth.point_cache.frame_start, cloth.point_cache.frame_end)
+    return result
+
+
+def shaping_restore(context, source, configuration):
+    cloth = source.modifiers.new('DD Cloth', 'CLOTH')
+    owners = {'settings': cloth.settings, 'collision_settings': cloth.collision_settings,
+              'effector_weights': cloth.settings.effector_weights}
+    for name, owner in owners.items():
+        for key, value in configuration[name].items():
+            setattr(owner, key, value)
+    cloth.point_cache.frame_start, cloth.point_cache.frame_end = configuration['cache']
+    context.view_layer.update()
+    return cloth
 
 
 def material(index):
@@ -454,6 +482,9 @@ def keep_drape(context):
     if not simulations:
         raise ValueError("Simulate a garment first, then stop on the frame you want to keep.")
     source = simulations[0]
+    if source.get('dd_shape_topology'):
+        from .cloth_shaping import keep_guard
+        keep_guard(context, source)
     panels = generated(scene,'panel')
     if source.get('dd_signature')!=signature(scene,panels):
         raise ValueError("The patterns or arrangement changed. Reset and simulate the current version first.")
@@ -515,8 +546,18 @@ def keep_drape(context):
         modifier = obj.modifiers.new('Fabric Thickness','SOLIDIFY')
         modifier.thickness = scene.dd_thickness/metres_per_unit(scene)
         modifier.offset = 0
+    if source.get('dd_shape_topology'):
+        try:
+            context.view_layer.update()
+            keep_guard(context, source, obj)
+        except Exception:
+            remove_objects([obj])
+            raise
     source.hide_set(True)
     source.hide_render = True
+    if source.get('dd_shape_topology'):
+        from .cloth_shaping import forget
+        forget(source)
     for other in context.selected_objects:
         other.select_set(False)
     obj.select_set(True)

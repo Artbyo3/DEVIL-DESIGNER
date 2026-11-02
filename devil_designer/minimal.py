@@ -39,15 +39,16 @@ def minimal_layout(layout, pending=False, confirmation=False, playing=False, kep
     layout.metrics = MinimalMetrics.resolve()
     layout.header = Rect(round(panel.x), round(panel.y + panel.h - 32 * scale), round(panel.w), round(32 * scale))
     layout.footer = Rect(round(panel.x), round(panel.y), round(panel.w), 0)
-    tool_pitch = min(35, max(24, (panel.h / scale - 156) / 8))
-    dock_height = round((8 * tool_pitch + 50) * scale)
+    tool_count = 9
+    tool_pitch = min(35, max(22, (panel.h / scale - 156) / tool_count))
+    dock_height = round((tool_count * tool_pitch + 50) * scale)
     dock_width = round(56 * scale)
     dock_x = round(panel.x + 6 * scale)
     dock_y = round(panel.y + (panel.h - dock_height) / 2)
     layout.rail = Rect(dock_x, dock_y, dock_width, dock_height)
     layout.buttons = {}
     tools = [('SELECT', 'Select'), ('DRAW', 'Draw'), ('INTERNAL', 'Internal'), ('SEW', 'Sew'),
-             ('PIN', 'Pin'), ('UNDO', 'Undo'), ('REDO', 'Redo'), ('LIBRARY', 'Library')]
+             ('PIN', 'Pin'), ('SHAPE', 'Shape'), ('UNDO', 'Undo'), ('REDO', 'Redo'), ('LIBRARY', 'Library')]
     col_w = round(40 * scale)
     col_pad = round(8 * scale)
     tool_x = round(layout.rail.x + col_pad)
@@ -59,7 +60,7 @@ def minimal_layout(layout, pending=False, confirmation=False, playing=False, kep
     btn_h = round(tool_pitch * scale)
     tools_top = layout.rail.y + dock_height - top_pad
     for index, (key, label) in enumerate(tools):
-        gap_offset = cluster_gap if index >= 5 else 0
+        gap_offset = cluster_gap if index >= 6 else 0
         btn_y = round(tools_top - (index + 1) * btn_h - gap_offset)
         layout.buttons[key] = (Rect(tool_x, btn_y, col_w, round(btn_h - 2 * scale)), label)
     chip_y1 = round(layout.rail.y + bottom_pad + ind_h + 2 * scale)
@@ -142,6 +143,8 @@ class MinimalCards:
             scene.dd_thickness = THICKNESS[self.named_choice(scene.dd_thickness, THICKNESS)]
 
     def seam_badges(self):
+        if self.tool == 'SHAPE':
+            return []
         badges = []
         scale = self.canvas_layout.scale
         meas = getattr(self, 'measurement_rects', [])
@@ -1250,6 +1253,11 @@ class MinimalCards:
                 self.perform_action(button)
             elif button == 'SEW':
                 self.choose_tool('SEW')
+            elif button == 'SHAPE':
+                try:
+                    self.enable_shaping(context)
+                except ValueError as failure:
+                    self.message = str(failure)
             elif button == 'LIBRARY':
                 self.show_card('LIBRARY', (btn_rect.x + btn_rect.w + 10 * scale, btn_rect.y + btn_rect.h / 2))
             elif button == 'CLOSE':

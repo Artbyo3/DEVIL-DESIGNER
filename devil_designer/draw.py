@@ -284,6 +284,12 @@ class Renderer:
             stitch = [(cx - 0.3 * s, cy + 0.28 * s), (cx - 0.1 * s, cy - 0.28 * s),
                       (cx + 0.1 * s, cy + 0.28 * s), (cx + 0.3 * s, cy - 0.28 * s)]
             self.lines(stitch, (*color[:3], 0.75), 1.2, strip=True)
+        elif name in {'SHAPE', 'shape'}:
+            pts = [(cx + math.cos(i * math.tau / 16) * 0.35 * s,
+                    cy + math.sin(i * math.tau / 16) * 0.35 * s) for i in range(17)]
+            self.lines(pts, color, 1.4, strip=True)
+            self.lines([(cx - 0.22 * s, cy), (cx + 0.22 * s, cy)], color, 1.2)
+            self.lines([(cx, cy - 0.22 * s), (cx, cy + 0.22 * s)], color, 1.2)
         elif name in {'PIN', 'pin'}:
             self.round_rect(Rect(cx - 0.25 * s, cy + 0.18 * s, 0.5 * s, 0.18 * s), color, radius=2)
             self.lines([(cx, cy + 0.18 * s), (cx, cy - 0.42 * s)], color, 1.5)
@@ -368,6 +374,42 @@ class Renderer:
         projected = [view.screen(pt, canvas) for pt in points] if view else screen
         self.triangles(projected, color, indices)
         return True
+
+    def draw_shaping_strip(self, ed):
+        rects = getattr(ed, 'shaping_strip_rects', None) or {}
+        bounds = rects.get('STRIP_BOUNDS')
+        if not bounds:
+            return
+        scale = min(self.s, bounds.w / 280)
+        self.round_rect(bounds, SURFACE_FLOATING, radius=6)
+        self.round_rect_outline(bounds, SURFACE_OUTLINE, radius=6)
+        mode_rect = rects.get('MODE_TOGGLE')
+        if mode_rect:
+            mode = getattr(ed, 'shape_mode', 'PULL')
+            hover = mode_rect.contains(*ed.pointer)
+            self.round_rect(mode_rect, ACCENT if mode == 'PULL' else ELEVATED if hover else BG_WELL, radius=4)
+            self.text(mode_rect.x + mode_rect.w / 2, mode_rect.y + 8 * scale, mode.title(), 11, TEXT_ON_ACCENT if mode == 'PULL' else TEXT, True)
+        rm_rect = rects.get('RADIUS_MINUS')
+        if rm_rect:
+            hover = rm_rect.contains(*ed.pointer)
+            self.round_rect(rm_rect, ELEVATED if hover else BG_WELL, radius=4)
+            self.text(rm_rect.x + rm_rect.w / 2, rm_rect.y + 7 * scale, '-', 13, TEXT, True)
+        rv_rect = rects.get('RADIUS_VALUE')
+        if rv_rect and ed.shaping is not None:
+            r_mm = ed.shaping.radius * 1000
+            self.text(rv_rect.x + rv_rect.w / 2, rv_rect.y + 8 * scale, f'{r_mm:.0f} mm', 10, TEXT_SUB, True)
+        rp_rect = rects.get('RADIUS_PLUS')
+        if rp_rect:
+            hover = rp_rect.contains(*ed.pointer)
+            self.round_rect(rp_rect, ELEVATED if hover else BG_WELL, radius=4)
+            self.text(rp_rect.x + rp_rect.w / 2, rp_rect.y + 7 * scale, '+', 13, TEXT, True)
+        rst_rect = rects.get('RESET')
+        if rst_rect:
+            hover = rst_rect.contains(*ed.pointer)
+            self.round_rect(rst_rect, ELEVATED if hover else BG_WELL, radius=4)
+            self.text(rst_rect.x + rst_rect.w / 2, rst_rect.y + 8 * scale, 'Reset', 10, TEXT, True)
+        self.text(bounds.x + 4 * scale, bounds.y - 18 * scale, ed.message, 10, TEXT,
+                  max_width=bounds.w - 8 * scale)
 
     def draw(self, ed):
         self.s = s = ed.canvas_layout.scale
@@ -920,11 +962,12 @@ class Renderer:
         self.round_rect(layout.rail, SURFACE_FLOATING, radius=metrics.menu_back)
         self.round_rect_outline(layout.rail, SURFACE_OUTLINE, radius=metrics.menu_back)
         icons = {'LIBRARY': 'LIBRARY', 'DRAW': 'RECTANGLE', 'INTERNAL': 'INTERNAL', 'PIN': 'PIN',
-                 'SELECT': 'SELECT', 'SEW': 'SEW', 'UNDO': 'UNDO', 'REDO': 'REDO'}
+                 'SELECT': 'SELECT', 'SEW': 'SEW', 'SHAPE': 'SHAPE', 'UNDO': 'UNDO', 'REDO': 'REDO'}
         draw_shape = getattr(ed, 'draw_shape', 'RECTANGLE')
         icons['DRAW'] = 'POLYGON' if draw_shape == 'POLYGON' else 'ELLIPSE' if draw_shape == 'ELLIPSE' else 'RECTANGLE'
         icons['INTERNAL'] = ed.tool if ed.tool in {'DART', 'KNIFE'} else 'INTERNAL'
         shortcuts = {'SELECT': 'V', 'DRAW': 'R', 'INTERNAL': 'I', 'SEW': 'J', 'PIN': 'K',
+                     'SHAPE': 'Live shaping correction',
                      'UNDO': 'Ctrl Z', 'REDO': 'Ctrl Shift Z',
                      'CLOSE': 'Esc', 'INSPECTOR_TOGGLE': 'Inspector',
                      'GARMENT': 'Garment & Body settings', 'HELP': '?',
@@ -991,6 +1034,9 @@ class Renderer:
                     position = (rect.x - 70 * scale, rect.y - 18 * scale)
                 elif key == 'GARMENT':
                     position = (rect.x + 20 * scale, rect.y - 18 * scale)
+                elif key == 'SHAPE':
+                    tip_label = 'Shape cloth'
+                    tip_shortcut = 'Live shaping correction'
                 tip_label = ('Snap: On' if ed.snap else 'Snap: Off') if key == 'TOGGLE_SNAP' else \
                             ('Body guide: On' if ed._scene.dd_reference_visible else 'Body guide: Off') if key == 'TOGGLE_GUIDE' else \
                             ('Lengths: On' if ed._scene.dd_lengths_visible else 'Lengths: Off') if key == 'TOGGLE_LENGTHS' else blocker or label
@@ -1236,7 +1282,7 @@ class Renderer:
             toast = Rect(panel.x + 76 * scale, panel.y + 15 * scale, width, 30 * scale)
             self.round_rect(toast, (.45, .12, .12, .96), radius=metrics.tooltip)
             self.text(toast.x + 12 * scale, toast.y + 10 * scale, ed.error_message, 10, (1.0, .85, .85, 1.0), max_width=toast.w - 24 * scale)
-        elif ed.message:
+        elif ed.message and ed.tool != 'SHAPE':
             if getattr(ed, 'toast_text', None) != ed.message:
                 ed.toast_text = ed.message
                 ed.toast_until = time.monotonic() + 3
@@ -1249,13 +1295,21 @@ class Renderer:
         panel = layout.panel
         hint_clear = not any(rect.y <= panel.y + 78 * scale and rect.y + rect.h >= panel.y + 60 * scale
                              for rect, title, controls in cards)
-        if panel.w > 850 * scale and not ed.confirm_action and hint_clear:
+        if panel.w > 850 * scale and not ed.confirm_action and hint_clear and ed.tool != 'SHAPE':
             self.text(panel.x + 90 * scale, panel.y + 65 * scale, ed.tool_hint(), 11, MUTED,
                       max_width=panel.w - 440 * scale)
         if tooltip and not any(card[0].contains(*ed.pointer) for card in cards):
             ComponentRenderer.draw_tooltip(self, Tooltip(text=tooltip[0], shortcut=tooltip[1], pos=tooltip[2], visible=True), scale, metrics)
         if card_tooltip:
             ComponentRenderer.draw_tooltip(self, card_tooltip, scale, metrics)
+        if ed.minimal_ui and ed.tool == 'SHAPE':
+            self.clip(ed.shaping_view_bounds())
+            if not layout.panel.contains(*ed.pointer) and ed.shape_hover is not None:
+                center, radius = ed.shape_hover
+                ring = [(center[0] + math.cos(index * math.tau / 32) * radius,
+                         center[1] + math.sin(index * math.tau / 32) * radius) for index in range(33)]
+                self.lines(ring, (*ACCENT[:3], 0.35), 1.2, strip=True)
+            self.draw_shaping_strip(ed)
 
     def grid(self, view, c):
         step = grid_step(view.zoom)

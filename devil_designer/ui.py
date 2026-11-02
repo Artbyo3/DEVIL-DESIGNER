@@ -21,6 +21,14 @@ KEYMAPS = []
 def on_load(_):
     close_active()
     cancel_playback()
+    from .cloth_shaping import clear
+    clear()
+
+
+@persistent
+def after_load(_):
+    from .cloth_shaping import recover_loaded
+    recover_loaded(bpy.context)
 
 
 classes = (DD_OT_pattern_editor,DD_OT_viewport_seam_action)+CLASSES
@@ -84,6 +92,7 @@ def register():
     live_panels.register()
     arrangement_controls.register()
     bpy.app.handlers.load_pre.append(on_load)
+    bpy.app.handlers.load_post.append(after_load)
     bpy.types.VIEW3D_MT_view.append(launch_menu)
     config=bpy.context.window_manager.keyconfigs.addon
     if config:
@@ -97,11 +106,15 @@ def unregister():
     arrangement_controls.unregister()
     live_panels.unregister()
     close_active()
+    from .cloth_shaping import clear
+    clear()
     from . import tracing
     tracing.unregister()
     cancel_playback()
     if on_load in bpy.app.handlers.load_pre:
         bpy.app.handlers.load_pre.remove(on_load)
+    if after_load in bpy.app.handlers.load_post:
+        bpy.app.handlers.load_post.remove(after_load)
     bpy.types.VIEW3D_MT_view.remove(launch_menu)
     for keymap,item in KEYMAPS:
         keymap.keymap_items.remove(item)
