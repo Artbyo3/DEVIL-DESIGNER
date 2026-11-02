@@ -108,59 +108,103 @@ body:has(.dd-landing-container) .md-content__inner {
 }
 
 .dd-install-card {
-  width: min(100%, 420px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: min(100%, 360px);
   min-width: 0;
-  padding: 16px 20px;
-  margin-bottom: 16px;
-  gap: 6px;
-  border: 1px solid #49635f;
-  border-radius: 10px;
-  background: var(--dd-panel);
-  box-shadow: 0 4px 16px #0000001a;
-  transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease;
+  padding: 0;
+  margin: 0 auto 16px;
+  gap: 8px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  text-decoration: none !important;
 }
 
 .dd-install-card:hover {
   transform: none;
-  border-color: var(--dd-mint);
-  background: #28312f;
-  box-shadow: 0 4px 20px #00000026;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
 }
 
-.dd-install-header {
-  gap: 10px;
-}
-
-.dd-install-name {
-  font-size: 16px;
+.dd-install-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 42px;
+  padding: 0 20px;
+  background: var(--dd-mint);
+  color: #14171a !important;
+  font-size: 14px;
   font-weight: 600;
-  line-height: 1.4;
-  letter-spacing: -0.015em;
-}
-
-.dd-install-version {
-  padding: 3px 7px;
-  border-radius: 5px;
-  font-size: 11px;
   line-height: 1.3;
-  letter-spacing: 0.01em;
+  letter-spacing: -0.01em;
+  border-radius: 8px;
+  border: 1px solid #88e2d4;
+  box-shadow: 0 2px 10px rgba(112, 213, 197, 0.2);
+  text-decoration: none !important;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
 }
 
-.dd-install-hint {
+.dd-install-btn-primary:hover {
+  background: var(--dd-mint-hover);
+  border-color: #a4eee2;
+  box-shadow: 0 4px 18px rgba(112, 213, 197, 0.35);
+  transform: translateY(-1px);
+}
+
+.dd-install-btn-primary:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(112, 213, 197, 0.25);
+}
+
+.dd-install-drag-zone {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 38px;
+  padding: 0 16px;
+  background: rgba(112, 213, 197, 0.04);
+  border: 1.5px dashed #49635f;
+  border-radius: 8px;
+  color: #cbd5e1 !important;
   font-size: 13px;
-  line-height: 1.4;
-  letter-spacing: 0;
-  color: var(--dd-mint);
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: 0.005em;
+  text-decoration: none !important;
+  cursor: grab;
+  user-select: none;
+  transition: border-color 160ms ease, background-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
 }
 
-.dd-install-disclaimer {
-  max-width: 340px;
-  margin: 2px 0 0;
-  font-size: 11px;
-  line-height: 1.45;
-  letter-spacing: 0;
-  color: #a4b0bc;
-  opacity: 1;
+.dd-install-drag-zone:hover {
+  border-color: var(--dd-mint);
+  background: rgba(112, 213, 197, 0.09);
+  color: #ffffff !important;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
+}
+
+.dd-install-drag-zone:active {
+  cursor: grabbing;
+}
+
+.dd-install-drag-icon {
+  flex-shrink: 0;
+  color: var(--dd-mint);
+  transition: transform 160ms ease;
+}
+
+.dd-install-drag-zone:hover .dd-install-drag-icon {
+  transform: scale(1.1);
 }
 
 .dd-landing-nav {
@@ -298,7 +342,21 @@ body:has(.dd-landing-container) a:focus-visible {
   }
 
   .dd-install-card {
-    padding: 16px;
+    width: 100%;
+    max-width: 320px;
+    padding: 0;
+    margin-bottom: 14px;
+    gap: 7px;
+  }
+
+  .dd-install-btn-primary {
+    min-height: 40px;
+    font-size: 13.5px;
+  }
+
+  .dd-install-drag-zone {
+    min-height: 36px;
+    font-size: 12px;
   }
 
   .md-typeset .dd-landing-btn {
@@ -327,8 +385,19 @@ body:has(.dd-landing-container) a:focus-visible {
   }
 
   .dd-install-card {
-    padding-block: 10px;
-    margin-bottom: 12px;
+    padding: 0;
+    margin-bottom: 10px;
+    gap: 6px;
+  }
+
+  .dd-install-btn-primary {
+    min-height: 36px;
+    font-size: 13px;
+  }
+
+  .dd-install-drag-zone {
+    min-height: 32px;
+    font-size: 11.5px;
   }
 }
 
@@ -338,6 +407,8 @@ body:has(.dd-landing-container) a:focus-visible {
   }
 
   .dd-install-card,
+  .dd-install-btn-primary,
+  .dd-install-drag-zone,
   .dd-landing-btn {
     transition: none;
   }

@@ -14,20 +14,32 @@ hide:
     <h1 class="dd-landing-title">Devil Designer</h1>
     <p class="dd-landing-tagline">A movable 2D clothing-pattern editor and cloth authoring tool for Blender.</p>
     
-    <!-- Draggable add-on package card: drag into Blender to install, click to download zip -->
-    <a href="https://github.com/Artbyo3/DEVIL-DESIGNER/releases/download/v0.11.0/devil_designer-0.11.0.zip"
-       download
-       draggable="true"
-       id="dd-install-card"
-       class="dd-install-card"
-       aria-label="Download or drag Devil Designer v0.11.0 into Blender">
-      <div class="dd-install-header">
-        <span class="dd-install-name">Devil Designer</span>
-        <span class="dd-install-version">v0.11.0</span>
-      </div>
-      <div class="dd-install-hint">Drag into Blender</div>
-      <div class="dd-install-disclaimer">Extensions listing awaiting approval — this installs the direct download.</div>
-    </a>
+    <!-- Install action: solid primary button + dashed drag-and-drop zone -->
+    <div class="dd-install-card" id="dd-install-card">
+      <a href="https://extensions.blender.org/add-ons/devil-designer/"
+         class="dd-install-btn-primary"
+         target="_blank"
+         rel="noopener">
+        Get Add-on
+      </a>
+      <a href="https://extensions.blender.org/add-ons/devil-designer/"
+         draggable="true"
+         id="dd-install-drag"
+         class="dd-install-drag-zone"
+         target="_blank"
+         rel="noopener"
+         aria-label="Drag and Drop into Blender">
+        <svg class="dd-install-drag-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polyline points="5 9 2 12 5 15"></polyline>
+          <polyline points="9 5 12 2 15 5"></polyline>
+          <polyline points="15 19 12 22 9 19"></polyline>
+          <polyline points="19 9 22 12 19 15"></polyline>
+          <line x1="2" y1="12" x2="22" y2="12"></line>
+          <line x1="12" y1="2" x2="12" y2="22"></line>
+        </svg>
+        <span>Drag and Drop into Blender</span>
+      </a>
+    </div>
 
     <!-- Minimal entry options (Quickstart, Documentation, GitHub) -->
     <nav class="dd-landing-nav" aria-label="Documentation entry points">
@@ -47,15 +59,14 @@ hide:
 </div>
 
 <script>
-// Wire HTML5 drag-and-drop payload for the install card
+// Wire HTML5 drag-and-drop payload for the Extensions listing
 (function() {
   const card = document.getElementById('dd-install-card');
   if (!card) return;
-  const assetUrl = 'https://github.com/Artbyo3/DEVIL-DESIGNER/releases/download/v0.11.0/devil_designer-0.11.0.zip';
+  const extensionUrl = 'https://extensions.blender.org/add-ons/devil-designer/';
   card.addEventListener('dragstart', (e) => {
-    e.dataTransfer.setData('text/uri-list', assetUrl);
-    e.dataTransfer.setData('text/plain', assetUrl);
-    e.dataTransfer.setData('DownloadURL', `application/zip:devil_designer-0.11.0.zip:${assetUrl}`);
+    e.dataTransfer.setData('text/uri-list', extensionUrl);
+    e.dataTransfer.setData('text/plain', extensionUrl);
     e.dataTransfer.effectAllowed = 'copyLink';
   });
 })();

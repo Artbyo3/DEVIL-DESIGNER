@@ -146,71 +146,92 @@ body:has(.dd-landing-container) .md-content__inner {
   max-width: 520px;
 }
 
-/* Draggable Install Card */
+/* Install Action Card: Primary solid button + dashed drag zone */
 .dd-install-card {
-  display: inline-flex;
+  display: flex;
   flex-direction: column;
   align-items: center;
+  width: min(100%, 360px);
+  margin: 0 auto 1.5rem;
+  gap: 0.5rem;
+  text-decoration: none !important;
+}
+
+.dd-install-btn-primary {
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
-  gap: 0.35rem;
-  background-color: #232930;
-  border: 1px solid rgba(112, 213, 197, 0.3);
-  border-radius: 6px;
-  padding: 0.85rem 1.8rem;
-  margin-bottom: 1.75rem;
+  width: 100%;
+  min-height: 42px;
+  padding: 0 1.25rem;
+  background-color: #70D5C5;
+  color: #14171A !important;
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  border-radius: 8px;
+  border: 1px solid #88E2D4;
+  box-shadow: 0 2px 10px rgba(112, 213, 197, 0.2);
+  text-decoration: none !important;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.16s ease;
+}
+
+.dd-install-btn-primary:hover {
+  background-color: #88E2D4;
+  border-color: #A4EEE2;
+  box-shadow: 0 4px 18px rgba(112, 213, 197, 0.35);
+  transform: translateY(-1px);
+}
+
+.dd-install-btn-primary:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(112, 213, 197, 0.25);
+}
+
+.dd-install-drag-zone {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: 38px;
+  padding: 0 1rem;
+  background-color: rgba(112, 213, 197, 0.04);
+  border: 1.5px dashed #49635F;
+  border-radius: 8px;
+  color: #CBD5E1 !important;
+  font-size: 0.825rem;
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: 0.005em;
   text-decoration: none !important;
   cursor: grab;
-  transition: all 0.2s ease;
   user-select: none;
-  min-width: 230px;
+  transition: all 0.16s ease;
 }
 
-.dd-install-card:hover {
+.dd-install-drag-zone:hover {
   border-color: #70D5C5;
-  background-color: #272E37;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  background-color: rgba(112, 213, 197, 0.09);
+  color: #FFFFFF !important;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
 }
 
-.dd-install-card:active {
+.dd-install-drag-zone:active {
   cursor: grabbing;
 }
 
-.dd-install-header {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-}
-
-.dd-install-name {
-  font-weight: 700;
-  font-size: 1rem;
-  color: #E5ECF2;
-  letter-spacing: 0.03em;
-}
-
-.dd-install-version {
-  font-size: 0.8rem;
-  font-weight: 600;
+.dd-install-drag-icon {
+  flex-shrink: 0;
   color: #70D5C5;
-  background: rgba(112, 213, 197, 0.12);
-  padding: 0.1rem 0.45rem;
-  border-radius: 3px;
+  transition: transform 0.16s ease;
 }
 
-.dd-install-hint {
-  font-size: 0.8rem;
-  color: #8E9BA8;
-  letter-spacing: 0.02em;
-}
-
-.dd-install-disclaimer {
-  font-size: 0.7rem;
-  color: #8E9BA8;
-  opacity: 0.85;
-  letter-spacing: 0.01em;
-  line-height: 1.3;
-  margin-top: 0.1rem;
+.dd-install-drag-zone:hover .dd-install-drag-icon {
+  transform: scale(1.1);
 }
 
 /* Navigation Buttons */

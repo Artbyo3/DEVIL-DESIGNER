@@ -4,19 +4,29 @@
 
 You need Blender 5.2 or later; nothing else needs to be installed.
 
-## Download Devil Designer
+## Install from Blender Extensions (Recommended)
 
-Download [Devil Designer v0.11.0](https://github.com/Artbyo3/DEVIL-DESIGNER/releases/download/v0.11.0/devil_designer-0.11.0.zip) from the GitHub releases page.
-
-The Blender Extensions listing is awaiting approval, so use this direct download for now.
-
-## Install in Blender
+Install directly from Blender's official extension platform:
 
 1. Open Blender.
 2. Choose **Edit > Preferences**.
+3. Open **Get Extensions**.
+4. Search for **Devil Designer** and click **Install**.
+
+Alternatively, drag and drop into Blender:
+
+1. Open the [Devil Designer listing on Blender Extensions](https://extensions.blender.org/add-ons/devil-designer/).
+2. Drag the **Drag and Drop into Blender** button into any Blender window.
+
+## Alternative: Install from GitHub Release ZIP
+
+If you prefer to install manually from a release archive:
+
+1. Download the add-on package from the [GitHub releases page](https://github.com/Artbyo3/DEVIL-DESIGNER/releases/latest).
+2. Open Blender and choose **Edit > Preferences**.
 3. Open **Add-ons**.
-4. Choose **Install from Disk...**.
-5. Select the downloaded ZIP and confirm.
+4. Choose **Install from Disk...** from the top-right menu.
+5. Select the downloaded ZIP file and confirm.
 
 ## Enable Devil Designer
 
@@ -42,12 +52,11 @@ From a 3D Viewport, use any of these options:
 
 ## Upgrade or Reinstall
 
-1. Uncheck the older Devil Designer version in Blender Preferences.
-2. Restart Blender.
-3. Install the v0.11.0 download and enable Devil Designer again.
+- **Extensions:** Blender automatically manages updates under **Preferences > Get Extensions**.
+- **Manual ZIP:** Uncheck the older Devil Designer in Blender Preferences, restart Blender, install the latest download, and enable it again.
 
 ## Fix Common Install Problems
 
-- **Devil Designer is not in the add-on list:** Confirm Blender is 5.2 or later, then install the downloaded ZIP again from **Preferences > Add-ons > Install from Disk...**.
-- **The checkbox will not stay on:** Restart Blender and reinstall the v0.11.0 download, then enable it again.
+- **Devil Designer is not found in Get Extensions:** Confirm Blender is 5.2 or later and online access is enabled under **Preferences > Get Extensions**.
+- **The checkbox will not stay on:** Restart Blender, reinstall the download, then enable it again.
 - **The editor does not open:** Make a 3D Viewport active, then try the shortcut, F3 search, or **View > Devil Designer** again.
