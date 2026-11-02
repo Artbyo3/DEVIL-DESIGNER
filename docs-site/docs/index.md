@@ -14,21 +14,20 @@ hide:
     <h1 class="dd-landing-title">Devil Designer</h1>
     <p class="dd-landing-tagline">A movable 2D clothing-pattern editor and cloth authoring tool for Blender.</p>
     
-    <!-- Install action: solid primary button + dashed drag-and-drop zone -->
+    <!-- Install action: single element with two states (resting: Get Add-on; clicked/active: Drag and Drop into Blender) -->
     <div class="dd-install-card" id="dd-install-card">
-      <a href="https://extensions.blender.org/add-ons/devil-designer/"
-         class="dd-install-btn-primary"
-         target="_blank"
-         rel="noopener">
+      <button type="button"
+              class="dd-install-btn-primary"
+              id="dd-install-btn"
+              aria-label="Get Add-on">
         Get Add-on
-      </a>
-      <a href="https://extensions.blender.org/add-ons/devil-designer/"
-         draggable="true"
-         id="dd-install-drag"
-         class="dd-install-drag-zone"
-         target="_blank"
-         rel="noopener"
-         aria-label="Drag and Drop into Blender">
+      </button>
+      <div class="dd-install-drag-zone"
+           id="dd-install-drag"
+           draggable="true"
+           role="button"
+           tabindex="0"
+           aria-label="Drag and Drop into Blender">
         <svg class="dd-install-drag-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <polyline points="5 9 2 12 5 15"></polyline>
           <polyline points="9 5 12 2 15 5"></polyline>
@@ -38,7 +37,7 @@ hide:
           <line x1="12" y1="2" x2="12" y2="22"></line>
         </svg>
         <span>Drag and Drop into Blender</span>
-      </a>
+      </div>
     </div>
 
     <!-- Minimal entry options (Quickstart, Documentation, GitHub) -->
@@ -59,16 +58,34 @@ hide:
 </div>
 
 <script>
-// Wire HTML5 drag-and-drop payload for the Extensions listing
+// Install card: single element with resting and drag states
 (function() {
   const card = document.getElementById('dd-install-card');
+  const btn = document.getElementById('dd-install-btn');
+  const dragZone = document.getElementById('dd-install-drag');
   if (!card) return;
-  const extensionUrl = 'https://extensions.blender.org/add-ons/devil-designer/';
-  card.addEventListener('dragstart', (e) => {
-    e.dataTransfer.setData('text/uri-list', extensionUrl);
-    e.dataTransfer.setData('text/plain', extensionUrl);
+
+  const installUrl = 'https://extensions.blender.org/download/sha256:96b820ec8a5ea15fc6ebf465c1a1c649ef68c075b122b79e1eac2b941b8fc37d/add-on-devil-designer-v0.11.0.zip?repository=%2Fapi%2Fv1%2Fextensions%2F&blender_version_min=5.2.0';
+
+  function revealDrag() {
+    card.classList.add('is-active');
+  }
+
+  if (btn) {
+    btn.addEventListener('click', revealDrag);
+  }
+
+  function handleDragStart(e) {
+    revealDrag();
+    e.dataTransfer.setData('text/uri-list', installUrl);
+    e.dataTransfer.setData('text/plain', installUrl);
     e.dataTransfer.effectAllowed = 'copyLink';
-  });
+  }
+
+  if (dragZone) {
+    dragZone.addEventListener('dragstart', handleDragStart);
+  }
+  card.addEventListener('dragstart', handleDragStart);
 })();
 
 // Fetch live GitHub contributors and populate truly seamless marquee

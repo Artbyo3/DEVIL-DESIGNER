@@ -146,15 +146,22 @@ body:has(.dd-landing-container) .md-content__inner {
   max-width: 520px;
 }
 
-/* Install Action Card: Primary solid button + dashed drag zone */
+/* Install Action Card: Single element with resting (button) and active (drag zone) states */
 .dd-install-card {
   display: flex;
-  flex-direction: column;
+  justify-content: center;
   align-items: center;
-  width: min(100%, 360px);
+  width: min(100%, 280px);
   margin: 0 auto 1.5rem;
-  gap: 0.5rem;
   text-decoration: none !important;
+}
+
+.dd-install-card:not(.is-active) .dd-install-drag-zone {
+  display: none !important;
+}
+
+.dd-install-card.is-active .dd-install-btn-primary {
+  display: none !important;
 }
 
 .dd-install-btn-primary {
@@ -162,10 +169,11 @@ body:has(.dd-landing-container) .md-content__inner {
   align-items: center;
   justify-content: center;
   width: 100%;
-  min-height: 42px;
+  min-height: 44px;
   padding: 0 1.25rem;
   background-color: #70D5C5;
   color: #14171A !important;
+  font-family: inherit;
   font-size: 0.9rem;
   font-weight: 600;
   line-height: 1.3;
