@@ -99,6 +99,7 @@ ADAPTIVE_FAMILIES = (('neck', 'chest', 'waist', 'hip'), ('left_thigh', 'left_cal
 ADAPTIVE_LIMIT = 24
 ADAPTIVE_TOLERANCE = .001
 SLICE_SECONDS = .005
+MIRROR_TOLERANCE = 1e-4
 
 
 class FitPending(ValueError):
@@ -754,15 +755,43 @@ def upgrade_volumes(context):
         raise
 
 
+def _mirror_volume(identity):
+    for side, other in (('left_', 'right_'), ('right_', 'left_')):
+        if identity.startswith(side):
+            return other + identity[len(side):]
+    return identity
+
+
+def _mirrors(point, other):
+    return (abs(math.remainder(point['angle'] + other['angle'], math.tau)) < MIRROR_TOLERANCE
+            and abs(point['height'] - other['height']) < MIRROR_TOLERANCE)
+
+
+def mirrored_points(setup):
+    volumes = {volume['id']: volume for volume in setup['volumes']}
+    result = set()
+    for volume in setup['volumes']:
+        partner = volumes.get(_mirror_volume(volume['id']))
+        if partner is None:
+            continue
+        for point in volume['points']:
+            on_centerline = partner is volume and abs(math.remainder(2 * point['angle'], math.tau)) < MIRROR_TOLERANCE
+            if not on_centerline and any(_mirrors(point, other) for other in partner['points']):
+                result.add((volume['id'], point['id']))
+    return result
+
+
 def world_points(context, setup=None, wait=True):
     setup = setup or ensure_volumes(context, wait=wait)
     low,extent,axes=_volume_frame(context)
+    mirrored=mirrored_points(setup)
     result=[]
     for volume in setup['volumes']:
         for point in volume['points']:
             resolved=_volume_resolve(setup,volume,point,low,extent,axes)
             result.append(dict(volume=volume['id'],point=point['id'],position=resolved['point'],
-                               geometry=resolved['volume'],normal=resolved['normal'],tangent=resolved['tangent']))
+                               geometry=resolved['volume'],normal=resolved['normal'],tangent=resolved['tangent'],
+                               mirrored=(volume['id'],point['id']) in mirrored))
     return result
 
 

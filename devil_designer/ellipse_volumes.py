@@ -120,17 +120,6 @@ def resolve_ellipse(setup, volume, point, low, extent, axes, clearance=None):
                 angle=point['angle'], right=right, front=front, clearance=clearance)
 
 
-def ellipse_ring(sample, clearance, up, count=32):
-    side, front = section_basis(up)
-    positions = []
-    for index in range(count + 1):
-        angle = math.tau * index / count
-        direction = tuple(side[axis] * math.sin(angle) + front[axis] * math.cos(angle) for axis in range(3))
-        radius = directional_radius(sample, direction) + clearance
-        positions.append(tuple(sample['center'][axis] + direction[axis] * radius for axis in range(3)))
-    return positions
-
-
 def wrap_positions(vertices, resolved, width, minimum, minimum_clearance):
     up, right, front = resolved['up'], resolved['right'], resolved['front']
     entries = resolved['stack']

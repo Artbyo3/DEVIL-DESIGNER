@@ -106,6 +106,11 @@ preserve valid pair membership. Designs without pair records remain unchanged.
   is a drawing reference only, not a placement projection.
 - Avatar-owned body-relative bounding volumes and editable arrangement points
   provide optional click-to-wrap or tangent-flat placement. Points toggle with H.
+- Points draw as flat round discs matched to Blender's native gizmo points, about
+  10 px at 100 percent UI scale, with nothing else around the avatar. A point with
+  a left/right mirror partner uses the mirrored color; a dragged point loses that
+  color, as does its partner, until the two mirror each other again. The color is
+  display only and does not place a twin.
 - Setup format 2 stores independent fitted ellipse radii and section bases, derived
   only from evaluated mesh slices at the existing height-fraction bands. Wrapped
   rows interpolate centers and radii across neighboring volumes in the same body

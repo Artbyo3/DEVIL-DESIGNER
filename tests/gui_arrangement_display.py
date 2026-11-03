@@ -30,41 +30,26 @@ def reference_draw(context):
         screen=view3d_utils.location_3d_to_region_2d(context.region,context.region_data,Vector(point['position']))
         if screen is not None and (panel is None or not panel.contains(*screen)):
             points.append(dict(point,screen=tuple(screen)))
-    shader=gpu.shader.from_builtin('UNIFORM_COLOR')
-    volumes=set();lines=[]
-    for point in points:
-        if point['volume'] in volumes:continue
-        volumes.add(point['volume'])
-        normal=Vector(point['normal']);tangent=Vector(point['tangent'])
-        for sample in (point['geometry']['samples'][0],point['geometry']['samples'][-1]):
-            if 'vectors' in sample:
-                from devil_designer.ellipse_volumes import ellipse_ring
-                positions=[Vector(position) for position in ellipse_ring(sample,point['geometry']['clearance'],point['geometry']['axis'])]
-            else:
-                positions=[Vector(sample['center'])+sample['radius']*(normal*math.cos(math.tau*index/32)+tangent*math.sin(math.tau*index/32)) for index in range(33)]
-            ring=[view3d_utils.location_3d_to_region_2d(context.region,context.region_data,position) for position in positions]
-            for first,second in zip(ring,ring[1:]):
-                if first is None or second is None:continue
-                if panel is not None and any(panel.contains(*value) for value in (first,second)):continue
-                lines.extend((tuple(first),tuple(second)))
-    gpu.state.blend_set('ALPHA')
-    if lines:
-        shader.bind();shader.uniform_float('color',ui_system.ARRANGEMENT_RING)
-        batch_for_shader(shader,'LINES',{'pos':lines}).draw(shader)
+    shader=gpu.shader.from_builtin('SMOOTH_COLOR')
     view=context.region_data;camera=view.view_matrix.inverted()
-    scale=ui_system.interface_scale()
-    edge=ui_system.ARRANGEMENT_POINT_DIAMETER*scale/2
-    for radius,color in ((edge,ui_system.ARRANGEMENT_EDGE),(edge-ui_system.ARRANGEMENT_EDGE_WIDTH*scale,ui_system.ARRANGEMENT_FILL)):
+    radius=ui_system.ARRANGEMENT_POINT_DIAMETER*ui_system.interface_scale()/2
+    feather=ui_system.ARRANGEMENT_EDGE_FEATHER/2
+    gpu.state.blend_set('ALPHA')
+    shader.bind()
+    for mirrored,color in ((False,ui_system.ARRANGEMENT_FILL),(True,ui_system.ARRANGEMENT_MIRRORED)):
         for point in points:
+            if point['mirrored']!=mirrored:continue
             toward=(camera.translation-Vector(point['position'])) if view.is_perspective else camera.col[2].xyz
-            alpha=ui_system.ARRANGEMENT_HIDDEN_ALPHA if Vector(point['normal']).dot(toward)<0 else 1
-            horizontal,vertical=point['screen'];vertices=[]
-            for index in range(20):
-                first=math.tau*index/20;second=math.tau*(index+1)/20
-                vertices.extend(((horizontal,vertical),(horizontal+radius*math.cos(first),vertical+radius*math.sin(first)),
-                                 (horizontal+radius*math.cos(second),vertical+radius*math.sin(second))))
-            shader.bind();shader.uniform_float('color',(*color[:3],color[3]*alpha))
-            batch_for_shader(shader,'TRIS',{'pos':vertices}).draw(shader)
+            alpha=color[3]*(ui_system.ARRANGEMENT_HIDDEN_ALPHA if Vector(point['normal']).dot(toward)<0 else 1)
+            horizontal,vertical=point['screen'];vertices=[];colors=[]
+            solid=(*color[:3],alpha);clear=(*color[:3],0.0)
+            for index in range(arrangement_controls.DISK_SEGMENTS):
+                first=math.tau*index/arrangement_controls.DISK_SEGMENTS;second=math.tau*(index+1)/arrangement_controls.DISK_SEGMENTS
+                inner=[(horizontal+(radius-feather)*math.cos(angle),vertical+(radius-feather)*math.sin(angle)) for angle in (first,second)]
+                outer=[(horizontal+(radius+feather)*math.cos(angle),vertical+(radius+feather)*math.sin(angle)) for angle in (first,second)]
+                vertices.extend(((horizontal,vertical),inner[0],inner[1],inner[0],outer[0],outer[1],inner[0],outer[1],inner[1]))
+                colors.extend((solid,solid,solid,solid,clear,clear,solid,clear,solid))
+            batch_for_shader(shader,'TRIS',{'pos':vertices,'color':colors}).draw(shader)
     gpu.state.blend_set('NONE')
     return points
 
@@ -100,6 +85,29 @@ def isolated_point(points,spacing):
     return None
 
 
+def check_points_only(check,area,region,view,evidence):
+    with bpy.context.temp_override(area=area,region=region,region_data=view):
+        points=arrangement_controls.projected_points(bpy.context)
+    raster=render_offscreen(bpy.context,area,region,view,region.width,region.height,arrangement_controls.draw_points)
+    rows,columns=np.nonzero(raster[:,:,3]>.02)
+    screens=np.array([point['screen'] for point in points])
+    pixels=np.stack((columns+.5,rows+.5),axis=1)
+    distances=np.sqrt(((pixels[:,None,:]-screens[None,:,:])**2).sum(axis=2)).min(axis=1)
+    reach=ui_system.ARRANGEMENT_POINT_DIAMETER*ui_system.interface_scale()/2+2
+    evidence['drawn_pixels']=dict(pixels=len(pixels),farthest_from_a_point_px=float(distances.max()),allowed_px=reach)
+    check(len(pixels)>0 and distances.max()<=reach,'every drawn pixel belongs to a point, so no ring or line surrounds the avatar '+str(evidence['drawn_pixels']))
+    colors={}
+    for mirrored,expected in ((False,ui_system.ARRANGEMENT_FILL),(True,ui_system.ARRANGEMENT_MIRRORED)):
+        point=next((item for item in points if item['facing'] and item['mirrored']==mirrored and
+                    all(other is item or math.dist(item['screen'],other['screen'])>12*ui_system.interface_scale() for other in points)),None)
+        check(point is not None,'an unobstructed point exists with mirrored='+str(mirrored))
+        x,y=(int(point['screen'][axis]) for axis in (0,1))
+        colors[str(mirrored)]=raster[y,x,:3].tolist()
+    evidence['rendered_point_colors']=colors
+    red_gap=abs(colors['True'][0]-colors['False'][0])
+    check(red_gap>.2,'a mirrored point renders in a different color from a single point '+str(colors))
+
+
 def check_states(check,area,region,view,scene,avatar,evidence):
     from devil_designer import garment
     width,height=region.width,region.height
@@ -127,19 +135,21 @@ def check_states(check,area,region,view,scene,avatar,evidence):
             sizes.append(dict(ui_scale=scale,system_scale=ui_system.interface_scale(),diameter_px=diameter,
                               hit_diameter_px=ui_system.ARRANGEMENT_HIT_DIAMETER*ui_system.interface_scale(),
                               active_diameter_px=ui_system.ARRANGEMENT_ACTIVE_DIAMETER*ui_system.interface_scale()))
-            check(diameter>=14*ui_system.interface_scale()-1,'normal marker is at least 14 px at 100 percent and scales with UI scale '+str(sizes[-1]))
+            check(abs(diameter-10*ui_system.interface_scale())<=1.5,'normal marker matches the 10 px native gizmo point and scales with UI scale '+str(sizes[-1]))
             check(ui_system.ARRANGEMENT_HIT_DIAMETER*ui_system.interface_scale()>=32*scale*original_system-1e-6,'hit diameter is at least 32 px scaled '+str(scale))
     finally:
         preferences.ui_scale=original_scale
         arrangement_controls._batch_cache=None
     evidence['marker_sizes']=sizes
-    backgrounds={'light body':(.82,.80,.78,1),'dark background':(.05,.06,.07,1)}
-    ratios={name:dict(edge=contrast(ui_system.ARRANGEMENT_EDGE,color),fill=contrast(ui_system.ARRANGEMENT_FILL,color))
+    backgrounds={'viewport background':(.25,.25,.25,1),'dark background':(.05,.06,.07,1)}
+    ratios={name:dict(fill=contrast(ui_system.ARRANGEMENT_FILL,color),mirrored=contrast(ui_system.ARRANGEMENT_MIRRORED,color))
             for name,color in backgrounds.items()}
-    ratios['edge_to_fill']=contrast(ui_system.ARRANGEMENT_EDGE,ui_system.ARRANGEMENT_FILL)
+    ratios['near_white_body']=dict(fill=contrast(ui_system.ARRANGEMENT_FILL,(.82,.80,.78,1)),mirrored=contrast(ui_system.ARRANGEMENT_MIRRORED,(.82,.80,.78,1)))
+    ratios['mirrored_to_fill']=contrast(ui_system.ARRANGEMENT_MIRRORED,ui_system.ARRANGEMENT_FILL)
     evidence['contrast']=ratios
-    check(all(max(value['edge'],value['fill'])>=3 for key,value in ratios.items() if key!='edge_to_fill') and ratios['edge_to_fill']>=3,
-          'marker edge contrast is at least 3:1 on light and dark fixtures '+str(ratios))
+    check(all(min(ratios[name].values())>=3 for name in backgrounds),'both point colors keep 3:1 contrast on viewport and dark fixtures '+str(ratios))
+    check(ratios['mirrored_to_fill']>=1.3,'mirrored points differ from single points in brightness, not hue alone '+str(ratios))
+    check_points_only(check,area,region,view,evidence)
     with bpy.context.temp_override(area=area,region=region,region_data=view):
         points=arrangement_controls.projected_points(bpy.context)
     point=isolated_point(points,60)

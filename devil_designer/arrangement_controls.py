@@ -1,6 +1,7 @@
 import math
 import time
 from dataclasses import dataclass
+from functools import lru_cache
 import blf
 import bpy
 import gpu
@@ -17,6 +18,7 @@ _world_cache=None
 _projection_cache=None
 _batch_cache=None
 _shader=None
+DISK_SEGMENTS=24
 
 
 @dataclass
@@ -48,21 +50,7 @@ def display_world_points(context):
     key=(context.scene.as_pointer(),context.view_layer.as_pointer(),live_panels.avatar_signature(context),
          (_interaction.point,_interaction.angle,_interaction.height) if setup else None)
     if _world_cache is None or _world_cache[0]!=key:
-        points=arrangement.world_points(context,setup,wait=False)
-        rings={}
-        for point in points:
-            normal=Vector(point['normal']);tangent=Vector(point['tangent'])
-            if 'vectors' in point['geometry']['samples'][0]:
-                from .ellipse_volumes import ellipse_ring
-                rings[(point['volume'],point['point'])]=[
-                    [Vector(position) for position in ellipse_ring(sample,point['geometry']['clearance'],point['geometry']['axis'])]
-                    for sample in (point['geometry']['samples'][0],point['geometry']['samples'][-1])]
-            else:
-                rings[(point['volume'],point['point'])]=[
-                    [Vector(sample['center'])+sample['radius']*(normal*math.cos(math.tau*index/32)+tangent*math.sin(math.tau*index/32))
-                     for index in range(33)]
-                    for sample in (point['geometry']['samples'][0],point['geometry']['samples'][-1])]
-        _world_cache=(key,points,rings)
+        _world_cache=(key,arrangement.world_points(context,setup,wait=False))
     return _world_cache[1]
 
 
@@ -75,9 +63,9 @@ def display_panel(context):
 def display_shader():
     interface=gpu.types.GPUShaderCreateInfo()
     interface.vertex_in(0,'VEC3','position')
-    interface.vertex_in(1,'VEC3','peer')
-    interface.vertex_in(2,'VEC2','offset')
-    interface.vertex_in(3,'VEC3','normal')
+    interface.vertex_in(1,'VEC2','offset')
+    interface.vertex_in(2,'VEC3','normal')
+    interface.vertex_in(3,'FLOAT','coverage')
     interface.push_constant('MAT4','viewProjection')
     interface.push_constant('VEC2','viewport')
     interface.push_constant('VEC4','panel')
@@ -87,6 +75,7 @@ def display_shader():
     interface.push_constant('BOOL','srgbTarget')
     stage=gpu.types.GPUStageInterfaceInfo('dd_arrangement_interface')
     stage.smooth('FLOAT','visibility')
+    stage.smooth('FLOAT','edgeCoverage')
     interface.vertex_out(stage)
     interface.fragment_out(0,'VEC4','fragColor')
     interface.vertex_source('''
@@ -97,9 +86,9 @@ bool covered(vec4 clip) {
 void main() {
     vec3 toward = eye.w > 0.5 ? eye.xyz - position : eye.xyz;
     visibility = dot(normal, toward) < 0.0 ? hidden : 1.0;
+    edgeCoverage = coverage;
     vec4 clip = viewProjection * vec4(position, 1.0);
-    vec4 other = viewProjection * vec4(peer, 1.0);
-    if (clip.w <= 0.0 || other.w <= 0.0 || covered(clip) || covered(other)) {
+    if (clip.w <= 0.0 || covered(clip)) {
         gl_Position = vec4(2.0, 2.0, 0.0, 1.0);
     } else {
         gl_Position = vec4(clip.xy / clip.w + 2.0 * offset / viewport, 0.0, 1.0);
@@ -108,7 +97,7 @@ void main() {
 ''')
     interface.fragment_source('''
 void main() {
-    fragColor = vec4(color.rgb, color.a * visibility);
+    fragColor = vec4(color.rgb, color.a * visibility * edgeCoverage);
     if (srgbTarget) {
         vec3 channels = max(color.rgb, vec3(0.0));
         fragColor.rgb = mix(pow((channels + 0.055) / 1.055, vec3(2.4)), channels / 12.92,
@@ -123,55 +112,50 @@ def marker_size(value):
     return value*ui_system.interface_scale()
 
 
-def disk(positions,offsets,normals,point,radius,inner=0.0):
-    position=point['position'];normal=point['normal']
-    for index in range(20):
-        first=math.tau*index/20;second=math.tau*(index+1)/20
-        outer=[(radius*math.cos(angle),radius*math.sin(angle)) for angle in (first,second)]
-        if inner:
-            hole=[(inner*math.cos(angle),inner*math.sin(angle)) for angle in (first,second)]
-            positions.extend((position,)*6);normals.extend((normal,)*6);offsets.extend((hole[0],outer[0],outer[1],hole[0],outer[1],hole[1]))
-        else:
-            positions.extend((position,)*3);normals.extend((normal,)*3);offsets.extend(((0,0),outer[0],outer[1]))
+@lru_cache(maxsize=None)
+def disk_vertices(radius,inner):
+    feather=ui_system.ARRANGEMENT_EDGE_FEATHER/2
+    rim=((radius-feather,1.0),(radius+feather,0.0))
+    bands=((inner-feather,0.0),(inner+feather,1.0),*rim) if inner else ((0.0,1.0),*rim)
+    offsets=[];coverages=[]
+    for index in range(DISK_SEGMENTS):
+        first=math.tau*index/DISK_SEGMENTS;second=math.tau*(index+1)/DISK_SEGMENTS
+        for (near,near_coverage),(far,far_coverage) in zip(bands,bands[1:]):
+            corners=[((distance*math.cos(angle),distance*math.sin(angle)),coverage)
+                     for distance,coverage in ((near,near_coverage),(far,far_coverage)) for angle in (first,second)]
+            for offset,coverage in (corners[0],corners[2],corners[3],corners[0],corners[3],corners[1]):
+                offsets.append(offset);coverages.append(coverage)
+    return offsets,coverages
 
 
 def shape_batch(shader,shapes):
-    positions=[];offsets=[];normals=[]
-    for point,radius,inner in shapes:disk(positions,offsets,normals,point,radius,inner)
-    return batch_for_shader(shader,'TRIS',{'position':positions,'peer':positions,'offset':offsets,'normal':normals}) if positions else None
+    positions=[];offsets=[];normals=[];coverages=[]
+    for point,radius,inner in shapes:
+        shape_offsets,shape_coverages=disk_vertices(radius,inner)
+        positions.extend((point['position'],)*len(shape_offsets));normals.extend((point['normal'],)*len(shape_offsets))
+        offsets.extend(shape_offsets);coverages.extend(shape_coverages)
+    return batch_for_shader(shader,'TRIS',{'position':positions,'offset':offsets,'normal':normals,'coverage':coverages}) if positions else None
 
 
-def display_batches(shader,points,focus=frozenset()):
+def display_batches(shader):
     global _batch_cache
     key=(_world_cache[0],ui_system.interface_scale())
     if _batch_cache is None or _batch_cache[0]!=key:
-        edge=marker_size(ui_system.ARRANGEMENT_POINT_DIAMETER)/2;fill=edge-marker_size(ui_system.ARRANGEMENT_EDGE_WIDTH)
-        layers=(shape_batch(shader,[(point,edge,0) for point in _world_cache[1]]),
-                shape_batch(shader,[(point,fill,0) for point in _world_cache[1]]))
-        _batch_cache=[key,layers,None,None,{}]
-    volumes=set();selected=[]
-    for point in points:
-        if point['volume'] not in volumes and (not focus or point['volume'] in focus):
-            volumes.add(point['volume']);selected.append((point['volume'],point['point']))
-    ring_key=tuple(selected)
-    if _batch_cache[2]!=ring_key:
-        positions=[];peers=[]
-        for identity in selected:
-            for ring in _world_cache[2][identity]:
-                for first,second in zip(ring,ring[1:]):
-                    positions.extend((first,second));peers.extend((second,first))
-        _batch_cache[2]=ring_key
-        _batch_cache[3]=batch_for_shader(shader,'LINES',{'position':positions,'peer':peers,'offset':[(0,0)]*len(positions),'normal':[(0,0,0)]*len(positions)}) if positions else None
-    return _batch_cache[1],_batch_cache[3]
+        radius=marker_size(ui_system.ARRANGEMENT_POINT_DIAMETER)/2
+        points=_world_cache[1]
+        layers=((shape_batch(shader,[(point,radius,0) for point in points if not point['mirrored']]),ui_system.ARRANGEMENT_FILL),
+                (shape_batch(shader,[(point,radius,0) for point in points if point['mirrored']]),ui_system.ARRANGEMENT_MIRRORED))
+        _batch_cache=(key,layers,{})
+    return _batch_cache[1]
 
 
 def overlay_batch(shader,kind,point):
-    overlays=_batch_cache[4]
+    overlays=_batch_cache[2]
     key=(kind,point['volume'],point['point'])
     if key not in overlays:
         edge=marker_size(ui_system.ARRANGEMENT_POINT_DIAMETER)/2;halo=marker_size(ui_system.ARRANGEMENT_ACTIVE_DIAMETER)/2
         width=marker_size(ui_system.ARRANGEMENT_EDGE_WIDTH)
-        radius,inner={'BOUND':(edge*.45,0),'HALO':(halo,halo-width),'PRESSED':(edge-width,0)}[kind]
+        radius,inner={'BOUND':(edge*.45,0),'HALO':(halo,halo-width),'PRESSED':(edge,0)}[kind]
         overlays[key]=shape_batch(shader,[(point,radius,inner)])
     return overlays[key]
 
@@ -251,7 +235,7 @@ def draw_points():
     try:
         bound=bound_point(context)
         active=_interaction.point if _interaction.state!='IDLE' else None
-        layers,rings=display_batches(shader,points,frozenset(identity[0] for identity in (bound,active) if identity))
+        layers=display_batches(shader)
         panel=display_panel(context)
         view=context.region_data
         camera=view.view_matrix.inverted()
@@ -261,9 +245,7 @@ def draw_points():
         shader.uniform_float('panel',(panel.x,panel.y,panel.x+panel.w,panel.y+panel.h) if panel is not None else (0,0,-1,-1))
         shader.uniform_float('eye',(*camera.translation,1.0) if view.is_perspective else (*camera.col[2][:3],0.0))
         shader.uniform_float('hidden',ui_system.ARRANGEMENT_HIDDEN_ALPHA)
-        if rings is not None:
-            shader.uniform_float('color',ui_system.ARRANGEMENT_RING);rings.draw(shader)
-        for batch,color in zip(layers,(ui_system.ARRANGEMENT_EDGE,ui_system.ARRANGEMENT_FILL)):
+        for batch,color in layers:
             if batch is None:continue
             shader.uniform_float('color',color);batch.draw(shader)
         by_identity={(point['volume'],point['point']):point for point in points}

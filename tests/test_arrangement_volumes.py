@@ -302,6 +302,25 @@ class ArrangementVolumeTests(unittest.TestCase):
                 self.assert_vector(point['position'], arrangement.resolve_point(
                     self.context, point['volume'], point['point'])['point'])
 
+    def test_points_with_a_left_right_partner_are_marked_mirrored(self):
+        points = arrangement.world_points(self.context)
+        single = {(point['volume'], point['point']) for point in points if not point['mirrored']}
+        self.assertEqual(single, {(volume, point) for volume in ('neck', 'chest', 'waist', 'hip') for point in ('front', 'back')})
+
+    def test_moving_a_point_off_its_mirror_clears_both_partners(self):
+        arrangement.edit_point(self.context, 'chest', 'side', angle=1.0)
+        arrangement.edit_point(self.context, 'left_thigh', 'front', height=.7)
+        mirrored = {(point['volume'], point['point']): point['mirrored'] for point in arrangement.world_points(self.context)}
+        for identity in (('chest', 'side'), ('chest', 'opposite_side'), ('left_thigh', 'front'), ('right_thigh', 'front')):
+            self.assertFalse(mirrored[identity], identity)
+        self.assertTrue(mirrored[('chest', 'front_side')])
+
+    def test_marking_mirrored_points_leaves_point_positions_alone(self):
+        setup = arrangement.ensure_volumes(self.context)
+        snapshot = json.dumps(setup, sort_keys=True)
+        arrangement.mirrored_points(setup)
+        self.assertEqual(json.dumps(setup, sort_keys=True), snapshot)
+
     def test_invalid_geometry_and_clearance_are_rejected(self):
         for vertices, triangles, clearance in (([], [], .03), ([(0, 0, 0)] * 3, [(0, 1, 2)], .03),
                                                 ([(math.nan, 0, 0)], [], .03),
