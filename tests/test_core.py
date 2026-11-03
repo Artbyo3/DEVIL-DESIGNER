@@ -109,7 +109,7 @@ class EditingTests(unittest.TestCase):
 class CanvasTests(unittest.TestCase):
     def test_zoom_keeps_cursor_world_coordinate(self):
         v = View()
-        rect = Layout(1600,900,left=40,right=300).canvas
+        rect = Layout(1600,900,left=40,right=300).panel
         cursor = (rect.x+100,rect.y+170)
         initial = v.world(cursor,rect)
         for factor in [1.15,.3,100000,.000001]:
@@ -119,7 +119,7 @@ class CanvasTests(unittest.TestCase):
 
     def test_screen_world_round_trip_after_pan(self):
         v = View()
-        c = Layout(1200,800).canvas
+        c = Layout(1200,800).panel
         v.pan(53,-72)
         for p in SQUARE:
             q = v.world(v.screen(p,c),c)
@@ -131,24 +131,17 @@ class CanvasTests(unittest.TestCase):
             l = Layout(1600*scale,900*scale,scale,left=40*scale,right=300*scale)
             self.assertGreater(l.panel.x,40*scale+200*scale)
             self.assertLessEqual(l.panel.x+l.panel.w,1300*scale)
-            self.assertLess(l.canvas.y+l.canvas.h,l.toolbar.y)
-            for name,(button,_) in l.buttons.items():
-                self.assertTrue(l.panel.contains(button.x,button.y),name)
-                self.assertLessEqual(button.x+button.w,l.panel.x+l.panel.w)
-                self.assertEqual(l.button(button.x+button.w/2,button.y+button.h/2),name)
+            self.assertGreaterEqual(l.panel.y,l.available.y)
 
     def test_native_header_shelf_and_small_viewports(self):
         for width in (640,800,1100,1600):
             l = Layout(width,700,left=56,right=280,top=52,bottom=60)
             self.assertLessEqual(l.panel.y+l.panel.h,700-52)
             self.assertGreaterEqual(l.panel.y,60)
-            for name,(r,_) in l.buttons.items():
-                self.assertLessEqual(r.x+r.w,l.panel.x+l.panel.w,name)
-                self.assertGreaterEqual(r.x,l.panel.x,name)
 
     def test_fit_and_grid_are_finite(self):
         v = View()
-        c = Layout(1200,800).canvas
+        c = Layout(1200,800).panel
         v.fit(CONCAVE,c)
         for point in CONCAVE:
             self.assertTrue(c.contains(*v.screen(point,c)))

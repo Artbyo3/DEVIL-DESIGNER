@@ -1,5 +1,6 @@
 import copy
 import json
+import math
 import unittest
 
 from devil_designer import history
@@ -142,6 +143,130 @@ class LinkedEditingTests(unittest.TestCase):
         self.assertEqual(set(duplicated['members']),session.selected_patterns)
         piece=session.document.find(session.selected);points=piece.points;points[1]=(points[1][0]+.01,.02);session.move(points)
         self.assertNotEqual(duplicated['members'],[source,target]);session.document.validate()
+
+    def test_section9_check14_compatible_linked_edit_preflights_indirect_seam(self):
+        session, source, target = self.paired()
+        session.add([(1.2, 0.0), (1.6, 0.0), (1.6, 0.5), (1.2, 0.5)])
+        p_third = session.selected
+        session.sew(session.document.edge(target, 1), session.document.edge(p_third, 3))
+        seam_id = session.document.seams[0].id
+        doc_before = session.document.dumps()
+        u_before = len(session.undo_stack)
+        src_verts_before = [(v.x, v.y) for v in session.document.find(source).vertices]
+        tgt_verts_before = [(v.x, v.y) for v in session.document.find(target).vertices]
+        pair = session.document.linked_pairs[0]
+        horizontal, vertical = pair['transform']
+        expected_twin_coords = [(horizontal - vx, vy + vertical) for vx, vy in [(0.0, 0.0), (0.4, 0.0), (0.4, 0.55), (0.0, 0.5)]]
+
+        session.select_point(source, 'OUTER', 2)
+        cand, pre = session.build_transform_candidate('MOVE', (0.0, 0.05))
+        self.assertEqual(pre['status'], 'WARN')
+        self.assertAlmostEqual(pre['diff_cm'], 5.0, delta=1e-4)
+        self.assertEqual(pre['affected_count'], 1)
+        self.assertEqual(len(pre['details']), 1)
+        detail = pre['details'][0]
+        self.assertEqual(detail['seam_id'], seam_id)
+        self.assertAlmostEqual(detail['len0_before'], 0.5, delta=1e-4)
+        self.assertAlmostEqual(detail['len1_before'], 0.5, delta=1e-4)
+        self.assertAlmostEqual(detail['len0_after'], 0.55, delta=1e-4)
+        self.assertAlmostEqual(detail['len1_after'], 0.5, delta=1e-4)
+        self.assertAlmostEqual(detail['diff_cm'], 5.0, delta=1e-4)
+        self.assertAlmostEqual(detail['percent'], 9.090909090909099, delta=1e-4)
+        self.assertIn(session.document.find(target).name, pre['affected_pieces'])
+        self.assertIn(session.document.find(p_third).name, pre['affected_pieces'])
+
+        for v, exp in zip(cand.find(target).vertices, expected_twin_coords):
+            self.assertAlmostEqual(v.x, exp[0], delta=1e-7)
+            self.assertAlmostEqual(v.y, exp[1], delta=1e-7)
+
+        self.assertEqual(len(cand.linked_pairs), 1)
+        self.assertTrue(cand.linked_pairs[0]['enabled'])
+        self.assertEqual(set(cand.linked_pairs[0]['members']), {source, target})
+        self.assertEqual(session.document.dumps(), doc_before)
+        self.assertEqual(len(session.undo_stack), u_before)
+        self.assertEqual([(v.x, v.y) for v in session.document.find(source).vertices], src_verts_before)
+        self.assertEqual([(v.x, v.y) for v in session.document.find(target).vertices], tgt_verts_before)
+
+        unconfirmed = session.move_selection(0.0, 0.05, confirm=False)
+        self.assertEqual(unconfirmed['status'], 'WARN')
+        self.assertEqual(session.document.dumps(), doc_before)
+        self.assertEqual(len(session.undo_stack), u_before)
+        self.assertEqual([(v.x, v.y) for v in session.document.find(source).vertices], src_verts_before)
+        self.assertEqual([(v.x, v.y) for v in session.document.find(target).vertices], tgt_verts_before)
+
+        self.assertTrue(session.move_selection(0.0, 0.05, confirm=True))
+        self.assertEqual(len(session.undo_stack), u_before + 1)
+        for v, exp in zip(session.document.find(target).vertices, expected_twin_coords):
+            self.assertAlmostEqual(v.x, exp[0], delta=1e-7)
+            self.assertAlmostEqual(v.y, exp[1], delta=1e-7)
+        self.assertEqual(session.document.seams[0].id, seam_id)
+        self.assertEqual(len(session.document.linked_pairs), 1)
+        self.assertTrue(session.document.linked_pairs[0]['enabled'])
+
+    def test_section9_check14_both_twins_rotation_blocks_and_unlink_retry_affine_geometry(self):
+        session = Session()
+        session.add([(0.0, 0.0), (0.4, 0.0), (0.4, 0.5), (0.0, 0.5)])
+        p_orig = session.document.patterns[0]
+        p_orig.vertices[1].incoming = (-0.05, 0.02)
+        p_orig.vertices[1].outgoing = (0.05, -0.02)
+        p_orig.vertices[2].incoming = (0.0, 0.04)
+        p_orig.vertices[2].outgoing = (0.0, -0.04)
+        session.document.validate()
+        source = p_orig.id
+        target = clone_twin(session).id
+
+        session.select_piece(source)
+        session.select_piece(target, toggle=True)
+        doc_before = session.document.dumps()
+        u_before = len(session.undo_stack)
+
+        cand, pre = session.build_transform_candidate('ROTATE', 30.0)
+        self.assertEqual(pre['status'], 'BLOCK')
+        self.assertIn('Linked editing conflict', pre['reason'])
+        self.assertNotIn('can_proceed', pre)
+        with self.assertRaises(ValueError):
+            session.rotate(30.0)
+        self.assertEqual(session.document.dumps(), doc_before)
+        self.assertEqual(len(session.undo_stack), u_before)
+
+        toggle_link(session)
+        self.assertFalse(session.document.linked_pairs[0]['enabled'])
+
+        pivot = (0.5, 0.25)
+        angle = 30.0
+        rad = math.radians(angle)
+        c, s_ang = math.cos(rad), math.sin(rad)
+        px, py = pivot
+        expected_verts = {}
+        expected_handles = {}
+        for pid in (source, target):
+            p = session.document.find(pid)
+            for v in p.vertices:
+                rx, ry = v.x - px, v.y - py
+                expected_verts[(pid, v.id)] = (px + c * rx - s_ang * ry, py + s_ang * rx + c * ry)
+                exp_in = (c * v.incoming[0] - s_ang * v.incoming[1], s_ang * v.incoming[0] + c * v.incoming[1]) if v.incoming else None
+                exp_out = (c * v.outgoing[0] - s_ang * v.outgoing[1], s_ang * v.outgoing[0] + c * v.outgoing[1]) if v.outgoing else None
+                expected_handles[(pid, v.id)] = (exp_in, exp_out)
+
+        session.select_piece(source)
+        session.select_piece(target, toggle=True)
+        session.rotate(angle, pivot=pivot)
+
+        self.assertEqual(len(session.document.patterns), 2)
+        for pid in (source, target):
+            p = session.document.find(pid)
+            for v in p.vertices:
+                ex, ey = expected_verts[(pid, v.id)]
+                self.assertAlmostEqual(v.x, ex, delta=1e-7)
+                self.assertAlmostEqual(v.y, ey, delta=1e-7)
+                exp_in, exp_out = expected_handles[(pid, v.id)]
+                if exp_in is not None:
+                    self.assertAlmostEqual(v.incoming[0], exp_in[0], delta=1e-7)
+                    self.assertAlmostEqual(v.incoming[1], exp_in[1], delta=1e-7)
+                if exp_out is not None:
+                    self.assertAlmostEqual(v.outgoing[0], exp_out[0], delta=1e-7)
+                    self.assertAlmostEqual(v.outgoing[1], exp_out[1], delta=1e-7)
+
 
     def test_mirror_keeps_original_link_and_only_explicit_mirror_sewing(self):
         session,source,target=self.paired();session.selected=source

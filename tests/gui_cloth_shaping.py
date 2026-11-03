@@ -91,7 +91,7 @@ class MouseProof:
                     self.workspace = editor._active
                     bpy.ops.devil_designer.shape_cloth()
                     bpy.ops.view3d.view_axis(type='FRONT')
-                self.check(self.workspace.minimal_ui and self.workspace.tool == 'SHAPE', 'registered operator activates minimal shaping canvas')
+                self.check(self.workspace.tool == 'SHAPE', 'registered operator activates minimal shaping canvas')
                 draped = cloth_shaping.points(self.source)
                 desired = Vector((0, -.11, min(point.z for point in draped) +
                                   (max(point.z for point in draped) - min(point.z for point in draped)) * .12))

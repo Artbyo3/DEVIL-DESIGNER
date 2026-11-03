@@ -41,9 +41,7 @@ body {
   color: var(--dd-text);
 }
 
-/* ============================================================
-   LANDING PAGE (Site Root): Minimal, Scroll-less, Video Slot
-   ============================================================ */
+
 
 body:has(.dd-landing-container) {
   overflow: hidden !important;
@@ -85,7 +83,7 @@ body:has(.dd-landing-container) .md-content__inner {
   text-align: center;
 }
 
-/* Video slot: background demonstration footage / placeholder */
+
 .dd-video-slot {
   position: absolute;
   inset: 0;
@@ -125,7 +123,7 @@ body:has(.dd-landing-container) .md-content__inner {
   display: flex;
   flex-direction: column;
   align-items: center;
-  margin-bottom: 72px; /* clearance above static label and scrolling track */
+  margin-bottom: 72px;
 }
 
 .dd-landing-title {
@@ -146,7 +144,7 @@ body:has(.dd-landing-container) .md-content__inner {
   max-width: 520px;
 }
 
-/* Install Action Card: Single element with resting (button) and active (drag zone) states */
+
 .dd-install-card {
   display: grid;
   grid-template-areas: "install-card";
@@ -300,7 +298,7 @@ body:has(.dd-landing-container) .md-content__inner {
   color: #70D5C5 !important;
 }
 
-/* Navigation Buttons */
+
 .dd-landing-nav {
   display: flex;
   gap: 1rem;
@@ -340,9 +338,7 @@ body:has(.dd-landing-container) .md-content__inner {
   border-color: #88E2D4;
 }
 
-/* ============================================================
-   CONTRIBUTORS SPACE: Static centered label + spacious floating loop
-   ============================================================ */
+
 
 .dd-contributors-container {
   position: absolute;
@@ -402,7 +398,7 @@ body:has(.dd-landing-container) .md-content__inner {
   display: inline-flex;
   align-items: center;
   gap: 0.75rem;
-  margin-right: 6.5rem; /* Exactly uniform spacing across every item and between both sets */
+  margin-right: 6.5rem;
   color: #CBD5E1;
   font-size: 0.95rem;
   font-weight: 500;
@@ -427,9 +423,7 @@ body:has(.dd-landing-container) .md-content__inner {
   letter-spacing: 0.01em;
 }
 
-/* ============================================================
-   DOCUMENTATION CHROME: Clean, distraction-free reading
-   ============================================================ */
+
 
 .md-header {
   background-color: #191D22 !important;
@@ -495,7 +489,7 @@ body:has(.dd-landing-container) .md-content__inner {
   letter-spacing: 0.04em;
 }
 
-/* Header GitHub release entry with version tag */
+
 .md-header__source .md-source {
   display: flex;
   align-items: center;
@@ -571,12 +565,12 @@ body:has(.dd-landing-container) .md-content__inner {
   vertical-align: middle;
 }
 
-/* Sidebar sticky offset to match the 76px header height */
+
 .md-sidebar {
   top: 76px !important;
 }
 
-/* Sidebar navigation: links only, no logo or title at top */
+
 .md-sidebar--primary .md-nav__title {
   display: none !important;
 }
@@ -595,7 +589,7 @@ body:has(.dd-landing-container) .md-content__inner {
   color: #70D5C5 !important;
 }
 
-/* Content cards and panels */
+
 .md-typeset .admonition,
 .md-typeset details {
   background-color: #232930 !important;
@@ -644,7 +638,7 @@ body:has(.dd-landing-container) .md-content__inner {
   border-radius: 3px;
 }
 
-/* Tables */
+
 .md-typeset table:not([class]) {
   background-color: #232930;
   border: 1px solid #2E3642;
@@ -665,17 +659,13 @@ body:has(.dd-landing-container) .md-content__inner {
   background-color: #28303A;
 }
 
-/* ============================================================
-   FOOTER: Completely removed across the entire site
-   ============================================================ */
+
 
 .md-footer {
   display: none !important;
 }
 
-/* ============================================================
-   PAGE TRANSITION: Subtle crossfade and vertical settle
-   ============================================================ */
+
 
 @keyframes dd-page-enter {
   0% {

@@ -34,7 +34,6 @@ def run():
             scene.dd_library_dir=temporary
             bpy.ops.devil_designer.pattern_editor('INVOKE_DEFAULT')
             workspace=editor._active
-            check(workspace.minimal_ui,'Library coverage uses the active minimal interface')
             def event(kind,point=None,text='',ctrl=False):
                 point=point or workspace.pointer
                 return SimpleNamespace(type=kind,value='PRESS',mouse_x=point[0]+region.x,mouse_y=point[1]+region.y,

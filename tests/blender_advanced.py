@@ -1,15 +1,14 @@
 from pathlib import Path
 from copy import deepcopy
 from types import SimpleNamespace
-import sys,json,math
+import sys,json
 import bpy
 ROOT=Path(__file__).resolve().parents[1]
 sys.dont_write_bytecode = True
 sys.path.insert(0,str(ROOT))
 import devil_designer
-from devil_designer.core import Session,Document,area
+from devil_designer.core import Session
 from devil_designer import garment,library
-from devil_designer.meshing import edge_counts,fabric_mesh
 
 seen=set()
 def check(ok,message):

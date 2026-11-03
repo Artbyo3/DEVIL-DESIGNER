@@ -13,7 +13,7 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.dont_write_bytecode=True
 sys.path.insert(0,str(ROOT))
 import devil_designer
-from devil_designer import arrangement,arrangement_controls,editor,garment,live_panels
+from devil_designer import arrangement,arrangement_controls,editor,garment
 from devil_designer.core import Session
 
 REPORT=ROOT/'scratch'/'editor_release-report.json'

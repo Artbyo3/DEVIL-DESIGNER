@@ -193,7 +193,7 @@ class DD_OT_shape_cloth(bpy.types.Operator):
         def action():
             from . import editor
             workspace = editor._active
-            if workspace is None or not workspace.minimal_ui:
+            if workspace is None:
                 raise ValueError('Open the Devil Designer minimal workspace first.')
             if self.finish:
                 workspace.choose_tool('SELECT')
