@@ -29,7 +29,10 @@ def open_workspace():
         bpy.ops.devil_designer.pattern_editor('INVOKE_DEFAULT')
         workspace = editor._active
         if '--demo' in sys.argv:
-            workspace.workflow_action('DEMO')
+            bpy.ops.devil_designer.demo('EXEC_DEFAULT')
+            workspace.reconcile_generated_document()
+            workspace.update_reference(bpy.context, align=True)
+            workspace.fit()
         if workspace.session.document.patterns:
             workspace.session.selected = workspace.session.document.patterns[0].id
             workspace.sync_selection()
