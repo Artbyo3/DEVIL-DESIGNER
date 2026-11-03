@@ -39,6 +39,22 @@ class ArrangementRecordTests(unittest.TestCase):
             document.patterns[0].arrangement=record
             with self.subTest(key=key),self.assertRaises(ValueError):document.validate()
 
+    def test_body_checked_records_roundtrip_options_and_refuse_invalid_choices(self):
+        document=self.document()
+        record=arrangement_record('waist','front',version=3,clearance=.05,direction=-1,overwrap=True)
+        record['translation']=[.01,0,0]
+        document.patterns[0].arrangement=record
+        payload=document.dumps();loaded=Document.loads(payload)
+        self.assertEqual(loaded.dumps(),payload)
+        self.assertEqual(loaded.patterns[0].arrangement,record)
+        self.assertEqual(arrangement_record('waist','front',version=3)['clearance'],None)
+        for key,value in (('direction',0),('direction',True),('overwrap',1),('clearance',0),('clearance',.31),('clearance',float('nan'))):
+            invalid=self.document();candidate=copy.deepcopy(record);candidate[key]=value
+            invalid.patterns[0].arrangement=candidate
+            with self.subTest(key=key,value=value),self.assertRaises(ValueError):invalid.validate()
+        legacy=self.document();legacy.patterns[0].arrangement=dict(arrangement_record('waist','front',version=2),clearance=None)
+        with self.assertRaises(ValueError):legacy.validate()
+
     def test_starters_use_explicit_points_not_name_or_piece_order(self):
         for generator,volume in ((create_tee_starter,'chest'),(create_tank_starter,'chest'),(create_skirt_starter,'waist')):
             document=generator(None)

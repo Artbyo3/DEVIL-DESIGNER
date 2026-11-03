@@ -27,6 +27,8 @@ QUALITY = {'Draft': 6, 'Standard': 12, 'High': 24}
 THICKNESS = {'None': 0, 'Thin': .0005, 'Standard': .001}
 FABRICS = ('COTTON', 'LINEN', 'DENIM', 'SILK', 'LEATHER', 'KNIT')
 GUIDE_OPACITY = {'Light': .15, 'Medium': .30, 'Strong': .50}
+PLACEMENT_DISTANCE = {'Body': None, '1 cm': .01, '2 cm': .02, '5 cm': .05}
+PLACEMENT_OVERLAP = {'Off': (False, 1), 'Right on top': (True, 1), 'Left on top': (True, -1)}
 IMAGE_OPACITY = {'Light': .2, 'Medium': .35, 'Strong': .6}
 
 
@@ -286,7 +288,10 @@ class MinimalCards:
             else:
                 rows.append(('INFO', 'Measurements', 'Select a body mesh'))
             if scene.dd_avatar is not None and not self.pending_simulation:
-                rows.append(('REGENERATE_VOLUMES', 'Regenerate body volumes', 'Resets point edits'))
+                from .arrangement import pending_job
+                if pending_job(bpy.context) is not None:
+                    rows.append(('INFO', 'Arrangement points', 'Preparing…'))
+                rows.append(('PAIR_ACTIONS', 'REFRESH_FIT', 'RESET_POINTS', 'Refresh fit', 'Reset points'))
         elif kind == 'LIBRARY':
             title = 'Garment library'
             matches=self.library_matches()
@@ -417,6 +422,16 @@ class MinimalCards:
             from .piece_states import label
             simulation_label = label(pattern).replace(' · Strengthened ×4', ' +4×')
             rows.append(('MENU', 'PIECE_SIMULATION_MENU', 'Simulation', simulation_label or 'Normal'))
+            record = pattern.arrangement
+            if record:
+                rows.append(('CHOICES', 'Placement', ('PLACE_SHAPE', ('Wrap', 'Flat'), 'Flat' if record['flat'] else 'Wrap')))
+                if record['version'] != 3:
+                    rows.append(('PLACE_UPGRADE', 'Use body-checked wrap', 'Keeps point'))
+                elif not record['flat']:
+                    distance = next(name for name, value in PLACEMENT_DISTANCE.items() if value == record['clearance']) if record['clearance'] in PLACEMENT_DISTANCE.values() else f"{record['clearance'] * 100:.1f} cm"
+                    rows.append(('CHOICES', 'Distance from body', ('PLACE_DISTANCE', tuple(PLACEMENT_DISTANCE), distance)))
+                    overlap = next(name for name, value in PLACEMENT_OVERLAP.items() if value == (record['overwrap'], record['direction']) or (not record['overwrap'] and not value[0]))
+                    rows.append(('CHOICES', 'Overwrap', ('PLACE_OVERLAP', tuple(PLACEMENT_OVERLAP), overlap)))
             rows.append(('PAIR_ACTIONS', 'DUPLICATE', 'MIRROR_SEW', 'Duplicate', 'Mirror'))
             rows.append(('CLONE_LINKED', 'Clone as linked twin', ''))
             if pattern.arrangement and pattern.arrangement['point']=='front':
@@ -713,14 +728,15 @@ class MinimalCards:
                 row_heights.append(46)
             elif r_key == 'INFO':
                 row_heights.append(22)
-            elif r_key in {'REGENERATE_VOLUMES', 'TRACE_PICK'}:
+            elif r_key == 'TRACE_PICK':
                 row_heights.append(40)
             else:
                 row_heights.append(30)
         if kind == 'PIECE':
-            avail = self.canvas_layout.panel.h / scale - 130 - sum(row_gaps)
-            row_height = min(30, avail / max(1, len(rows)))
-            row_heights = [22 if r[0] == 'INFO' else max(24, row_height) for r in rows]
+            choices = sum(r[0] == 'CHOICES' for r in rows)
+            avail = self.canvas_layout.panel.h / scale - 130 - sum(row_gaps) - 44 * choices
+            row_height = min(30, avail / max(1, len(rows) - choices))
+            row_heights = [22 if r[0] == 'INFO' else 44 if r[0] == 'CHOICES' else max(24, row_height) for r in rows]
         excess = max(0, 48 + sum(row_heights) + sum(row_gaps) - max_card_h / scale)
         for index, row in enumerate(rows):
             if row[0].startswith('PREVIEW_'):
@@ -927,9 +943,18 @@ class MinimalCards:
             from .live_panels import reset_piece
             self.run_edit(lambda:reset_piece(self.session,self.session.selected),'Piece reset to its 2D layout position.')
             self.card_kind=None
-        elif key=='REGENERATE_VOLUMES':
-            result=bpy.ops.devil_designer.arrangement_edit(action='REGENERATE')
-            self.message='Body volumes regenerated; point edits reset.' if 'FINISHED' in result else 'Could not regenerate body volumes.'
+        elif key in {'REFRESH_FIT','RESET_POINTS'}:
+            result=bpy.ops.devil_designer.arrangement_edit(action='REFRESH' if key=='REFRESH_FIT' else 'REGENERATE')
+            self.message=('Refreshing body fit; your points are kept.' if key=='REFRESH_FIT' else 'Resetting arrangement points to their defaults.') if 'FINISHED' in result else 'Could not prepare the body fit.'
+            self.card_kind=None
+        elif key.startswith('PLACE_'):
+            from .live_panels import update_arrangement
+            option,_,choice=key.removeprefix('PLACE_').partition('_')
+            if option=='SHAPE':changes=dict(flat=choice=='Flat')
+            elif option=='DISTANCE':changes=dict(clearance=PLACEMENT_DISTANCE[choice])
+            elif option=='OVERLAP':changes=dict(zip(('overwrap','direction'),PLACEMENT_OVERLAP[choice]))
+            else:changes={}
+            self.run_edit(lambda:update_arrangement(self.session,self.session.selected,**changes),'Placement updated.')
             self.card_kind=None
         elif key.startswith('INSP_GARMENT_FABRIC_'):
             name = key.removeprefix('INSP_GARMENT_FABRIC_')

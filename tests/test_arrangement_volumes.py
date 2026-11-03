@@ -47,11 +47,34 @@ class VolumeMatrix:
         self.shift = shift
 
     def __getitem__(self, index):
-        return self.rows[index]
+        return (*self.rows[index], self.shift[index])
 
     def __matmul__(self, point):
         return tuple(sum(self.rows[axis][index] * point[index] for index in range(3)) + self.shift[axis]
                      for axis in range(3))
+
+
+class BlenderItems(list):
+    def __init__(self, items, attribute):
+        super().__init__(items)
+        self.attribute = attribute
+
+    def foreach_get(self, name, buffer):
+        values = [value for item in self for value in getattr(item, self.attribute)]
+        buffer[:] = values
+
+
+class VolumeMesh:
+    def __init__(self, **values):
+        for name, value in values.items():
+            setattr(self, name, value)
+
+    def __setattr__(self, name, value):
+        if name == 'vertices':
+            value = BlenderItems(value, 'co')
+        elif name == 'loop_triangles':
+            value = BlenderItems(value, 'vertices')
+        super().__setattr__(name, value)
 
 
 class VolumeAvatar(dict):
@@ -59,7 +82,7 @@ class VolumeAvatar(dict):
         super().__init__()
         self.type = 'MESH'
         self.matrix_world = VolumeMatrix()
-        self.mesh = SimpleNamespace(vertices=[SimpleNamespace(co=point) for point in vertices],
+        self.mesh = VolumeMesh(vertices=[SimpleNamespace(co=point) for point in vertices],
                                     loop_triangles=[SimpleNamespace(vertices=face) for face in triangles],
                                     calc_loop_triangles=Mock())
         self.to_mesh_clear = Mock()

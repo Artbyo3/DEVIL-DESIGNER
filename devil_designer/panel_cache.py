@@ -62,3 +62,52 @@ def panel_output(obj):
 def wrapped_positions(payload):
     vertices, resolved, width, minimum, minimum_clearance = json.loads(payload)
     return tuple(wrap_positions(vertices, resolved, width, minimum, minimum_clearance))
+
+
+_body_trees = {}
+_surfaces = {}
+
+
+def body_tree(context):
+    import numpy
+    from mathutils.bvhtree import BVHTree
+    from .live_panels import avatar_signature
+    signature = avatar_signature(context)
+    if signature not in _body_trees:
+        avatar = context.scene.dd_avatar
+        evaluated = avatar.evaluated_get(context.evaluated_depsgraph_get())
+        mesh = evaluated.to_mesh()
+        try:
+            mesh.calc_loop_triangles()
+            local = numpy.zeros(len(mesh.vertices) * 3, dtype=numpy.float32)
+            mesh.vertices.foreach_get('co', local)
+            faces = numpy.zeros(len(mesh.loop_triangles) * 3, dtype=numpy.int32)
+            mesh.loop_triangles.foreach_get('vertices', faces)
+            matrix = numpy.array(evaluated.matrix_world)
+            world = local.reshape(-1, 3).astype(float) @ matrix[:3, :3].T + matrix[:3, 3]
+            tree = BVHTree.FromPolygons(world.tolist(), faces.reshape(-1, 3).tolist(), all_triangles=True)
+        finally:
+            evaluated.to_mesh_clear()
+        _body_trees.clear()
+        _body_trees[signature] = tree
+    return _body_trees[signature]
+
+
+def checked_surface(context, pattern, vertices, triangles, edges, frame, resolved, unit, record):
+    import numpy
+    from .live_panels import avatar_signature, checked_positions
+    vertices = numpy.ascontiguousarray(vertices, dtype=float)
+    digest = hashlib.sha256(json.dumps([resolved, record, unit, avatar_signature(context)], separators=(',', ':')).encode())
+    for array in (vertices, numpy.ascontiguousarray(triangles, dtype=numpy.int32), numpy.ascontiguousarray(edges, dtype=numpy.int32)):
+        digest.update(array.tobytes())
+    key = digest.hexdigest()
+    if key not in _surfaces:
+        if len(_surfaces) >= 32:
+            del _surfaces[next(iter(_surfaces))]
+        _surfaces[key] = checked_positions(context, pattern, vertices, triangles, edges, record, frame, resolved, unit)
+    return _surfaces[key]
+
+
+def clear_arrangement_caches():
+    _body_trees.clear()
+    _surfaces.clear()

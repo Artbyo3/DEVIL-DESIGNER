@@ -1,0 +1,520 @@
+{
+  "blender": "5.2.3 LTS",
+  "cases": [
+    {
+      "label": "rectangle",
+      "version": 3,
+      "vertices": 1465,
+      "triangles": 2786,
+      "inside": 0,
+      "intersecting": 0,
+      "self_intersections": 0,
+      "separation_mm": {
+        "minimum": 29.209807515144348,
+        "vertex_minimum": 29.99994531273842,
+        "face_minimum": 29.209807515144348,
+        "median": 30.493253841996193
+      },
+      "excess_mm": {
+        "p50": 0.4629635065794002,
+        "p95": 11.703067719936373,
+        "maximum": 17.68327996134758
+      },
+      "stretch": {
+        "minimum": 0.9514250450441719,
+        "median": 1.0001801563631156,
+        "p95": 1.0330889733836084,
+        "maximum": 1.1296311404004453
+      },
+      "degenerate_faces": 0,
+      "legacy_v2": {
+        "vertices": 1465,
+        "triangles": 2786,
+        "inside": 17,
+        "intersecting": 39,
+        "self_intersections": 0,
+        "separation_mm": {
+          "minimum": -1.2785664293915033,
+          "vertex_minimum": 4.193712025880814,
+          "face_minimum": -1.2785664293915033,
+          "median": 27.797125279903412
+        },
+        "excess_mm": {
+          "p50": -2.2176603972911826,
+          "p95": 1.1920928966180355e-06,
+          "maximum": 4.289583563804627
+        },
+        "stretch": {
+          "minimum": 0.8903713375992701,
+          "median": 0.9999921066912646,
+          "p95": 1.2315306604331442,
+          "maximum": 3.9107308515485517
+        },
+        "degenerate_faces": 0
+      }
+    },
+    {
+      "label": "concave_long_tab",
+      "version": 3,
+      "vertices": 1143,
+      "triangles": 2141,
+      "inside": 0,
+      "intersecting": 0,
+      "self_intersections": 0,
+      "separation_mm": {
+        "minimum": 29.209865257143974,
+        "vertex_minimum": 29.99994531273842,
+        "face_minimum": 29.209865257143974,
+        "median": 30.837951228022575
+      },
+      "excess_mm": {
+        "p50": 0.6114535778760921,
+        "p95": 12.9021492600441,
+        "maximum": 17.680936753749847
+      },
+      "stretch": {
+        "minimum": 0.9499539765317505,
+        "median": 1.0006541093485464,
+        "p95": 1.0362085542554658,
+        "maximum": 1.1296184314238753
+      },
+      "degenerate_faces": 0,
+      "legacy_v2": {
+        "vertices": 1143,
+        "triangles": 2141,
+        "inside": 17,
+        "intersecting": 39,
+        "self_intersections": 0,
+        "separation_mm": {
+          "minimum": -1.2785664293915033,
+          "vertex_minimum": 4.193712025880814,
+          "face_minimum": -1.2785664293915033,
+          "median": 27.55374275147915
+        },
+        "excess_mm": {
+          "p50": -2.446247935295104,
+          "p95": 1.1920928966180355e-06,
+          "maximum": 4.289583563804627
+        },
+        "stretch": {
+          "minimum": 0.5252547440106425,
+          "median": 0.9999917572657817,
+          "p95": 1.4374680854153723,
+          "maximum": 3.9107308515485517
+        },
+        "degenerate_faces": 0
+      }
+    }
+  ],
+  "difficult": [
+    {
+      "label": "overwrap",
+      "direction": 1,
+      "vertices": 309,
+      "triangles": 486,
+      "inside": 0,
+      "intersecting": 0,
+      "self_intersections": 0,
+      "separation_mm": {
+        "minimum": 30.113622546195984,
+        "vertex_minimum": 30.40469065308571,
+        "face_minimum": 30.113622546195984,
+        "median": 43.778788298368454
+      },
+      "excess_mm": {
+        "p50": 13.627094477415087,
+        "p95": 29.864092618227005,
+        "maximum": 35.07325917482376
+      },
+      "stretch": {
+        "minimum": 0.987634698736286,
+        "median": 1.0004461144103516,
+        "p95": 1.0814521760501372,
+        "maximum": 1.0997865951947912
+      },
+      "degenerate_faces": 0
+    },
+    {
+      "label": "overwrap",
+      "direction": -1,
+      "vertices": 309,
+      "triangles": 486,
+      "inside": 0,
+      "intersecting": 0,
+      "self_intersections": 0,
+      "separation_mm": {
+        "minimum": 30.11362813413143,
+        "vertex_minimum": 30.404716730117798,
+        "face_minimum": 30.11362813413143,
+        "median": 43.75012218952179
+      },
+      "excess_mm": {
+        "p50": 13.699268251657488,
+        "p95": 29.864092618227005,
+        "maximum": 35.07325917482376
+      },
+      "stretch": {
+        "minimum": 0.9879443391014684,
+        "median": 1.0004577163040316,
+        "p95": 1.0814475937577464,
+        "maximum": 1.0997854981047492
+      },
+      "degenerate_faces": 0
+    },
+    {
+      "label": "tapered_sleeve",
+      "warning": "",
+      "vertices": 149,
+      "triangles": 252,
+      "inside": 0,
+      "intersecting": 0,
+      "self_intersections": 0,
+      "separation_mm": {
+        "minimum": 29.999982565641403,
+        "vertex_minimum": 29.999982565641403,
+        "face_minimum": 30.005885288119316,
+        "median": 31.253527849912643
+      },
+      "excess_mm": {
+        "p50": 1.464807689189912,
+        "p95": 1.7362546920776378,
+        "maximum": 3.1010036170482644
+      },
+      "stretch": {
+        "minimum": 0.9022760314192491,
+        "median": 0.9993628842504574,
+        "p95": 1.0146422619081767,
+        "maximum": 1.078378192530001
+      },
+      "degenerate_faces": 0
+    },
+    {
+      "label": "notched_panel",
+      "warning": "",
+      "vertices": 476,
+      "triangles": 843,
+      "inside": 0,
+      "intersecting": 0,
+      "self_intersections": 0,
+      "separation_mm": {
+        "minimum": 29.438868165016174,
+        "vertex_minimum": 29.99991923570633,
+        "face_minimum": 29.438868165016174,
+        "median": 30.320903286337852
+      },
+      "excess_mm": {
+        "p50": 0.43889813125133625,
+        "p95": 1.0624185949563991,
+        "maximum": 1.4600951969623577
+      },
+      "stretch": {
+        "minimum": 0.900223803199673,
+        "median": 0.9999108153837136,
+        "p95": 1.0413170646946446,
+        "maximum": 1.0790397678436785
+      },
+      "degenerate_faces": 0
+    },
+    {
+      "label": "long_bodice",
+      "warning": "",
+      "vertices": 807,
+      "triangles": 1505,
+      "inside": 0,
+      "intersecting": 0,
+      "self_intersections": 0,
+      "separation_mm": {
+        "minimum": 29.379550367593765,
+        "vertex_minimum": 29.999978840351105,
+        "face_minimum": 29.379550367593765,
+        "median": 109.46150869131088
+      },
+      "excess_mm": {
+        "p50": 79.41296815872192,
+        "p95": 83.68676275014877,
+        "maximum": 84.64560776948929
+      },
+      "stretch": {
+        "minimum": 0.9004738479924168,
+        "median": 1.0007174838853872,
+        "p95": 1.0398292095252835,
+        "maximum": 1.0784793174718585
+      },
+      "degenerate_faces": 0
+    },
+    {
+      "label": "hood_hood_left",
+      "warning": "",
+      "vertices": 224,
+      "triangles": 390,
+      "inside": 0,
+      "intersecting": 0,
+      "self_intersections": 0,
+      "separation_mm": {
+        "minimum": 29.05299700796604,
+        "vertex_minimum": 29.99993786215782,
+        "face_minimum": 29.05299700796604,
+        "median": 30.979985371232033
+      },
+      "excess_mm": {
+        "p50": 0.6316297501325618,
+        "p95": 14.349115341901781,
+        "maximum": 17.706741839647293
+      },
+      "stretch": {
+        "minimum": 0.9013757260698948,
+        "median": 1.0005094322344066,
+        "p95": 1.0260587534447272,
+        "maximum": 1.0999292993296108
+      },
+      "degenerate_faces": 0
+    },
+    {
+      "label": "hood_hood_right",
+      "warning": "",
+      "vertices": 224,
+      "triangles": 390,
+      "inside": 0,
+      "intersecting": 0,
+      "self_intersections": 0,
+      "separation_mm": {
+        "minimum": 29.052918776869774,
+        "vertex_minimum": 29.99989315867424,
+        "face_minimum": 29.052918776869774,
+        "median": 30.97982332110405
+      },
+      "excess_mm": {
+        "p50": 0.6316018104553234,
+        "p95": 14.349029660224916,
+        "maximum": 17.706808894872665
+      },
+      "stretch": {
+        "minimum": 0.9013559896683477,
+        "median": 1.0005040507533962,
+        "p95": 1.0260568953339866,
+        "maximum": 1.0999402283830126
+      },
+      "degenerate_faces": 0
+    }
+  ],
+  "continuity": [
+    {
+      "arm_gap_m": 0.015,
+      "volume": "chest",
+      "center_offsets_mm": [
+        4.4859714640673765e-05,
+        2.1919935897379795e-05,
+        7.450580555003215e-06,
+        8.786411921334855e-06,
+        9.071128274346908e-06,
+        -1.2361963095765504e-05,
+        -7.45058060329791e-06,
+        3.1394141453548296e-06,
+        7.450580555003215e-06
+      ],
+      "side_radii": [
+        0.1368241366171238,
+        0.13294919476614533,
+        0.12719242968755157,
+        0.11923594495365829,
+        0.10854045984309792,
+        0.09415774627371476,
+        0.08509565199549675,
+        0.07429103608844391,
+        0.06989250221539654
+      ],
+      "samples": 9
+    },
+    {
+      "arm_gap_m": 0.015,
+      "volume": "waist",
+      "center_offsets_mm": [
+        7.450580555003215e-06,
+        1.9213165818974417e-05,
+        3.7774627952726196e-05,
+        5.9378450536196085e-05,
+        4.909871988944187e-05,
+        5.092533421543596e-05,
+        5.5661625884114014e-05
+      ],
+      "side_radii": [
+        0.12722695914189422,
+        0.13223740615168622,
+        0.13597606294487832,
+        0.13856191785643854,
+        0.139432133756818,
+        0.13928554079389452,
+        0.1381170328420927
+      ],
+      "samples": 7
+    },
+    {
+      "arm_gap_m": 0.06,
+      "volume": "chest",
+      "center_offsets_mm": [
+        4.485971460534676e-05,
+        2.1919935907323657e-05,
+        7.450580642812989e-06,
+        8.786411922184032e-06,
+        9.071128255299928e-06,
+        -1.23619632084067e-05,
+        -7.450580536231588e-06,
+        3.1394141167001154e-06,
+        7.450580642812989e-06
+      ],
+      "side_radii": [
+        0.1368241366171238,
+        0.13294919476614536,
+        0.12719242968755157,
+        0.11923594495365829,
+        0.10854045984309794,
+        0.09415774627371475,
+        0.0850956519954967,
+        0.07429103608844395,
+        0.06989250221539654
+      ],
+      "samples": 9
+    },
+    {
+      "arm_gap_m": 0.06,
+      "volume": "waist",
+      "center_offsets_mm": [
+        7.450580642812989e-06,
+        1.921316586129778e-05,
+        3.777462791341806e-05,
+        5.937845063183052e-05,
+        4.909871987392174e-05,
+        5.092533409943442e-05,
+        5.5661625911262294e-05
+      ],
+      "side_radii": [
+        0.12722695914189422,
+        0.13223740615168625,
+        0.13597606294487835,
+        0.13856191785643857,
+        0.13943213375681798,
+        0.1392855407938945,
+        0.13811703284209279
+      ],
+      "samples": 7
+    }
+  ],
+  "selection": [
+    {
+      "triangles": 17856,
+      "runs": [
+        {
+          "callback_ms": 8.336900034919381,
+          "completion_s": 0.25262010004371405,
+          "slices": 169,
+          "longest_step_ms": 5.252800008747727,
+          "errors": 0
+        },
+        {
+          "callback_ms": 8.844199997838587,
+          "completion_s": 0.22327670000959188,
+          "slices": 169,
+          "longest_step_ms": 5.737999978009611,
+          "errors": 0
+        },
+        {
+          "callback_ms": 8.639100007712841,
+          "completion_s": 0.2231045999797061,
+          "slices": 169,
+          "longest_step_ms": 5.842100013978779,
+          "errors": 0
+        },
+        {
+          "callback_ms": 8.649900031741709,
+          "completion_s": 0.22044840001035482,
+          "slices": 169,
+          "longest_step_ms": 5.651000014040619,
+          "errors": 0
+        },
+        {
+          "callback_ms": 8.653900003992021,
+          "completion_s": 0.21979890001239255,
+          "slices": 169,
+          "longest_step_ms": 5.719400011003017,
+          "errors": 0
+        }
+      ],
+      "cached_callback_ms": 6.924599991180003
+    },
+    {
+      "triangles": 72576,
+      "runs": [
+        {
+          "callback_ms": 32.933699956629425,
+          "completion_s": 0.46246719994815066,
+          "slices": 176,
+          "longest_step_ms": 10.663699998985976,
+          "errors": 0
+        },
+        {
+          "callback_ms": 33.03089999826625,
+          "completion_s": 0.44202339998446405,
+          "slices": 176,
+          "longest_step_ms": 10.57420001598075,
+          "errors": 0
+        },
+        {
+          "callback_ms": 32.67859999323264,
+          "completion_s": 0.44077159999869764,
+          "slices": 176,
+          "longest_step_ms": 9.478199994191527,
+          "errors": 0
+        },
+        {
+          "callback_ms": 33.09039998566732,
+          "completion_s": 0.4512512999936007,
+          "slices": 176,
+          "longest_step_ms": 10.76669996837154,
+          "errors": 0
+        },
+        {
+          "callback_ms": 33.02640002220869,
+          "completion_s": 0.4462103000259958,
+          "slices": 176,
+          "longest_step_ms": 11.125200020615011,
+          "errors": 0
+        }
+      ],
+      "cached_callback_ms": 7.022700039669871
+    }
+  ],
+  "adaptive_sample_offset_mm": 2.119276309997531e-05,
+  "control": {
+    "vertices": 1465,
+    "triangles": 2786,
+    "inside": 0,
+    "intersecting": 0,
+    "self_intersections": 0,
+    "separation_mm": {
+      "minimum": 29.952198266983032,
+      "vertex_minimum": 29.9999862909317,
+      "face_minimum": 29.952198266983032,
+      "median": 30.227098613977432
+    },
+    "excess_mm": {
+      "p50": 0.2874334156513225,
+      "p95": 0.6099094450473797,
+      "maximum": 0.6417178362607967
+    },
+    "stretch": {
+      "minimum": 0.9997125747403234,
+      "median": 0.9999876644975636,
+      "p95": 0.9999995050916386,
+      "maximum": 1.0000041307637888
+    },
+    "degenerate_faces": 0
+  },
+  "same_bounds_refit": {
+    "kept_point": true,
+    "signature_changed": true
+  },
+  "stale_and_failed_jobs": {
+    "stale_cancelled": true,
+    "invalid_setup_preserved": true
+  }
+}
