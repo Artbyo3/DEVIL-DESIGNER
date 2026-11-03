@@ -20,6 +20,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
+      - name: Install Blender-bundled numpy for headless tests
+        run: python -m pip install numpy
       - name: Geometry, editing, sewing, and layout tests
         run: python -m unittest discover -s tests -p 'test_*.py' -v
       - name: Parse add-on source without generating bytecode
