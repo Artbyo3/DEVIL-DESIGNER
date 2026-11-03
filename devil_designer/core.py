@@ -252,15 +252,24 @@ def read_vertex(v):
     return Vertex(float(v['x']),float(v['y']),v['id'],handles[0],handles[1],point_type=ptype)
 
 
-def arrangement_record(volume,point,flat=False,*,version=1):
-    return dict(version=version,volume=volume,point=point,flat=flat,translation=[0.0]*3,rotation=[0.0]*3)
+ARRANGEMENT_KEYS={'version','volume','point','flat','translation','rotation'}
+ARRANGEMENT_OPTIONS={'clearance','direction','overwrap'}
+
+
+def arrangement_record(volume,point,flat=False,*,version=1,clearance=None,direction=1,overwrap=False):
+    record=dict(version=version,volume=volume,point=point,flat=flat,translation=[0.0]*3,rotation=[0.0]*3)
+    if version==3:record.update(clearance=clearance,direction=direction,overwrap=overwrap)
+    return record
 
 
 def validate_arrangement(record):
-    if not isinstance(record,dict) or set(record)!={'version','volume','point','flat','translation','rotation'}:
+    if not isinstance(record,dict) or set(record)!=ARRANGEMENT_KEYS|(ARRANGEMENT_OPTIONS if record.get('version')==3 else set()):
         raise ValueError('Invalid arrangement record.')
-    if type(record['version']) is not int or record['version'] not in (1,2) or type(record['flat']) is not bool:
+    if type(record['version']) is not int or record['version'] not in (1,2,3) or type(record['flat']) is not bool:
         raise ValueError('Unsupported arrangement record.')
+    if record['version']==3 and (record['direction'] not in (1,-1) or type(record['direction']) is not int or type(record['overwrap']) is not bool
+                                 or record['clearance'] is not None and (type(record['clearance']) not in (int,float) or not math.isfinite(record['clearance']) or not 0<record['clearance']<=.3)):
+        raise ValueError('Invalid arrangement options.')
     for key in ('volume','point'):
         if not isinstance(record[key],str) or not record[key].strip():raise ValueError('Arrangement IDs must be nonempty.')
     for key in ('translation','rotation'):

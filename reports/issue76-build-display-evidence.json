@@ -1,0 +1,57 @@
+{
+  "marker_sizes": [
+    {
+      "ui_scale": 1.0,
+      "system_scale": 1.0,
+      "diameter_px": 14.0,
+      "hit_diameter_px": 32.0,
+      "active_diameter_px": 18.0
+    },
+    {
+      "ui_scale": 1.5,
+      "system_scale": 1.5,
+      "diameter_px": 20.0,
+      "hit_diameter_px": 48.0,
+      "active_diameter_px": 27.0
+    },
+    {
+      "ui_scale": 2.0,
+      "system_scale": 2.0,
+      "diameter_px": 28.0,
+      "hit_diameter_px": 64.0,
+      "active_diameter_px": 36.0
+    }
+  ],
+  "contrast": {
+    "light body": {
+      "edge": 12.239158235942885,
+      "fill": 1.2114716068288285
+    },
+    "dark background": {
+      "edge": 1.0176079644220106,
+      "fill": 9.927909560060836
+    },
+    "edge_to_fill": 10.102719838379326
+  },
+  "grayscale_state_differences": {
+    "IDLE/HOVER": 0.104,
+    "IDLE/PRESSED": 0.25699910585796354,
+    "IDLE/BOUND": 0.12297021215729713,
+    "HOVER/PRESSED": 0.15299910585796356,
+    "HOVER/BOUND": 0.2269702121572971,
+    "PRESSED/BOUND": 0.3799693180152607
+  },
+  "picking": {
+    "crowded_points": 96,
+    "unique_targets": 24,
+    "correct": 24
+  },
+  "preview": {
+    "vertices": 5284,
+    "samples": 24,
+    "p50_ms": 34.095499955583364,
+    "p95_ms": 36.275599966757,
+    "maximum_ms": 37.12630004156381,
+    "preview_commit_max_mm": 0.00013328003749250113
+  }
+}

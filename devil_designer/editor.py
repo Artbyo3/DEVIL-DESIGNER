@@ -301,6 +301,9 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         self.update_reference(context, align=True)
         if body:
             self.fit()
+            from .arrangement import pending_job
+            if pending_job(context) is not None:
+                self.message = self._scene.get('dd_arrangement_message', '') or 'Preparing arrangement points.'
             if self.pending_simulation:
                 self.pending_simulation = False
                 self.perform_action('SIMULATE')
@@ -603,16 +606,16 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         result = self.shaping_event(context, event, panel)
         if result is not None:
             return result
-        sewing_result = self.viewport_sewing.event(context, event, panel, canvas)
-        if sewing_result is not None:
-            return sewing_result
-        if not panel and self.tool != 'SEW' and not self.pending_tack and not self.pending_place:
-            from .arrangement_controls import point_event
+        from .arrangement_controls import interaction_active,point_event
+        if (not panel or interaction_active()) and self.tool != 'SEW' and not self.pending_tack and not self.pending_place:
             try:arrangement_result=point_event(context,event)
             except ValueError as failure:
                 self.message=str(failure)
                 return {'RUNNING_MODAL'}
             if arrangement_result is not None:return arrangement_result
+        sewing_result = self.viewport_sewing.event(context, event, panel, canvas)
+        if sewing_result is not None:
+            return sewing_result
         if event.type == 'LEFTMOUSE' and event.value == 'DOUBLE_CLICK' and canvas and self.tool != 'KNIFE':
             edge = self.design_hit_edge()
             if edge:

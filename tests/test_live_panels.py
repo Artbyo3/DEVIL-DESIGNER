@@ -349,7 +349,7 @@ class LivePanelTests(unittest.TestCase):
         panel=self.panels()[0];panel.location.x+=.04;bpy.context.view_layer.update()
         record=live_panels.capture(bpy.context).patterns[0].arrangement
         self.body.location.x+=2;self.body.scale=(1.2,.8,1.1);bpy.context.view_layer.update()
-        resolved=arrangement.resolve_point(bpy.context,'chest','front')
+        resolved=arrangement.resolve_point(bpy.context,'chest','front',3,live_panels.effective_clearance(bpy.context,record))
         frame,_=live_panels.point_frame(bpy.context,record)
         expected=Vector(resolved['point'])+frame.to_3x3() @ Vector(record['translation'])
         self.assertLess((panel.matrix_world.translation-expected).length,1e-5)

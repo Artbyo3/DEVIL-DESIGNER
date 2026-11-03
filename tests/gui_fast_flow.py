@@ -672,6 +672,8 @@ def check_arrangement_controls(workspace,event,check):
         view.view_location=scene.dd_avatar.matrix_world.translation
         view.view_rotation=Quaternion((1,0,0),math.pi/2);view.view_distance=3;view.view_perspective='ORTHO'
         bpy.context.view_layer.update()
+        check(arrangement.pending_job(bpy.context) is not None or 'dd_arrangement_volumes' in scene.dd_avatar,'choosing a body prepares arrangement points without blocking')
+        arrangement.ensure_volumes(bpy.context)
         points=arrangement_controls.projected_points(bpy.context)
         check(bool(points),'avatar arrangement dots project into the uncovered 3D view')
         target=next(point for point in points if point['volume']=='chest' and point['point']=='front')
@@ -681,8 +683,10 @@ def check_arrangement_controls(workspace,event,check):
         check(not arrangement_controls.projected_points(bpy.context),'H hides arrangement dots along with the body guide')
         workspace.handle_event(bpy.context,event('H',screen))
         workspace.handle_event(bpy.context,event('LEFTMOUSE',screen))
+        check(workspace.session.document.find(workspace.session.selected).arrangement is None,'pressing a dot waits for release before placing')
+        workspace.handle_event(bpy.context,event('LEFTMOUSE',screen,'RELEASE'))
         pattern=workspace.session.document.find(workspace.session.selected)
-        check(pattern.arrangement and pattern.arrangement['volume']=='chest','clicking a visible chest dot arranges the selected piece')
+        check(pattern.arrangement and pattern.arrangement['volume']=='chest' and pattern.arrangement['version']==3,'clicking a visible chest dot arranges the selected piece with body-checked wrap')
         identity=pattern.id;chosen=pattern.arrangement['point']
         workspace.perform_action('UNDO')
         check(workspace.session.document.find(identity).arrangement is None,'Undo removes a point arrangement in one step')
@@ -709,6 +713,88 @@ def check_arrangement_controls(workspace,event,check):
         bpy.ops.devil_designer.arrangement_edit(action='DELETE',volume='chest',point=added)
         volume=next(volume for volume in arrangement.ensure_volumes(bpy.context)['volumes'] if volume['id']=='chest')
         check(len(volume['points'])==count,'point card deletes the chosen avatar point')
+        bpy.ops.devil_designer.arrangement_edit(action='WRAP',volume='chest',point=chosen)
+        record=workspace.session.document.find(identity).arrangement
+        check(not record['flat'] and record['version']==3,'point menu Arrange here: Wrap places a body-checked wrapped piece')
+        workspace.session.selected=identity
+        def live():
+            return next(panel for panel in garment.generated(scene,'panel') if panel['dd_pattern_id']==identity)
+        live().location.x+=.02;bpy.context.view_layer.update();live_panels.capture(bpy.context)
+        before=dict(workspace.session.document.find(identity).arrangement)
+        workspace.show_card('PIECE')
+        offered={row[2][0] if row[0]=='CHOICES' else row[0] for rect,row in workspace.minimal_card()[2]}
+        check({'PLACE_SHAPE','PLACE_DISTANCE','PLACE_OVERLAP'}<=offered,'piece menu offers Wrap / Flat, distance and overwrap for an arranged piece')
+        workspace.error_message='';workspace.renderer.draw(workspace)
+        check(not workspace.error_message,'piece menu with placement rows draws without error')
+        workspace.minimal_action('PLACE_SHAPE_Flat')
+        after=workspace.session.document.find(identity).arrangement
+        check(after['flat'] and all(after[key]==before[key] for key in ('volume','point','translation','rotation')) and workspace.session.selected==identity,
+              'one contextual Flat keeps the point, 3D offset and selection')
+        check(max(abs(vertex.co.z) for vertex in live().data.vertices)<1e-6,'Flat piece is planar within one micrometre before its pose offset')
+        workspace.perform_action('UNDO')
+        check(not workspace.session.document.find(identity).arrangement['flat'],'Undo returns the piece to Wrap')
+        workspace.perform_action('REDO')
+        check(workspace.session.document.find(identity).arrangement['flat'],'Redo reapplies Flat')
+        workspace.minimal_action('PLACE_SHAPE_Wrap')
+        workspace.minimal_action('PLACE_DISTANCE_5 cm')
+        check(workspace.session.document.find(identity).arrangement['clearance']==.05,'distance chip overrides body clearance for one piece')
+        workspace.minimal_action('PLACE_OVERLAP_Left on top')
+        record=workspace.session.document.find(identity).arrangement
+        check(record['overwrap'] and record['direction']==-1 and not record['flat'],'overwrap is an explicit choice with an overlap side')
+        workspace.minimal_action('PLACE_OVERLAP_Off');workspace.minimal_action('PLACE_DISTANCE_Body')
+        workspace.session.selected=identity
+        target=next(point for point in arrangement_controls.projected_points(bpy.context) if point['volume']=='chest' and point['point']==chosen)
+        screen=target['screen']
+        stored=scene.dd_avatar['dd_arrangement_volumes']
+        matrices=[panel.matrix_world.copy() for panel in garment.generated(scene,'panel')]
+        workspace.handle_event(bpy.context,event('MOUSEMOVE',screen,'NOTHING'))
+        state=arrangement_controls._interaction
+        check(state.state=='HOVER' and state.point==('chest',chosen),'hovering a dot highlights it')
+        check(state.preview is not None and bool(state.preview['positions']),'hover previews the selected piece at the dot')
+        workspace.error_message='';workspace.renderer.draw(workspace)
+        check(not workspace.error_message,'editor draws while a dot is hovered')
+        with patch.object(garment,'build_panels',wraps=garment.build_panels) as rebuild:
+            workspace.handle_event(bpy.context,event('LEFTMOUSE',screen))
+            workspace.handle_event(bpy.context,event('MOUSEMOVE',(screen[0]+2,screen[1]+1),'NOTHING'))
+            check(state.state=='PRESSED','movement under four pixels stays a click')
+            for step in range(1,6):
+                workspace.handle_event(bpy.context,event('MOUSEMOVE',(screen[0]+6*step,screen[1]+4*step),'NOTHING'))
+            check(state.state=='DRAGGING' and state.point==('chest',chosen),'dragging keeps the pressed point identity')
+            workspace.renderer.draw(workspace)
+            check(not workspace.error_message,'editor draws while a dot is dragged')
+            check(rebuild.call_count==0 and scene.dd_avatar['dd_arrangement_volumes']==stored,'dragging previews without rebuilding panels or writing avatar data')
+        workspace.handle_event(bpy.context,event('ESC',screen))
+        check(state.state=='IDLE' and scene.dd_avatar['dd_arrangement_volumes']==stored and
+              [panel.matrix_world for panel in garment.generated(scene,'panel')]==matrices,'Escape restores the exact setup and panel pose')
+        workspace.handle_event(bpy.context,event('LEFTMOUSE',screen))
+        for step in range(1,6):
+            workspace.handle_event(bpy.context,event('MOUSEMOVE',(screen[0]+6*step,screen[1]+4*step),'NOTHING'))
+        with patch.object(arrangement,'edit_point',wraps=arrangement.edit_point) as edit:
+            workspace.handle_event(bpy.context,event('LEFTMOUSE',(screen[0]+30,screen[1]+20),'RELEASE'))
+        check(edit.call_count==1 and scene.dd_avatar['dd_arrangement_volumes']!=stored and state.state=='IDLE','release commits the dragged point once')
+        check(workspace.session.document.find(identity).arrangement['point']==chosen,'dragging a point keeps the piece bound to it')
+        bpy.ops.devil_designer.arrangement_edit(action='MOVE',volume='chest',point=chosen,angle=math.radians(12.3),height=.6)
+        moved=next(point for point in next(volume for volume in arrangement.ensure_volumes(bpy.context)['volumes'] if volume['id']=='chest')['points'] if point['id']==chosen)
+        check(abs(math.degrees(moved['angle'])-12.3)<1e-6,'numeric point entry keeps 0.1 degree precision')
+        chest=next(volume for volume in arrangement.ensure_volumes(bpy.context)['volumes'] if volume['id']=='chest')
+        bpy.ops.devil_designer.arrangement_edit(action='VOLUME',volume='chest',point=chosen,lower=chest['lower'],upper=chest['upper'],radius_scale=chest['radius_scale'],width_scale=1.2,depth_scale=.9)
+        chest=next(volume for volume in arrangement.ensure_volumes(bpy.context)['volumes'] if volume['id']=='chest')
+        check(abs(chest['width_scale']-1.2)<1e-6 and abs(chest['depth_scale']-.9)<1e-6,'advanced fit edits ellipse width and depth independently')
+        bpy.ops.devil_designer.arrangement_edit(action='VOLUME',volume='chest',point=chosen,reset_fit=True)
+        chest=next(volume for volume in arrangement.ensure_volumes(bpy.context)['volumes'] if volume['id']=='chest')
+        check((chest['lower'],chest['upper'],chest['width_scale'],chest['depth_scale'])==(chest['measured_lower'],chest['measured_upper'],1.0,1.0) and
+              any(point['id']==chosen for point in chest['points']),'Reset fit restores the measured volume and keeps its points')
+        from devil_designer.core import arrangement_record
+        legacy=dict(arrangement_record('chest',chosen,version=2),translation=[.01,0.0,0.0])
+        def downgrade():
+            workspace.session.document.find(identity).arrangement=legacy
+        workspace.run_edit(lambda:workspace.session.commit(downgrade),'Older arrangement restored for upgrade check.')
+        workspace.show_card('PIECE')
+        check(any(row[0]=='PLACE_UPGRADE' for rect,row in workspace.minimal_card()[2]),'older arrangements offer an explicit body-checked wrap upgrade')
+        workspace.minimal_action('PLACE_UPGRADE')
+        upgraded=workspace.session.document.find(identity).arrangement
+        check(upgraded['version']==3 and upgraded['point']==chosen and upgraded['translation']==[.01,0.0,0.0] and not upgraded['flat'],
+              'explicit upgrade keeps the point and 3D offset')
         workspace.minimal_action('RESET_LAYOUT')
         check(workspace.session.document.find(identity).arrangement is None,'piece card Reset to 2D layout clears the arrangement')
     finally:

@@ -114,3 +114,23 @@ class ComponentRenderer:
             pill_r = Rect(r.x + r.w - sw - 4 * s, r.y + 3 * s, sw, 18 * s)
             draw_ctx.round_rect(pill_r, BG_ELEVATED, radius=metrics.box if metrics else RADIUS_BADGE)
             draw_ctx.text(pill_r.x + pill_r.w / 2, pill_r.y + 4 * s, tooltip.shortcut, 9, ACCENT, center=True)
+
+ARRANGEMENT_POINT_DIAMETER = 14.0
+ARRANGEMENT_ACTIVE_DIAMETER = 18.0
+ARRANGEMENT_HIT_DIAMETER = 32.0
+ARRANGEMENT_EDGE_WIDTH = 2.0
+ARRANGEMENT_DRAG_THRESHOLD = 4.0
+ARRANGEMENT_LABEL_SIZE = 11
+ARRANGEMENT_FILL = (.28, .78, 1.0, 1.0)
+ARRANGEMENT_EDGE = (.035, .05, .07, 1.0)
+ARRANGEMENT_HALO = (1.0, 1.0, 1.0, 1.0)
+ARRANGEMENT_HIDDEN_ALPHA = .35
+ARRANGEMENT_RING = (.28, .78, 1.0, .22)
+ARRANGEMENT_PREVIEW = (1.0, .635, .337, .85)
+
+
+def interface_scale():
+    try:
+        return float(bpy.context.preferences.system.ui_scale)
+    except (AttributeError, TypeError):
+        return 1.0
