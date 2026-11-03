@@ -50,7 +50,6 @@ def run():
             bpy.ops.devil_designer.pattern_editor('INVOKE_DEFAULT')
             workspace = editor._active
             check(workspace is not None and not workspace._closed, 'pattern editor active with minimal UI')
-            check(workspace.minimal_ui, 'minimal UI is active')
 
             def event(kind, point, value='PRESS'):
                 return SimpleNamespace(type=kind, value=value, mouse_x=point[0] + region.x,

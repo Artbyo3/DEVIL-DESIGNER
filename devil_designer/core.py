@@ -525,18 +525,106 @@ class Document:
 
 from .construction import ConstructionMixin
 
+def pattern_enclosed_by_box(pattern,x0,y0,x1,y1):
+    min_x,max_x=min(x0,x1),max(x0,x1)
+    min_y,max_y=min(y0,y1),max(y0,y1)
+    outline=pattern.outline()
+    if not outline:return False
+    return all(min_x<=pt[0]<=max_x and min_y<=pt[1]<=max_y for pt in outline)
+
 def pattern_touches_box(pattern,x0,y0,x1,y1):
+    min_x,max_x=min(x0,x1),max(x0,x1)
+    min_y,max_y=min(y0,y1),max(y0,y1)
     center=((x0+x1)/2,(y0+y1)/2)
     if pattern.contains(center):return True
-    corners=[(x0,y0),(x1,y0),(x1,y1),(x0,y1)]
+    corners=[(min_x,min_y),(max_x,min_y),(max_x,max_y),(min_x,max_y)]
     if any(pattern.contains(c) for c in corners):return True
     outline=pattern.outline()
+    if any(min_x<=pt[0]<=max_x and min_y<=pt[1]<=max_y for pt in outline):return True
     poly_edges=list(zip(outline,outline[1:]+outline[:1]))
     box_edges=list(zip(corners,corners[1:]+corners[:1]))
     for a,b in poly_edges:
         for c,d in box_edges:
             if intersects(a,b,c,d):return True
     return False
+
+def point_in_lasso(pt,poly):
+    x,y=pt
+    inside=False
+    n=len(poly)
+    for i in range(n):
+        x1,y1=poly[i]
+        x2,y2=poly[(i+1)%n]
+        if ((y1>y)!=(y2>y)) and (x<(x2-x1)*(y-y1)/(y2-y1+1e-12)+x1):
+            inside=not inside
+    return inside
+
+def pattern_in_lasso(pattern,poly,rule='ENCLOSE'):
+    outline=pattern.outline()
+    if not outline:return False
+    if rule=='ENCLOSE':
+        return all(point_in_lasso(pt,poly) for pt in outline)
+    if any(point_in_lasso(pt,poly) for pt in outline):
+        return True
+    if any(pattern.contains(pt) for pt in poly):
+        return True
+    poly_edges=list(zip(outline,outline[1:]+outline[:1]))
+    lasso_edges=list(zip(poly,poly[1:]+poly[:1]))
+    for a,b in poly_edges:
+        for c,d in lasso_edges:
+            if intersects(a,b,c,d):return True
+    return False
+
+def edge_in_box(doc,edge,x0,y0,x1,y1,rule='ENCLOSE'):
+    try:samples=[pt for _,pt in curves.table(doc.edge_curve(edge))]
+    except Exception:return False
+    if not samples:return False
+    min_x,max_x=min(x0,x1),max(x0,x1)
+    min_y,max_y=min(y0,y1),max(y0,y1)
+    in_box=[min_x<=pt[0]<=max_x and min_y<=pt[1]<=max_y for pt in samples]
+    if rule=='ENCLOSE':return all(in_box)
+    if any(in_box):return True
+    corners=[(min_x,min_y),(max_x,min_y),(max_x,max_y),(min_x,max_y)]
+    box_edges=list(zip(corners,corners[1:]+corners[:1]))
+    edge_segs=list(zip(samples,samples[1:]))
+    for a,b in edge_segs:
+        for c,d in box_edges:
+            if intersects(a,b,c,d):return True
+    return False
+
+def edge_in_lasso(doc,edge,poly,rule='ENCLOSE'):
+    try:samples=[pt for _,pt in curves.table(doc.edge_curve(edge))]
+    except Exception:return False
+    if not samples:return False
+    in_lasso=[point_in_lasso(pt,poly) for pt in samples]
+    if rule=='ENCLOSE':return all(in_lasso)
+    if any(in_lasso):return True
+    lasso_edges=list(zip(poly,poly[1:]+poly[:1]))
+    edge_segs=list(zip(samples,samples[1:]))
+    for a,b in edge_segs:
+        for c,d in lasso_edges:
+            if intersects(a,b,c,d):return True
+    return False
+
+def canonicalize_auto_handles(doc):
+    for p in doc.patterns:
+        for _,nodes,closed,_ in p.loops():
+            update_auto_handles(nodes,closed)
+
+def selected_edge_curves(doc,nodes):
+    result=[]
+    for p in doc.patterns:
+        for path_id,vlist,closed,_ in p.loops():
+            if all((p.id,path_id,i) in nodes for i in range(len(vlist))):continue
+            count=len(vlist) if closed else len(vlist)-1
+            for i in range(count):
+                j=(i+1)%len(vlist)
+                key_a=(p.id,path_id,i);key_b=(p.id,path_id,j)
+                if key_a in nodes and key_b in nodes and 'AUTO' in (getattr(vlist[i],'point_type','CORNER'),getattr(vlist[j],'point_type','CORNER')):
+                    result.append((key_a,key_b,curves.controls(vlist[i],vlist[j])))
+    return result
+
+CURVE_TOLERANCE=1e-6
 
 class Session(ConstructionMixin):
     def __init__(self,document=None):
@@ -547,8 +635,14 @@ class Session(ConstructionMixin):
         self.point_selection=[]
         self.selected_patterns=set()
         self.selected_points=set()
+        self.selected_edges=set()
+        self.selected_paths=set()
+        self.acquisition_target='PIECES'
+        self.active_entity=None
+        self.placed_pivot=None
         self._undo_selections=[]
         self._redo_selections=[]
+        self._committed_selection=None
         self.undo_stack,self.redo_stack=[],[]
         self.last_repairs=0
 
@@ -561,9 +655,12 @@ class Session(ConstructionMixin):
         self._selected=value
         if value is None:
             self.selected_patterns.clear()
+            if self.active_entity and self.active_entity[0]=='PIECE':
+                self.active_entity=None
         elif value:
             if not self.selected_patterns or (len(self.selected_patterns)==1 and not self.selected_points):
                 self.selected_patterns={value}
+                self.active_entity=('PIECE',value)
 
     @property
     def corner(self):
@@ -573,15 +670,22 @@ class Session(ConstructionMixin):
     def corner(self,value):
         self._corner=value
         if value is None:
-            if len(self.selected_points)<=1:self.selected_points.clear()
+            if len(self.selected_points)<=1:
+                self.selected_points.clear()
+                if self.active_entity and self.active_entity[0]=='POINT':
+                    self.active_entity=None
         else:
             if self._selected and len(self.selected_points)<=1:
                 self.selected_points={(self._selected,self.path,value)}
+                self.active_entity=('POINT',(self._selected,self.path,value))
 
     def get_selection_state(self):
         return dict(patterns=set(self.selected_patterns),points=set(self.selected_points),
-                    selected=self._selected,corner=self._corner,path=self.path,
-                    segment=self.segment,point_selection=list(self.point_selection))
+                    edges=set(self.selected_edges),paths=set(self.selected_paths),
+                    target=self.acquisition_target,active=self.active_entity,
+                    placed_pivot=self.placed_pivot,selected=self._selected,
+                    corner=self._corner,path=self.path,segment=self.segment,
+                    point_selection=list(self.point_selection))
 
     def set_selection_state(self,state):
         if not isinstance(state,dict):return
@@ -594,9 +698,30 @@ class Session(ConstructionMixin):
                     if idx<len(p.path(path_id).vertices):
                         self.selected_points.add((pid,path_id,idx))
                 except (ValueError,KeyError,IndexError):pass
+        self.selected_edges=set()
+        for edge in state.get('edges',()):
+            p=self.document.find(edge.pattern)
+            if p:
+                try:
+                    vlist=p.path(edge.path).vertices
+                    vids={v.id for v in vlist}
+                    if edge.start in vids and edge.end in vids:
+                        self.selected_edges.add(edge)
+                except (ValueError,KeyError):pass
+        self.selected_paths=set()
+        for pid,path_id in state.get('paths',()):
+            p=self.document.find(pid)
+            if p:
+                try:
+                    p.path(path_id)
+                    self.selected_paths.add((pid,path_id))
+                except (ValueError,KeyError):pass
+        self.acquisition_target=state.get('target','PIECES')
+        self.active_entity=state.get('active')
+        self.placed_pivot=state.get('placed_pivot')
         self._selected=state.get('selected')
         if self._selected and not self.document.find(self._selected):
-            self._selected=next(iter(self.selected_patterns),None) if self.selected_patterns else None
+            self._selected=None
         self._corner=state.get('corner')
         self.path=state.get('path','OUTER')
         self.segment=state.get('segment')
@@ -604,42 +729,77 @@ class Session(ConstructionMixin):
         self.sync_from_multi()
 
     def sync_from_multi(self):
-        if self.selected_patterns and not self.selected_points:
-            if self._selected not in self.selected_patterns:
-                self._selected=next(iter(self.selected_patterns),None)
-            self._corner=None;self.point_selection=[]
-        elif self.selected_points:
-            first=next(iter(self.selected_points))
-            self._selected,self.path=first[0],first[1]
-            self.point_selection=[idx for (pid,path,idx) in self.selected_points if pid==self._selected and path==self.path]
-            self._corner=first[2] if len(self.selected_points)==1 else None
+        if not self.has_selection():
+            self._selected=None;self._corner=None;self.path='OUTER'
+            self.segment=None;self.point_selection=[];self.active_entity=None
+            return
+        if self.active_entity is not None:
+            kind,val=self.active_entity
+            if kind=='PIECE' and val not in self.selected_patterns:self.active_entity=None
+            elif kind=='POINT' and val not in self.selected_points:self.active_entity=None
+            elif kind=='EDGE' and val not in self.selected_edges:self.active_entity=None
+            elif kind=='PATH' and val not in self.selected_paths:self.active_entity=None
+        if self.active_entity is not None:
+            kind,val=self.active_entity
+            if kind=='PIECE':
+                self._selected=val;self.path='OUTER';self._corner=None
+                self.segment=None;self.point_selection=[]
+            elif kind=='POINT':
+                pid,path_id,idx=val
+                self._selected=pid;self.path=path_id;self._corner=idx
+                self.segment=None
+                self.point_selection=[i for (p,pth,i) in self.selected_points if p==pid and pth==path_id]
+            elif kind=='EDGE':
+                self._selected=val.pattern;self.path=val.path;self.segment=val
+                self._corner=None;self.point_selection=[]
+            elif kind=='PATH':
+                pid,path_id=val
+                self._selected=pid;self.path=path_id;self._corner=None
+                self.segment=None;self.point_selection=[]
 
     def clear_selection(self):
         self.selected_patterns.clear()
         self.selected_points.clear()
+        self.selected_edges.clear()
+        self.selected_paths.clear()
+        self.active_entity=None
         self._selected=self._corner=self.segment=None
         self.path='OUTER';self.point_selection=[]
+        self.placed_pivot=None
 
     def select_all(self):
         self.clear_selection()
-        for p in self.document.patterns:self.selected_patterns.add(p.id)
-        if self.document.patterns:self._selected=self.document.patterns[0].id
+        if self.acquisition_target=='PIECES':
+            for p in self.document.patterns:self.selected_patterns.add(p.id)
+            if self.document.patterns:self.active_entity=('PIECE',self.document.patterns[0].id)
+        elif self.acquisition_target=='POINTS':
+            for p in self.document.patterns:
+                for path,nodes,_,_ in p.loops():
+                    for idx in range(len(nodes)):self.selected_points.add((p.id,path,idx))
+            if self.selected_points:self.active_entity=('POINT',next(iter(self.selected_points)))
+        elif self.acquisition_target=='EDGES':
+            for p in self.document.patterns:
+                for path,_,_,_ in p.loops():
+                    for edge in self.document.edges(p.id,path):self.selected_edges.add(edge)
+            if self.selected_edges:self.active_entity=('EDGE',next(iter(self.selected_edges)))
+        elif self.acquisition_target=='PATHS':
+            for p in self.document.patterns:
+                for path in p.paths:self.selected_paths.add((p.id,path.id))
+            if self.selected_paths:self.active_entity=('PATH',next(iter(self.selected_paths)))
+        self.sync_from_multi()
 
     def select_piece(self,pattern_id,toggle=False):
         if not toggle:
-            self.selected_patterns={pattern_id}
-            self.selected_points.clear()
-            self._selected=pattern_id;self.path='OUTER'
-            self._corner=None;self.point_selection=[]
-            if self.segment and self.segment.pattern!=pattern_id:self.segment=None
+            self.clear_selection()
+            self.selected_patterns.add(pattern_id)
+            self.active_entity=('PIECE',pattern_id)
         else:
             if pattern_id in self.selected_patterns:
                 self.selected_patterns.remove(pattern_id)
-                if self._selected==pattern_id:
-                    self._selected=next(iter(self.selected_patterns),None) if self.selected_patterns else None
+                if self.active_entity==('PIECE',pattern_id):self.active_entity=None
             else:
                 self.selected_patterns.add(pattern_id)
-                self._selected=pattern_id
+                self.active_entity=('PIECE',pattern_id)
         self.sync_from_multi()
 
     def select_point(self,pattern_id,path_id,point_index,toggle=False):
@@ -647,21 +807,103 @@ class Session(ConstructionMixin):
         if not toggle:
             self.clear_selection()
             self.selected_points.add(key)
+            self.active_entity=('POINT',key)
         else:
-            if key in self.selected_points:self.selected_points.remove(key)
-            else:self.selected_points.add(key)
+            if key in self.selected_points:
+                self.selected_points.remove(key)
+                if self.active_entity==('POINT',key):self.active_entity=None
+            else:
+                self.selected_points.add(key)
+                self.active_entity=('POINT',key)
+        self.sync_from_multi()
+
+    def select_edge(self,edge_ref,toggle=False):
+        if not toggle:
+            self.clear_selection()
+            self.selected_edges.add(edge_ref)
+            self.active_entity=('EDGE',edge_ref)
+        else:
+            if edge_ref in self.selected_edges:
+                self.selected_edges.remove(edge_ref)
+                if self.active_entity==('EDGE',edge_ref):self.active_entity=None
+            else:
+                self.selected_edges.add(edge_ref)
+                self.active_entity=('EDGE',edge_ref)
+        self.sync_from_multi()
+
+    def select_path(self,pattern_id,path_id,toggle=False):
+        key=(pattern_id,path_id)
+        if not toggle:
+            self.clear_selection()
+            self.selected_paths.add(key)
+            self.active_entity=('PATH',key)
+        else:
+            if key in self.selected_paths:
+                self.selected_paths.remove(key)
+                if self.active_entity==('PATH',key):self.active_entity=None
+            else:
+                self.selected_paths.add(key)
+                self.active_entity=('PATH',key)
+        self.sync_from_multi()
+
+    def invert_selection(self):
+        target=self.acquisition_target
+        if target=='PIECES':
+            all_pids={p.id for p in self.document.patterns}
+            self.selected_patterns=all_pids-self.selected_patterns
+        elif target=='POINTS':
+            all_pts={(p.id,path,idx) for p in self.document.patterns for path,nodes,_,_ in p.loops() for idx in range(len(nodes))}
+            self.selected_points=all_pts-self.selected_points
+        elif target=='EDGES':
+            all_edges={e for p in self.document.patterns for path,_,_,_ in p.loops() for e in self.document.edges(p.id,path)}
+            self.selected_edges=all_edges-self.selected_edges
+        elif target=='PATHS':
+            all_paths={(p.id,path.id) for p in self.document.patterns for path in p.paths}
+            self.selected_paths=all_paths-self.selected_paths
+        self.sync_from_multi()
+
+    def select_connected(self,mode='PATH'):
+        if mode=='PATH':
+            if self.active_entity:
+                kind,val=self.active_entity
+                if kind=='POINT':
+                    pid,path_id,_=val
+                    p=self.document.find(pid)
+                    if p:
+                        for i in range(len(p.path(path_id).vertices)):
+                            self.selected_points.add((pid,path_id,i))
+                elif kind=='EDGE':
+                    p=self.document.find(val.pattern)
+                    if p:
+                        for e in self.document.edges(val.pattern,val.path):
+                            self.selected_edges.add(e)
+                elif kind=='PATH':
+                    self.selected_paths.add(val)
+        elif mode=='SEWN':
+            seeds=set(self.selected_patterns)
+            if not seeds and self._selected:seeds.add(self._selected)
+            connected=set(seeds)
+            changed=True
+            while changed:
+                changed=False
+                for seam in self.document.seams:
+                    side_a={e.pattern for e in seam.side(0)}
+                    side_b={e.pattern for e in seam.side(1)}
+                    if connected.intersection(side_a) and not side_b.issubset(connected):
+                        connected.update(side_b);changed=True
+                    if connected.intersection(side_b) and not side_a.issubset(connected):
+                        connected.update(side_a);changed=True
+            self.selected_patterns.update(connected)
         self.sync_from_multi()
 
     def is_multi_selected(self):
-        return len(self.selected_patterns)+len(self.selected_points)>1
+        return len(self.selected_patterns)+len(self.selected_points)+len(self.selected_edges)+len(self.selected_paths)>1
 
     def has_selection(self):
-        return bool(self.selected_patterns or self.selected_points or self._selected)
+        return bool(self.selected_patterns or self.selected_points or self.selected_edges or self.selected_paths)
 
     def selection_counts(self):
-        n_p=len(self.selected_patterns) if self.selected_patterns else (1 if self._selected and not self.selected_points and self._corner is None else 0)
-        n_pt=len(self.selected_points) if self.selected_points else (1 if self._corner is not None else 0)
-        return n_p,n_pt
+        return len(self.selected_patterns),len(self.selected_points)
 
     def can_merge_selected_points(self):
         if len(self.selected_points)!=2:return False
@@ -673,31 +915,114 @@ class Session(ConstructionMixin):
         a,b=sorted([pts[0][2],pts[1][2]])
         return b==a+1 or (a==0 and b==len(nodes)-1)
 
-    def box_select(self,x0,y0,x1,y1,shift=False):
+    def box_select(self,x0,y0,x1,y1,mode=None,shift=False,alt=False):
+        target=self.acquisition_target
+        rule='ENCLOSE' if x1>=x0 else 'CROSSING'
+        if mode is None:
+            if alt:mode='SUBTRACT'
+            elif shift:mode='ADD'
+            else:mode='REPLACE'
         min_x,max_x=min(x0,x1),max(x0,x1)
         min_y,max_y=min(y0,y1),max(y0,y1)
-        pts_found=[]
-        for p in self.document.patterns:
-            for path,nodes,_,_ in p.loops():
-                for idx,v in enumerate(nodes):
-                    if min_x<=v.x<=max_x and min_y<=v.y<=max_y:
-                        pts_found.append((p.id,path,idx))
-        if pts_found:
-            if not shift:self.clear_selection()
-            for pt in pts_found:self.selected_points.add(pt)
-            self.sync_from_multi()
-            return 'POINTS',len(self.selected_points)
-        touched=[]
-        for p in self.document.patterns:
-            if pattern_touches_box(p,min_x,min_y,max_x,max_y):
-                touched.append(p.id)
-        if touched:
-            if not shift:self.clear_selection()
-            for pid in touched:self.selected_patterns.add(pid)
+        hits=set()
+        if target=='PIECES':
+            for p in self.document.patterns:
+                matched=pattern_enclosed_by_box(p,min_x,min_y,max_x,max_y) if rule=='ENCLOSE' else pattern_touches_box(p,min_x,min_y,max_x,max_y)
+                if matched:hits.add(p.id)
+            if mode=='REPLACE':self.selected_patterns=hits
+            elif mode=='ADD':self.selected_patterns.update(hits)
+            elif mode=='SUBTRACT':self.selected_patterns.difference_update(hits)
             self.sync_from_multi()
             return 'PIECES',len(self.selected_patterns)
-        if not shift:self.clear_selection()
-        return 'NONE',0
+        elif target=='POINTS':
+            for p in self.document.patterns:
+                for path,nodes,_,_ in p.loops():
+                    for idx,v in enumerate(nodes):
+                        if min_x<=v.x<=max_x and min_y<=v.y<=max_y:
+                            hits.add((p.id,path,idx))
+            if mode=='REPLACE':self.selected_points=hits
+            elif mode=='ADD':self.selected_points.update(hits)
+            elif mode=='SUBTRACT':self.selected_points.difference_update(hits)
+            self.sync_from_multi()
+            return 'POINTS',len(self.selected_points)
+        elif target=='EDGES':
+            for p in self.document.patterns:
+                for path,_,_,_ in p.loops():
+                    for edge in self.document.edges(p.id,path):
+                        if edge_in_box(self.document,edge,min_x,min_y,max_x,max_y,rule):
+                            hits.add(edge)
+            if mode=='REPLACE':self.selected_edges=hits
+            elif mode=='ADD':self.selected_edges.update(hits)
+            elif mode=='SUBTRACT':self.selected_edges.difference_update(hits)
+            self.sync_from_multi()
+            return 'EDGES',len(self.selected_edges)
+        elif target=='PATHS':
+            for p in self.document.patterns:
+                for path in p.paths:
+                    samples=path.outline()
+                    in_box=[min_x<=pt[0]<=max_x and min_y<=pt[1]<=max_y for pt in samples]
+                    matched=all(in_box) if rule=='ENCLOSE' else (any(in_box) or any(intersects(a,b,c,d) for a,b in zip(samples,samples[1:]) for c,d in zip([(min_x,min_y),(max_x,min_y),(max_x,max_y),(min_x,max_y)],[(max_x,min_y),(max_x,max_y),(min_x,max_y),(min_x,min_y)])))
+                    if matched:hits.add((p.id,path.id))
+            if mode=='REPLACE':self.selected_paths=hits
+            elif mode=='ADD':self.selected_paths.update(hits)
+            elif mode=='SUBTRACT':self.selected_paths.difference_update(hits)
+            self.sync_from_multi()
+            return 'PATHS',len(self.selected_paths)
+        return target,0
+
+    def lasso_select(self,points,mode=None,shift=False,alt=False,rule='ENCLOSE'):
+        target=self.acquisition_target
+        if mode is None:
+            if alt:mode='SUBTRACT'
+            elif shift:mode='ADD'
+            else:mode='REPLACE'
+        hits=set()
+        poly=list(points)
+        if len(poly)>=2 and poly[0]==poly[-1]:poly=poly[:-1]
+        if len(poly)<3:return target,0
+        if target=='PIECES':
+            for p in self.document.patterns:
+                if pattern_in_lasso(p,poly,rule):hits.add(p.id)
+            if mode=='REPLACE':self.selected_patterns=hits
+            elif mode=='ADD':self.selected_patterns.update(hits)
+            elif mode=='SUBTRACT':self.selected_patterns.difference_update(hits)
+            self.sync_from_multi()
+            return 'PIECES',len(self.selected_patterns)
+        elif target=='POINTS':
+            for p in self.document.patterns:
+                for path,nodes,_,_ in p.loops():
+                    for idx,v in enumerate(nodes):
+                        if point_in_lasso((v.x,v.y),poly):
+                            hits.add((p.id,path,idx))
+            if mode=='REPLACE':self.selected_points=hits
+            elif mode=='ADD':self.selected_points.update(hits)
+            elif mode=='SUBTRACT':self.selected_points.difference_update(hits)
+            self.sync_from_multi()
+            return 'POINTS',len(self.selected_points)
+        elif target=='EDGES':
+            for p in self.document.patterns:
+                for path,_,_,_ in p.loops():
+                    for edge in self.document.edges(p.id,path):
+                        if edge_in_lasso(self.document,edge,poly,rule):
+                            hits.add(edge)
+            if mode=='REPLACE':self.selected_edges=hits
+            elif mode=='ADD':self.selected_edges.update(hits)
+            elif mode=='SUBTRACT':self.selected_edges.difference_update(hits)
+            self.sync_from_multi()
+            return 'EDGES',len(self.selected_edges)
+        elif target=='PATHS':
+            for p in self.document.patterns:
+                for path in p.paths:
+                    samples=path.outline()
+                    in_poly=[point_in_lasso(pt,poly) for pt in samples]
+                    matched=all(in_poly) if rule=='ENCLOSE' else (any(in_poly) or any(intersects(a,b,c,d) for a,b in zip(samples,samples[1:]) for c,d in zip(poly,poly[1:]+poly[:1])))
+                    if matched:hits.add((p.id,path.id))
+            if mode=='REPLACE':self.selected_paths=hits
+            elif mode=='ADD':self.selected_paths.update(hits)
+            elif mode=='SUBTRACT':self.selected_paths.difference_update(hits)
+            self.sync_from_multi()
+            return 'PATHS',len(self.selected_paths)
+        return target,0
 
 
     def commit(self,operation):
@@ -834,38 +1159,371 @@ class Session(ConstructionMixin):
                     if anchor.pattern==p.id: anchor.x+=dx; anchor.y+=dy
         return self.commit(apply)
 
-    def move_selection(self,dx,dy):
-        if abs(dx)<1e-9 and abs(dy)<1e-9:return False
-        pieces=set(self.selected_patterns)
-        if not pieces and not self.selected_points and self._selected:
-            if self._corner is None:pieces.add(self._selected)
-        points=set(self.selected_points)
-        if not pieces and not points and self._selected and self._corner is not None:
-            points.add((self._selected,self.path,self._corner))
-        if not pieces and not points:return False
-        def apply():
-            for pid in pieces:
-                p=self.document.find(pid)
-                if not p:continue
-                for _,nodes,closed,_ in p.loops():
-                    for v in nodes:v.x+=dx;v.y+=dy
-                    update_auto_handles(nodes,closed)
-                for anchor in self.document.anchors:
-                    if anchor.pattern==p.id:anchor.x+=dx;anchor.y+=dy
-            affected_paths=set()
-            for pid,path_id,idx in points:
-                if pid in pieces:continue
-                p=self.document.find(pid)
-                if not p:continue
-                nodes=p.path(path_id).vertices
-                if 0<=idx<len(nodes):
-                    v=nodes[idx];v.x+=dx;v.y+=dy
-                    affected_paths.add((pid,path_id))
-            for pid,path_id in affected_paths:
-                p=self.document.find(pid)
+    def resolve_selection(self,doc=None):
+        doc=doc or self.document
+        nodes={}
+        whole_patterns=set(self.selected_patterns)
+        for pid in self.selected_patterns:
+            p=doc.find(pid)
+            if not p:continue
+            for path,vlist,_,_ in p.loops():
+                for i,v in enumerate(vlist):
+                    nodes[(pid,path,i)]=v
+        for pid,path_id in self.selected_paths:
+            p=doc.find(pid)
+            if not p:continue
+            try:
+                q=p.path(path_id)
+                for i,v in enumerate(q.vertices):
+                    nodes[(pid,path_id,i)]=v
+            except (ValueError,KeyError):pass
+        for edge in self.selected_edges:
+            p=doc.find(edge.pattern)
+            if not p:continue
+            try:
+                vlist=p.path(edge.path).vertices
+                i0=next((i for i,v in enumerate(vlist) if v.id==edge.start),None)
+                i1=next((i for i,v in enumerate(vlist) if v.id==edge.end),None)
+                if i0 is not None:nodes[(edge.pattern,edge.path,i0)]=vlist[i0]
+                if i1 is not None:nodes[(edge.pattern,edge.path,i1)]=vlist[i1]
+            except (ValueError,KeyError):pass
+        for pid,path_id,idx in self.selected_points:
+            p=doc.find(pid)
+            if not p:continue
+            try:
+                vlist=p.path(path_id).vertices
+                if 0<=idx<len(vlist):
+                    nodes[(pid,path_id,idx)]=vlist[idx]
+            except (ValueError,IndexError):pass
+        if not nodes and self._selected:
+            p=doc.find(self._selected)
+            if p:
+                if self._corner is not None:
+                    try:
+                        nodes[(self._selected,self.path,self._corner)]=p.path(self.path).vertices[self._corner]
+                    except (ValueError,IndexError):pass
+                elif self.segment:
+                    try:
+                        vlist=p.path(self.segment.path).vertices
+                        i0=next((i for i,v in enumerate(vlist) if v.id==self.segment.start),None)
+                        i1=next((i for i,v in enumerate(vlist) if v.id==self.segment.end),None)
+                        if i0 is not None:nodes[(self.segment.pattern,self.segment.path,i0)]=vlist[i0]
+                        if i1 is not None:nodes[(self.segment.pattern,self.segment.path,i1)]=vlist[i1]
+                    except (ValueError,KeyError):pass
+                else:
+                    whole_patterns.add(p.id)
+                    for path,vlist,_,_ in p.loops():
+                        for i,v in enumerate(vlist):
+                            nodes[(self._selected,path,i)]=v
+        return nodes,whole_patterns
+
+    def selection_center(self):
+        bounds=self.selection_bounds()
+        if bounds is None:return 0.0,0.0
+        return (bounds[0]+bounds[2])/2,(bounds[1]+bounds[3])/2
+
+    def selection_bounds(self):
+        pts=[]
+        doc=self.document
+        for pid in self.selected_patterns:
+            p=doc.find(pid)
+            if p:
+                for path,_,_,_ in p.loops():
+                    for edge in doc.edges(p.id,path):
+                        for _,pt in curves.table(doc.edge_curve(edge)):
+                            pts.append(pt)
+        for edge in self.selected_edges:
+            if edge.pattern not in self.selected_patterns:
+                try:
+                    for _,pt in curves.table(doc.edge_curve(edge)):
+                        pts.append(pt)
+                except (ValueError,KeyError):pass
+        for pid,path_id in self.selected_paths:
+            if pid not in self.selected_patterns:
+                p=doc.find(pid)
                 if p:
-                    update_auto_handles(p.path(path_id).vertices,path_id=='OUTER' or p.path(path_id).closed)
-        return self.commit(apply)
+                    try:
+                        for edge in doc.edges(pid,path_id):
+                            for _,pt in curves.table(doc.edge_curve(edge)):
+                                pts.append(pt)
+                    except (ValueError,KeyError):pass
+        for pid,path_id,idx in self.selected_points:
+            if pid not in self.selected_patterns and (pid,path_id) not in self.selected_paths:
+                p=doc.find(pid)
+                if p:
+                    try:
+                        v=p.path(path_id).vertices[idx]
+                        pts.append((v.x,v.y))
+                    except (ValueError,IndexError):pass
+        if not pts and self._selected:
+            p=doc.find(self._selected)
+            if p:
+                if self._corner is not None:
+                    try:
+                        v=p.path(self.path).vertices[self._corner]
+                        pts.append((v.x,v.y))
+                    except (ValueError,IndexError):pass
+                elif self.segment:
+                    try:
+                        for _,pt in curves.table(doc.edge_curve(self.segment)):
+                            pts.append(pt)
+                    except (ValueError,KeyError):pass
+                else:
+                    for path,_,_,_ in p.loops():
+                        for edge in doc.edges(p.id,path):
+                            for _,pt in curves.table(doc.edge_curve(edge)):
+                                pts.append(pt)
+        if not pts:return None
+        return min(p[0] for p in pts),min(p[1] for p in pts),max(p[0] for p in pts),max(p[1] for p in pts)
+
+    def get_pivot(self):
+        if self.placed_pivot is not None:return self.placed_pivot
+        return self.selection_center()
+
+    def set_pivot(self,x,y):
+        self.placed_pivot=(float(x),float(y))
+
+    def reset_pivot(self):
+        self.placed_pivot=None
+
+    def find_pivot_candidate(self,pointer_world,tolerance=0.02):
+        candidates=[]
+        sc=self.selection_center()
+        d_sc=math.hypot(sc[0]-pointer_world[0],sc[1]-pointer_world[1])
+        if d_sc<=tolerance:
+            candidates.append((3,round(d_sc,6),999999,sc,'Selection center'))
+        order=0
+        for p in self.document.patterns:
+            for path,nodes,_,_ in p.loops():
+                for v in nodes:
+                    d=math.hypot(v.x-pointer_world[0],v.y-pointer_world[1])
+                    if d<=tolerance:
+                        candidates.append((1,round(d,6),order,(v.x,v.y),f'Vertex ({v.x:.2f}, {v.y:.2f})'))
+                    order+=1
+                for edge in self.document.edges(p.id,path):
+                    ctrl=self.document.edge_curve(edge)
+                    mid=curves.at_length(ctrl,0.5)
+                    mid=(round(mid[0],7),round(mid[1],7))
+                    d=math.hypot(mid[0]-pointer_world[0],mid[1]-pointer_world[1])
+                    if d<=tolerance:
+                        candidates.append((2,round(d,6),order,mid,'Midpoint'))
+                    order+=1
+        if not candidates:
+            return pointer_world,'Free'
+        candidates.sort(key=lambda item:(item[1],item[0],item[2]))
+        best=candidates[0]
+        return best[3],best[4]
+
+    def preflight_transform(self,candidate_doc,whole_patterns,nodes):
+        try:
+            candidate_doc.validate()
+        except Exception as exc:
+            return dict(status='BLOCK',reason='Invalid panel geometry: '+str(exc))
+        from .linked_editing import synchronize
+        try:
+            synchronize(candidate_doc,self.document,self.selected)
+        except Exception as exc:
+            return dict(status='BLOCK',reason='Linked editing synchronization failed: '+str(exc))
+        canonicalize_auto_handles(candidate_doc)
+        source_doc=Document.loads(self.document.dumps())
+        canonicalize_auto_handles(source_doc)
+        for key,cand_v in nodes.items():
+            pid,path_id,idx=key
+            p=candidate_doc.find(pid)
+            if not p:
+                return dict(status='BLOCK',reason='Selected piece removed during synchronization.')
+            try:
+                v=p.path(path_id).vertices[idx]
+                if abs(v.x-cand_v.x)>1e-6 or abs(v.y-cand_v.y)>1e-6:
+                    return dict(status='BLOCK',reason='Linked editing conflict: synchronization overwrote explicitly selected geometry.')
+            except (ValueError,IndexError):
+                return dict(status='BLOCK',reason='Selected vertex missing during synchronization.')
+        old_seams={s.id:s for s in self.document.seams}
+        new_seams={s.id:s for s in candidate_doc.seams}
+        if len(new_seams)<len(old_seams):
+            return dict(status='BLOCK',reason='A seam would be pruned or invalidated.')
+        warn_details=[]
+        affected_seam_ids=[]
+        affected_patterns=set()
+        for sid,old_seam in old_seams.items():
+            new_seam=new_seams.get(sid)
+            if not new_seam:
+                return dict(status='BLOCK',reason='A seam would be pruned or invalidated.')
+            if old_seam.reverse!=new_seam.reverse or getattr(old_seam,'shrink',0)!=getattr(new_seam,'shrink',0):
+                return dict(status='BLOCK',reason='A seam configuration was modified.')
+            for side_idx in (0,1):
+                old_chain=old_seam.side(side_idx);new_chain=new_seam.side(side_idx)
+                if len(old_chain)!=len(new_chain):
+                    return dict(status='BLOCK',reason='A seam chain was modified or reordered.')
+                for e_old,e_new in zip(old_chain,new_chain):
+                    if (e_old.pattern!=e_new.pattern or e_old.path!=e_new.path or
+                        e_old.start!=e_new.start or e_old.end!=e_new.end or
+                        abs(e_old.t0-e_new.t0)>1e-6 or abs(e_old.t1-e_new.t1)>1e-6):
+                        return dict(status='BLOCK',reason='A seam reference or span was modified or reordered.')
+            try:
+                for side_idx in (0,1):
+                    for e in new_seam.side(side_idx):
+                        if candidate_doc.edge_length(e)<1e-5:
+                            return dict(status='BLOCK',reason='Seam span length is near zero.')
+                len0_before=sum(source_doc.edge_length(e) for e in old_seam.side(0))
+                len1_before=sum(source_doc.edge_length(e) for e in old_seam.side(1))
+                len0_after=sum(candidate_doc.edge_length(e) for e in new_seam.side(0))
+                len1_after=sum(candidate_doc.edge_length(e) for e in new_seam.side(1))
+            except Exception as exc:
+                return dict(status='BLOCK',reason='Seam geometry evaluation failed: '+str(exc))
+            tol0=max(0.0001,0.0001*len(old_seam.side(0)))
+            tol1=max(0.0001,0.0001*len(old_seam.side(1)))
+            r_min=(len0_before-tol0)/(len1_before+tol1)
+            r_max=(len0_before+tol0)/(len1_before-tol1)
+            r_after=len0_after/len1_after if len1_after>0 else 1.0
+            seam_changed=(abs(len0_after-len0_before)>tol0 or abs(len1_after-len1_before)>tol1)
+            ratio_changed=(r_after<r_min-1e-6 or r_after>r_max+1e-6)
+            chain_break_changed=False
+            for side_idx in (0,1):
+                old_side=old_seam.side(side_idx);new_side=new_seam.side(side_idx)
+                if len(old_side)>1:
+                    old_tot=len0_before if side_idx==0 else len1_before
+                    new_tot=len0_after if side_idx==0 else len1_after
+                    cum_old=cum_new=0.0
+                    for e_old,e_new in zip(old_side[:-1],new_side[:-1]):
+                        cum_old+=source_doc.edge_length(e_old)
+                        cum_new+=candidate_doc.edge_length(e_new)
+                        if abs(cum_new/new_tot-cum_old/old_tot)>(0.0001/old_tot):
+                            chain_break_changed=True;break
+            if (seam_changed and ratio_changed) or chain_break_changed:
+                diff_cm=abs(len0_after-len1_after)*100
+                max_len=max(len0_after,len1_after)
+                percent=(abs(len0_after-len1_after)/max_len*100) if max_len>0 else 0.0
+                affected_seam_ids.append(sid)
+                for e in old_seam.side(0)+old_seam.side(1):
+                    p=candidate_doc.find(e.pattern)
+                    if p:affected_patterns.add(p.name)
+                warn_details.append(dict(seam_id=sid,len0_before=len0_before,len1_before=len1_before,
+                                         len0_after=len0_after,len1_after=len1_after,diff_cm=diff_cm,
+                                         percent=percent))
+        if warn_details:
+            first_warn=warn_details[0]
+            can_include_sewn=(len(whole_patterns)>0 and len(whole_patterns)==len(self.selected_patterns) and not self.selected_points and not self.selected_edges and not self.selected_paths)
+            return dict(status='WARN',diff_cm=first_warn['diff_cm'],percent=first_warn['percent'],
+                        len0_after=first_warn['len0_after'],len1_after=first_warn['len1_after'],
+                        len0_before=first_warn['len0_before'],len1_before=first_warn['len1_before'],
+                        affected_count=len(affected_seam_ids),affected_pieces=list(affected_patterns),
+                        can_include_sewn=can_include_sewn,details=warn_details)
+        return dict(status='OK')
+
+    def commit_candidate(self,candidate_doc,coalesce=False):
+        before=self.document.dumps()
+        before_sel=self.get_selection_state()
+        for cand_p in candidate_doc.patterns:
+            p=self.document.find(cand_p.id)
+            if p:
+                for cand_path,cand_nodes,_,_ in cand_p.loops():
+                    try:
+                        q=p.path(cand_path)
+                        for v_orig,v_cand in zip(q.vertices,cand_nodes):
+                            v_orig.x,v_orig.y=v_cand.x,v_cand.y
+                            v_orig.incoming=v_cand.incoming
+                            v_orig.outgoing=v_cand.outgoing
+                            if hasattr(v_cand,'point_type'):v_orig.point_type=v_cand.point_type
+                    except (ValueError,KeyError):pass
+                p.features=list(cand_p.features)
+        for cand_a in candidate_doc.anchors:
+            a=next((anc for anc in self.document.anchors if anc.id==cand_a.id),None)
+            if a:a.x,a.y=cand_a.x,cand_a.y
+        self.document.seams=candidate_doc.seams
+        self.document.linked_pairs=candidate_doc.linked_pairs
+        self.document.prune_seams()
+        self.document.validate()
+        canonicalize_auto_handles(self.document)
+        if self.document.dumps()!=before:
+            if not coalesce:
+                self.undo_stack.append(before);self.undo_stack=self.undo_stack[-100:]
+                self._undo_selections.append(before_sel);self._undo_selections=self._undo_selections[-100:]
+            self.redo_stack.clear();self._redo_selections.clear()
+            self.remember_committed_selection()
+            return True
+        return False
+
+    def remember_committed_selection(self):
+        self._committed_selection=(self.document.dumps(),self.get_selection_state())
+
+    def build_transform_candidate(self,op_kind,param,pivot=None):
+        nodes,whole_patterns=self.resolve_selection()
+        if not nodes:return None,{'status':'BLOCK','reason':'No selection'}
+        pivot=pivot or self.get_pivot()
+        px,py=pivot
+        if op_kind=='SCALE' and (not isinstance(param,(int,float)) or not math.isfinite(param) or param<=0):
+            return None,{'status':'BLOCK','reason':'Scale factor must be positive and finite.'}
+        if op_kind=='MOVE':
+            dx,dy=param
+            def place(x,y):return x+dx,y+dy
+            def turn(vector):return vector
+        elif op_kind=='ROTATE':
+            angle_degrees=param
+            rad=math.radians(angle_degrees)
+            c=math.cos(rad);s=math.sin(rad)
+            if abs(angle_degrees-90)<1e-6 or abs(angle_degrees+270)<1e-6:c,s=0.0,1.0
+            elif abs(angle_degrees+90)<1e-6 or abs(angle_degrees-270)<1e-6:c,s=0.0,-1.0
+            elif abs(abs(angle_degrees)-180)<1e-6:c,s=-1.0,0.0
+            def place(x,y):
+                rx=x-px;ry=y-py
+                return px+c*rx-s*ry,py+s*rx+c*ry
+            def turn(vector):return (c*vector[0]-s*vector[1],s*vector[0]+c*vector[1])
+        else:
+            factor=param
+            def place(x,y):return px+factor*(x-px),py+factor*(y-py)
+            def turn(vector):return (factor*vector[0],factor*vector[1])
+        cand_doc=Document.loads(self.document.dumps())
+        canonicalize_auto_handles(cand_doc)
+        cand_nodes,_=self.resolve_selection(cand_doc)
+        selected_curves=selected_edge_curves(cand_doc,cand_nodes)
+        for v in cand_nodes.values():
+            v.x,v.y=place(v.x,v.y)
+            if v.incoming is not None:v.incoming=turn(v.incoming)
+            if v.outgoing is not None:v.outgoing=turn(v.outgoing)
+        for pid in whole_patterns:
+            for anchor in cand_doc.anchors:
+                if anchor.pattern==pid:anchor.x,anchor.y=place(anchor.x,anchor.y)
+        exact_handles={key:(v.incoming,v.outgoing) for key,v in cand_nodes.items()}
+        canonicalize_auto_handles(cand_doc)
+        deviation=0.0
+        convert_keys=set()
+        for key_a,key_b,source_control in selected_curves:
+            target=tuple(place(*point) for point in source_control)
+            produced=curves.controls(cand_nodes[key_a],cand_nodes[key_b])
+            edge_deviation=max(math.dist(curves.evaluate(target,i/100),curves.evaluate(produced,i/100)) for i in range(101))
+            if edge_deviation>CURVE_TOLERANCE:
+                deviation=max(deviation,edge_deviation)
+                convert_keys.update(key for key in (key_a,key_b) if getattr(cand_nodes[key],'point_type','CORNER')=='AUTO')
+        exact_doc=None
+        if convert_keys:
+            exact_doc=Document.loads(cand_doc.dumps())
+            exact_nodes,_=self.resolve_selection(exact_doc)
+            for key in convert_keys:
+                v=exact_nodes[key]
+                v.point_type='SMOOTH'
+                v.incoming,v.outgoing=exact_handles[key]
+            canonicalize_auto_handles(exact_doc)
+        pre=self.preflight_transform(cand_doc,whole_patterns,cand_nodes)
+        if deviation>CURVE_TOLERANCE and pre['status']!='BLOCK':
+            if pre['status']=='OK':pre=dict(status='WARN',can_include_sewn=False)
+            pre.update(curve_deviation_mm=deviation*1000,auto_point_count=len(convert_keys),exact_candidate=exact_doc)
+        return cand_doc,pre
+
+    def move_selection(self,dx,dy,confirm=False,coalesce=False):
+        if abs(dx)<1e-9 and abs(dy)<1e-9:return False
+        cand_doc,pre=self.build_transform_candidate('MOVE',(dx,dy))
+        if not cand_doc:return False
+        if pre['status']=='BLOCK':
+            raise ValueError(pre['reason'])
+        if pre['status']=='WARN' and not confirm:
+            return pre
+        before_pivot=self.placed_pivot
+        res=self.commit_candidate(cand_doc,coalesce=coalesce)
+        if res and before_pivot is not None:
+            self.placed_pivot=(round(before_pivot[0]+dx,7),round(before_pivot[1]+dy,7))
+            self.remember_committed_selection()
+        return res
 
     def flip_horizontal(self):
         pats=[self.document.find(pid) for pid in self.selected_patterns if self.document.find(pid)]
@@ -953,60 +1611,27 @@ class Session(ConstructionMixin):
                 if v.outgoing is not None:v.outgoing=(v.outgoing[0],-v.outgoing[1])
         return self.commit(op_pts)
 
-    def rotate(self,angle_degrees):
-        rad=math.radians(angle_degrees)
-        c=math.cos(rad);s=math.sin(rad)
-        if abs(angle_degrees-90)<1e-6 or abs(angle_degrees+270)<1e-6:c,s=0.0,1.0
-        elif abs(angle_degrees+90)<1e-6 or abs(angle_degrees-270)<1e-6:c,s=0.0,-1.0
-        elif abs(abs(angle_degrees)-180)<1e-6:c,s=-1.0,0.0
-        elif abs(angle_degrees)<1e-6:return False
-        pats=[self.document.find(pid) for pid in self.selected_patterns if self.document.find(pid)]
-        if not pats and not self.selected_points and self._selected and self._corner is None:
-            p=self.document.find(self._selected)
-            if p:pats=[p]
-        if pats:
-            xs=[v.x for p in pats for _,nodes,_,_ in p.loops() for v in nodes]
-            ys=[v.y for p in pats for _,nodes,_,_ in p.loops() for v in nodes]
-            cx=(min(xs)+max(xs))/2;cy=(min(ys)+max(ys))/2
-            def op():
-                for p in pats:
-                    for _,nodes,_,_ in p.loops():
-                        for v in nodes:
-                            dx,dy=v.x-cx,v.y-cy
-                            v.x=cx+c*dx-s*dy
-                            v.y=cy+s*dx+c*dy
-                            if v.incoming is not None:v.incoming=(c*v.incoming[0]-s*v.incoming[1],s*v.incoming[0]+c*v.incoming[1])
-                            if v.outgoing is not None:v.outgoing=(c*v.outgoing[0]-s*v.outgoing[1],s*v.outgoing[0]+c*v.outgoing[1])
-                    for anchor in self.document.anchors:
-                        if anchor.pattern==p.id:
-                            dx,dy=anchor.x-cx,anchor.y-cy
-                            anchor.x=cx+c*dx-s*dy
-                            anchor.y=cy+s*dx+c*dy
-            return self.commit(op)
-        pts=set(self.selected_points)
-        if not pts and self._selected and self._corner is not None:
-            pts.add((self._selected,self.path,self._corner))
-        if not pts:return False
-        nodes_to_rot=[]
-        for pid,path_id,idx in pts:
-            p=self.document.find(pid)
-            if p:
-                nds=p.path(path_id).vertices
-                if 0<=idx<len(nds):nodes_to_rot.append(nds[idx])
-        if not nodes_to_rot:return False
-        cx=(min(v.x for v in nodes_to_rot)+max(v.x for v in nodes_to_rot))/2
-        cy=(min(v.y for v in nodes_to_rot)+max(v.y for v in nodes_to_rot))/2
-        def op_pts():
-            for v in nodes_to_rot:
-                dx,dy=v.x-cx,v.y-cy
-                v.x=cx+c*dx-s*dy
-                v.y=cy+s*dx+c*dy
-                if v.incoming is not None:v.incoming=(c*v.incoming[0]-s*v.incoming[1],s*v.incoming[0]+c*v.incoming[1])
-                if v.outgoing is not None:v.outgoing=(c*v.outgoing[0]-s*v.outgoing[1],s*v.outgoing[0]+c*v.outgoing[1])
-        return self.commit(op_pts)
+    def rotate(self,angle_degrees,pivot=None,confirm=False):
+        if abs(angle_degrees)<1e-9:return False
+        cand_doc,pre=self.build_transform_candidate('ROTATE',angle_degrees,pivot=pivot)
+        if not cand_doc:return False
+        if pre['status']=='BLOCK':
+            raise ValueError(pre['reason'])
+        if pre['status']=='WARN' and not confirm:
+            return pre
+        return self.commit_candidate(cand_doc)
 
-    def rotate_90(self,clockwise=True):
-        return self.rotate(-90 if clockwise else 90)
+    def scale(self,factor,pivot=None,confirm=False):
+        if not isinstance(factor,(int,float)) or not math.isfinite(factor) or factor<=0:
+            raise ValueError('Scale factor must be positive and finite.')
+        if abs(factor-1.0)<1e-9:return False
+        cand_doc,pre=self.build_transform_candidate('SCALE',factor,pivot=pivot)
+        if not cand_doc:return False
+        if pre['status']=='BLOCK':
+            raise ValueError(pre['reason'])
+        if pre['status']=='WARN' and not confirm:
+            return pre
+        return self.commit_candidate(cand_doc)
 
     def duplicate(self):
         patterns_to_dup=[self.document.find(pid) for pid in self.selected_patterns if self.document.find(pid)]
@@ -1225,7 +1850,11 @@ class Session(ConstructionMixin):
         source,target=(self.redo_stack,self.undo_stack) if redo else (self.undo_stack,self.redo_stack)
         sel_source,sel_target=(self._redo_selections,self._undo_selections) if redo else (self._undo_selections,self._redo_selections)
         if not source:return False
-        target.append(self.document.dumps());sel_target.append(self.get_selection_state())
+        committed=self._committed_selection
+        current=self.document.dumps()
+        target.append(current)
+        sel_target.append(committed[1] if not redo and committed and committed[0]==current else self.get_selection_state())
+        self._committed_selection=None
         self.document=Document.loads(source.pop())
         if sel_source:
             self.set_selection_state(sel_source.pop())

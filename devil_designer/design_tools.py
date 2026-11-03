@@ -2,6 +2,8 @@ import copy
 import math
 import bpy
 from . import curves
+from .canvas import Rect
+from .ui_system import TRANSFORM_FRAME_PAD,TRANSFORM_KNOB_OFFSET,TRANSFORM_HIT_RADIUS,TRANSFORM_PIVOT_HIT_RADIUS
 from .core import EdgeRef, update_auto_handles
 from .construction import chain_range,path_range,sew_reverse
 from .presets import PRESETS
@@ -89,43 +91,25 @@ class DesignTools:
         self.session.segment = None
         self.session.point_selection = []
 
-    def design_info(self,key):
-        doc=self.session.document;p=doc.find(self.session.selected)
-        if key=='PATTERN_INFO':
-            if not p:return 'Select a pattern / point.','C curves, Q splits, Shift-click merges.'
-            detail=p.path(self.session.path).name if self.session.path!='OUTER' else 'Outer boundary'
-            if self.session.segment:
-                try:detail=f'Selected segment: {doc.edge_length(self.session.segment)*100:.3f} cm'
-                except ValueError:pass
-            return p.name,detail
-        if key=='CHAIN_INFO':return f'Chain A: {len(self.chain_a)} / B: {len(self.chain_b)} segments',('Free mode: start/end A, start/end B.' if self._scene.dd_free_sewing else 'Pair mode: pick an edge, then its partner.')
-        if key=='PRESET_INFO':return (p.preset.title() if p else 'Select a pattern for a preset.'),'Stretch/bend per piece; mass shared.'
-        if key=='LIBRARY_INFO':
-            if not self.library_items:return 'No saved garments.','Save stores editable source and UVs.'
-            index=min(self._scene.dd_library_selected,len(self.library_items)-1)
-            return f'{index+1} / {len(self.library_items)}',self.library_items[index].name.replace('.garment.json','')
-        return '',''
-
     def refresh_library(self):
         from . import library
         self.library_error=''
         try:self.library_items=library.entries(self._scene)
         except OSError as exc:
             self.library_items=[];self.library_error=str(exc);self.message='Library unavailable: '+str(exc)
-        if getattr(self,'minimal_ui',False):
-            previous=self.library_previews
-            updated={}
-            for path in self.library_items:
-                try:
-                    stat=path.stat()
-                    signature=(stat.st_mtime_ns,stat.st_size)
-                except OSError:
-                    signature=None
-                cached=previous.get(path)
-                if not cached or cached['signature']!=signature:
-                    cached=dict(signature=signature,**library.preview(path))
-                updated[path]=cached
-            self.library_previews=updated
+        previous=self.library_previews
+        updated={}
+        for path in self.library_items:
+            try:
+                stat=path.stat()
+                signature=(stat.st_mtime_ns,stat.st_size)
+            except OSError:
+                signature=None
+            cached=previous.get(path)
+            if not cached or cached['signature']!=signature:
+                cached=dict(signature=signature,**library.preview(path))
+            updated[path]=cached
+        self.library_previews=updated
         self._scene.dd_library_selected=min(self._scene.dd_library_selected,max(0,len(self.library_items)-1))
 
     def design_action(self,action):
@@ -218,14 +202,71 @@ class DesignTools:
                 if not p and not self.session.selected_patterns and not self.session.selected_points and self.session.corner is None:raise ValueError('Select a piece or points to flip.')
                 self.session.flip_vertical()
                 self.message = 'Pattern flipped vertically.'
-            elif action in {'ROTATE_CW','ROTATE_90'}:
-                if not p and not self.session.selected_patterns and not self.session.selected_points and self.session.corner is None:raise ValueError('Select a piece or points to rotate.')
-                self.session.rotate_90(clockwise=True)
-                self.message = 'Pattern rotated 90 degrees clockwise.'
-            elif action == 'ROTATE_CCW':
-                if not p and not self.session.selected_patterns and not self.session.selected_points and self.session.corner is None:raise ValueError('Select a piece or points to rotate.')
-                self.session.rotate_90(clockwise=False)
-                self.message = 'Pattern rotated 90 degrees counter-clockwise.'
+            elif action.startswith('SELECT_TARGET_'):
+                tgt = action.removeprefix('SELECT_TARGET_')
+                self.session.acquisition_target = tgt
+                self.message = f"Selection target: {tgt.title()}."
+            elif action == 'SELECT_CONNECTED_PATH':
+                self.session.select_connected('PATH')
+                self.sync_selection()
+                self.message = 'Connected path selected.'
+            elif action == 'SELECT_CONNECTED_SEWN':
+                self.session.select_connected('SEWN')
+                self.sync_selection()
+                self.message = 'Sewn pieces selected.'
+            elif action == 'SELECT_INVERT':
+                self.session.invert_selection()
+                self.sync_selection()
+                self.message = f"{self.session.acquisition_target.title()} selection inverted."
+            elif action == 'SELECT_ALL':
+                self.session.select_all()
+                self.sync_selection()
+                self.message = 'All items selected.'
+            elif action == 'SELECT_CLEAR':
+                self.session.clear_selection()
+                self.sync_selection()
+                self.message = 'Selection cleared.'
+            elif action == 'SELECT_BOX':
+                self.choose_tool('SELECT')
+                c = self.canvas_layout.canvas
+                self.gesture = dict(mode='BOX_SELECT', start=self.pointer,
+                                    world_start=self.view.world(self.pointer, c),
+                                    shift=False, alt=False)
+                self.message = 'Drag to box select. Left-to-right encloses, right-to-left crosses.'
+            elif action == 'SELECT_LASSO':
+                self.choose_tool('SELECT')
+                c = self.canvas_layout.canvas
+                w = self.view.world(self.pointer, c)
+                self.gesture = dict(mode='LASSO_SELECT', points=[w], screen_points=[self.pointer],
+                                    shift=False, alt=False, rule='ENCLOSE')
+                self.message = 'Drag lasso to select. Escape cancels.'
+            elif action == 'TRANSFORM_MOVE':
+                self.start_transform('MOVE')
+            elif action == 'TRANSFORM_ROTATE':
+                self.start_transform('ROTATE')
+            elif action == 'TRANSFORM_SCALE':
+                self.start_transform('SCALE')
+            elif action == 'TRANSFORM_SET_PIVOT':
+                self.start_set_pivot()
+            elif action == 'TRANSFORM_RESET_PIVOT':
+                self.session.reset_pivot()
+                self.message = 'Pivot reset to selection center.'
+            elif action == 'BEND_EDGE':
+                self.start_bend_edge()
+            elif action == 'APPLY_MISMATCH':
+                self.commit_preflighted_transform()
+            elif action == 'CANCEL_TRANSFORM':
+                self.cancel_transform()
+            elif action == 'INCLUDE_SEWN':
+                pending = getattr(self, 'pending_transform', None)
+                if not pending:return
+                self.pending_transform = None
+                self.card_kind = None
+                self.session.select_connected(mode='SEWN')
+                if self.stage_transform(pending.get('op', 'MOVE'), pending.get('param'), pending.get('pivot')):return
+            elif action == 'CONVERT_AUTO':
+                self.convert_pending_auto_points()
+                return
             elif action.startswith('SET_PRESET_'):
                 p_val = action.replace('SET_PRESET_', '')
                 if not p:raise ValueError('Select a pattern to change fabric.')
@@ -285,7 +326,7 @@ class DesignTools:
                 self.refresh_library()
                 if action=='LIBRARY_SAVE':
                     library.save(bpy.context,scene.dd_library_name,getattr(self,'library_tags','').split(','))
-                    if getattr(self,'minimal_ui',False):self.library_previews={}
+                    self.library_previews={}
                     self.refresh_library()
                 elif action in {'LIBRARY_PREV','LIBRARY_NEXT'} and self.library_items:
                     scene.dd_library_selected=(scene.dd_library_selected+(1 if action=='LIBRARY_NEXT' else -1))%len(self.library_items)
@@ -299,10 +340,9 @@ class DesignTools:
                     before=scene.dd_document
                     scene['dd_backup_document']=before
                     loaded=library.load(bpy.context,scene.dd_library_selected)
-                    if getattr(self,'minimal_ui',False):
-                        metadata=self.library_previews[self.library_items[scene.dd_library_selected]]
-                        self.library_tags=', '.join(metadata['tags'])
-                        self.library_load_path=None
+                    metadata=self.library_previews[self.library_items[scene.dd_library_selected]]
+                    self.library_tags=', '.join(metadata['tags'])
+                    self.library_load_path=None
                     self.clear_interaction_references()
                     self.session.undo_stack.append(before);self.session.redo_stack.clear()
                     self.session.document=loaded;self.session.selected=loaded.patterns[0].id if loaded.patterns else None
@@ -310,7 +350,7 @@ class DesignTools:
                     self.session.point_selection=[]
                     self._stored=scene.dd_document;self.update_reference(bpy.context,align=True);self.fit()
             else:return
-            self.persist();self.sync_selection();self.refresh_controls()
+            self.persist();self.sync_selection()
             self.message=self.sewing_message(self.session.document.seams[-1]) if action=='CHAIN_SEW' else 'Done: '+action.replace('_',' ').lower()+'.'
             if scene.get('dd_arrangement_message'):self.message+=' '+scene['dd_arrangement_message']
             if self.session.last_repairs:self.message+=f' {self.session.last_repairs} affected sewing pair(s) removed; re-pair edited edges.'
@@ -399,10 +439,6 @@ class DesignTools:
                 self.perform_action('FLIP_H');return {'RUNNING_MODAL'}
             if event.type == 'V' and event.shift and not event.ctrl and not event.alt:
                 self.perform_action('FLIP_V');return {'RUNNING_MODAL'}
-            if event.type == 'R' and event.shift and not event.ctrl and not event.alt:
-                self.perform_action('ROTATE_CW');return {'RUNNING_MODAL'}
-            if event.type in {'LEFT_BRACKET','RIGHT_BRACKET'}:
-                self.perform_action('ROTATE_CW' if event.type=='RIGHT_BRACKET' else 'ROTATE_CCW');return {'RUNNING_MODAL'}
             if event.type in {'E','I','K','T','D','G'} and not event.ctrl and not event.alt:
                 if event.type == 'E':
                     self.draw_shape = 'ELLIPSE'
@@ -413,7 +449,7 @@ class DesignTools:
                 self.choose_tool({'E':'ELLIPSE','I':'INTERNAL','K':'PIN','T':'TACK','D':'DART','G':'PLACE'}[event.type]);return {'RUNNING_MODAL'}
             if event.type in {'C','Q','M','U'} and not event.ctrl:
                 self.perform_action({'C':'CURVE','Q':'SPLIT','M':'MERGE','U':'MIRROR_SEW' if event.shift else 'UNFOLD'}[event.type]);return {'RUNNING_MODAL'}
-            if event.type=='L':self._scene.dd_lengths_visible=not self._scene.dd_lengths_visible;return {'RUNNING_MODAL'}
+            if event.type=='L' and not event.ctrl:self._scene.dd_lengths_visible=not self._scene.dd_lengths_visible;return {'RUNNING_MODAL'}
         return None
 
     def design_canvas_click(self,event):
@@ -535,7 +571,145 @@ class DesignTools:
                 except ValueError:
                     return pattern
                 return result
+        if self.gesture and self.gesture.get('candidate'):
+            cand = self.gesture['candidate'].find(pattern.id)
+            if cand:return cand
         if pattern.id!=self.session.selected:return pattern
         if not self.preview:return pattern
         result=copy.deepcopy(pattern)
         return result
+
+    def start_transform(self,kind):
+        if not self.session.has_selection():
+            self.message='Select geometry to transform.'
+            return
+        c=self.canvas_layout.canvas
+        w=self.view.world(self.pointer,c)
+        self.gesture=dict(mode='TRANSFORM',kind=kind,start=w,pointer_start=self.pointer,
+                          numeric_text='',axis_lock=None,preflight=None,candidate=None)
+        self.message=f"Transform {kind.title()}: drag cursor or enter value. Enter commits, Esc cancels."
+
+    def transform_frame(self):
+        if self.tool!='SELECT' or self.gesture or getattr(self,'pending_transform',None) or not self.session.has_selection():return None
+        bounds=self.session.selection_bounds()
+        if bounds is None:return None
+        c=self.canvas_layout.canvas;scale=self.canvas_layout.scale
+        x0,y0=self.view.screen((bounds[0],bounds[1]),c);x1,y1=self.view.screen((bounds[2],bounds[3]),c)
+        if max(x1-x0,y1-y0)<6*scale:return None
+        pad=TRANSFORM_FRAME_PAD*scale
+        rect=Rect(x0-pad,y0-pad,x1-x0+2*pad,y1-y0+2*pad)
+        top=(rect.x+rect.w/2,rect.y+rect.h)
+        return dict(rect=rect,corners=[(rect.x,rect.y),(rect.x+rect.w,rect.y),(rect.x+rect.w,rect.y+rect.h),(rect.x,rect.y+rect.h)],
+                    stem=top,knob=(top[0],top[1]+TRANSFORM_KNOB_OFFSET*scale),pivot=self.view.screen(self.session.get_pivot(),c))
+
+    def transform_frame_hit(self,frame=None):
+        frame=frame or self.transform_frame()
+        if frame is None:return None
+        scale=self.canvas_layout.scale
+        if math.dist(self.pointer,frame['pivot'])<=TRANSFORM_PIVOT_HIT_RADIUS*scale:return 'PIVOT'
+        if math.dist(self.pointer,frame['knob'])<=TRANSFORM_HIT_RADIUS*scale:return 'ROTATE'
+        if any(math.dist(self.pointer,corner)<=TRANSFORM_HIT_RADIUS*scale for corner in frame['corners']):return 'SCALE'
+        return None
+
+    def start_frame_gesture(self,handle):
+        if handle=='PIVOT':
+            self.start_set_pivot()
+            self.message='Drag the pivot. It snaps to corners, midpoints and the selection center.'
+            return
+        self.start_transform(handle)
+        self.gesture['handle']=True
+        self.message=('Rotating around the pivot. Shift snaps to 15 degrees; type a number for an exact angle.' if handle=='ROTATE'
+                      else 'Scaling around the pivot. Shift snaps to 10 percent; type a number for an exact factor.')
+
+    def start_set_pivot(self):
+        if not self.session.has_selection():
+            self.message='Select geometry before placing pivot.'
+            return
+        self.gesture=dict(mode='SET_PIVOT',start=self.pointer,chosen=self.session.get_pivot(),label='Default')
+        self.message='Click to place pivot. Snaps to vertices, midpoints, or selection center.'
+
+    def start_bend_edge(self):
+        if not self.session.segment:
+            self.message='Select an edge to bend.'
+            return
+        edge=self.session.segment
+        a,b=self.session.document.edge_vertices(edge)
+        ctrl=self.session.document.edge_curve(edge)
+        click_w=curves.evaluate(ctrl,0.5)
+        t_frac,_=curves.closest_fraction(ctrl,click_w)
+        t0=max(0.15,min(0.85,curves.parameter(ctrl,t_frac)))
+        p_orig=curves.evaluate(ctrl,t0)
+        self.gesture=dict(
+            mode='EDGE_BEND',edge=edge,start=click_w,t0=t0,p_orig=p_orig,
+            orig_c1=ctrl[1],orig_c2=ctrl[2],anchor_a=(a.x,a.y),anchor_b=(b.x,b.y),
+            moved=False,new_outgoing=a.outgoing,new_incoming=b.incoming
+        )
+        self.message='Drag to bend edge. Escape cancels.'
+
+    def stage_transform(self,kind,param,pivot=None):
+        pivot=pivot or self.session.get_pivot()
+        cand,pre=self.session.build_transform_candidate(kind,param,pivot=pivot)
+        if cand is None or pre['status']=='BLOCK':raise ValueError(pre.get('reason','This transform is blocked.'))
+        if pre['status']=='WARN':
+            self.pending_transform=dict(candidate=cand,report=pre,op=kind,param=param,pivot=pivot,
+                                        source=self.session.document.dumps(),selection=self.session.get_selection_state())
+            self.card_kind='SEAM_WARNING'
+            self.message=self.transform_warning_message(pre)
+            return True
+        self.apply_transform_candidate(cand,kind,param)
+        return False
+
+    def transform_warning_message(self,report):
+        parts=[]
+        if report.get('details'):parts.append(f"seam mismatch {report.get('diff_cm',0.0):.2f} cm")
+        if report.get('curve_deviation_mm') is not None:parts.append(f"selected curve changes {report['curve_deviation_mm']:.3f} mm")
+        return 'Review before applying: '+', '.join(parts)+'.'
+
+    def convert_pending_auto_points(self):
+        pending=getattr(self,'pending_transform',None)
+        exact=pending['report'].get('exact_candidate') if pending else None
+        if exact is None:raise ValueError('There are no AUTO points to convert.')
+        if pending['source']!=self.session.document.dumps() or pending['selection']!=self.session.get_selection_state():
+            self.cancel_transform()
+            raise ValueError('Transform cancelled because its source selection changed.')
+        nodes,whole=self.session.resolve_selection(exact)
+        pre=self.session.preflight_transform(exact,whole,nodes)
+        if pre['status']=='BLOCK':
+            self.cancel_transform()
+            raise ValueError(pre.get('reason','This transform is blocked.'))
+        count=pending['report'].get('auto_point_count',0)
+        if pre['status']=='WARN':
+            self.pending_transform=dict(pending,candidate=exact,report=pre)
+            self.card_kind='SEAM_WARNING'
+            self.message=f'{count} AUTO point(s) will become Smooth. '+self.transform_warning_message(pre)
+            return
+        self.pending_transform=dict(pending,candidate=exact)
+        self.commit_preflighted_transform()
+        self.message=f'Transform applied; {count} AUTO point(s) converted to Smooth to keep the selected curve exact.'
+
+    def apply_transform_candidate(self,cand,op,param):
+        pivot=self.session.placed_pivot
+        changed=self.session.commit_candidate(cand)
+        if changed and op=='MOVE' and pivot is not None and param:
+            self.session.placed_pivot=(round(pivot[0]+param[0],7),round(pivot[1]+param[1],7))
+            self.session.remember_committed_selection()
+        return changed
+
+    def commit_preflighted_transform(self):
+        pre=getattr(self,'pending_transform',None)
+        if pre and pre.get('candidate'):
+            if pre['source']!=self.session.document.dumps() or pre['selection']!=self.session.get_selection_state():
+                self.cancel_transform()
+                self.message='Transform cancelled because its source selection changed.'
+                return
+            self.run_edit(lambda: self.apply_transform_candidate(pre['candidate'],pre.get('op'),pre.get('param')), 'Transform committed with accepted mismatch.')
+            self.pending_transform=None
+            self.card_kind=None
+
+    def cancel_transform(self):
+        self.pending_transform=None
+        self.card_kind=None
+        self.gesture=None
+        self.preview=None
+        self.sync_selection()
+        self.message='Transform cancelled.'

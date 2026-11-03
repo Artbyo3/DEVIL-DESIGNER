@@ -7,7 +7,7 @@ from .canvas import Layout, View, Rect
 from .interaction import OverlayControls
 from .minimal import MinimalCards, minimal_layout
 from .design_tools import DesignTools
-from .silhouette import BodyReference, torso_alignment, VIEWS
+from .silhouette import BodyReference, torso_alignment
 from . import history,layering
 from .fit_display import FitOverlay
 
@@ -76,7 +76,6 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         self.seam_hover = None
         self.viewport_sewing = ViewportSewing(self)
         self.canvas_layout = self.make_layout()
-        self.refresh_controls()
         self.update_reference(context)
         self.fit()
         from .draw import Renderer
@@ -96,15 +95,7 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         if self.draft or self.gesture:
             self.message = "Finish or cancel the current draft before changing stages."
             return False
-        stage_to_tab = {
-            'DRAFT': 'DESIGN',
-            'SEW': 'SEW',
-            'ARRANGE': 'AVATAR',
-            'SIMULATE': 'CLOTH',
-            'LIBRARY': 'LIBRARY'
-        }
         self.stage = stage
-        self.inspector_tab = stage_to_tab.get(stage, 'DESIGN')
         if stage == 'DRAFT':
             if self.tool not in {'SELECT', 'POLYGON', 'RECTANGLE', 'ELLIPSE', 'INTERNAL', 'DART'}:
                 self.choose_tool('SELECT')
@@ -119,7 +110,6 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
             self.choose_tool('SELECT')
             self.refresh_library()
         self.canvas_layout = self.make_layout()
-        self.refresh_controls()
         self.message = {
             'DRAFT': "Drafting workspace. Reshape, add points, or draw pieces.",
             'SEW': "Sewing workspace. Pair edges to create seams before arranging.",
@@ -152,33 +142,6 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                 self.workflow_action('SIMULATE')
         elif self.stage == 'LIBRARY':
             self.design_action('LIBRARY_SAVE')
-
-    def workflow_guidance(self):
-        if self.draft or self.gesture:
-            return 'Finish or cancel your draft before continuing.', 'Finish draft', False
-        if not self.session.document.patterns:
-            return 'Start with a rectangle or use a template on the canvas.', 'Draw rectangle', True
-        if self.stage == 'SIMULATE' and self._scene.dd_avatar is None:
-            return 'Choose an avatar body in Arrange before starting the drape.', 'Choose body first', False
-        return {
-            'DRAFT': ('1 / 4  Draw and refine pieces, then pair their edges.', 'Next: Sew', True),
-            'SEW': ('2 / 4  Pair edges. Unsewn pieces can continue too.', 'Build & arrange', True),
-            'ARRANGE': ('3 / 4  Choose a body; position panels in the 3D viewport.', 'Next: Simulate', True),
-            'SIMULATE': ('4 / 4  Simulate, stop at the desired frame, then Keep mesh.',
-                         'Pause drape' if bpy.context.screen.is_animation_playing else 'Start drape', True),
-            'LIBRARY': ('Save this editable garment to your library.', 'Save garment', True),
-        }[self.stage]
-
-    def workspace_hint(self):
-        if self.confirm_action:
-            return self.confirm_message
-        if self.draft:
-            return 'Drawing in progress. Finish to keep it, or cancel. Your other pieces stay editable.'
-        if self.pending_place or self.pending_tack:
-            return 'Pick a target in the 3D viewport. Escape cancels.'
-        if self.tool == 'SEW':
-            return f'Sew directly: pick an edge and its partner. {len(self.session.document.seams)} sewing pairs.'
-        return 'Draw panels. Sew edges. Simulate. Right-click for local controls.'
 
     def reveal_3d(self):
         self.full = False
@@ -214,18 +177,15 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                 if region.y <= r.y < region.y + region.height / 2:
                     bottom = max(bottom, r.y + r.height - region.y)
         system_scale = getattr(bpy.context.preferences.system, 'ui_scale', 0.0)
-        if self.minimal_ui and system_scale <= 0.0:
+        if system_scale <= 0.0:
             system_scale = getattr(bpy.context.preferences.view, 'ui_scale', 1.0)
         scale = max(.5, system_scale)
         position = tuple(v * scale for v in self.window_rect) if self.window_rect else None
         stage = getattr(self, 'stage', 'DRAFT')
         layout = Layout(region.width, region.height, scale, self.full, max(0, left), max(0, right), top, bottom,
-                      position=position, settings=self.settings_open, stage=stage,
-                      pending=bool(self.draft), confirmation=bool(self.confirm_action),
-                      playing=bpy.context.screen.is_animation_playing, advanced=self.advanced_tools)
-        if self.minimal_ui:
-            minimal_layout(layout, bool(self.draft), bool(self.confirm_action), bpy.context.screen.is_animation_playing,
-                           kept=bool(layering.kept_garments(self._scene)))
+                        position=position, stage=stage)
+        minimal_layout(layout, bool(self.draft), bool(self.confirm_action), bpy.context.screen.is_animation_playing,
+                       kept=bool(layering.kept_garments(self._scene)))
         return layout
 
     def update_reference(self, context, force=False, align=False):
@@ -243,16 +203,6 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         pattern = selected or (patterns[0] if patterns else None)
         return pattern.points if pattern else []
 
-    def align_reference(self):
-        points = self.reference_pattern_points()
-        if not self.reference.bounds:
-            self.message = 'Choose an avatar body before aligning its silhouette.'
-            return
-        x, y = torso_alignment(self.reference.bounds, points)
-        self._scene.dd_reference_x, self._scene.dd_reference_y = x, y
-        self._scene.dd_reference_placed = True
-        self.message = 'Body reference aligned to the pattern torso area.'
-
     def reference_corners(self):
         if not self._scene.dd_reference_visible:
             return []
@@ -267,7 +217,7 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         layout = self.canvas_layout
         canvas = layout.canvas
         fit_rect = canvas
-        if self.minimal_ui and points:
+        if points:
             left = max(canvas.x, layout.rail.x + layout.rail.w + 16 * layout.scale)
             right = canvas.x + canvas.w - 16 * layout.scale
             if right > left:
@@ -275,24 +225,6 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         self.view.fit(points, fit_rect)
         self.view.cx += (canvas.x + canvas.w / 2 - fit_rect.x - fit_rect.w / 2) / self.view.zoom
         self.view.cy += (canvas.y + canvas.h / 2 - fit_rect.y - fit_rect.h / 2) / self.view.zoom
-
-    def reference_action(self, action):
-        if action == 'REFERENCE_VIEW':
-            current = VIEWS.index(self._scene.dd_reference_view)
-            self._scene.dd_reference_view = VIEWS[(current + 1) % len(VIEWS)]
-            self.update_reference(bpy.context)
-        elif action == 'REFERENCE_ALIGN':
-            self.align_reference()
-        elif action == 'REFERENCE_FRAME':
-            if self.reference.bounds:
-                self._scene.dd_reference_visible = True
-                self.view.fit(self.reference_corners(), self.canvas_layout.canvas)
-                self.message = 'Framed the body at its real-world scale.'
-            else:
-                self.message = 'Choose an avatar body to display its silhouette.'
-        elif action == 'REFERENCE_REFRESH':
-            self.update_reference(bpy.context, force=True)
-            self.message = self.reference.error or 'Body reference refreshed from the current evaluated mesh.'
 
     def choose_body(self, body, context):
         self._scene.dd_avatar = body
@@ -320,7 +252,6 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
             self.session.document.uv_layout=Document.loads(self._scene.dd_document).uv_layout
             self._stored=self._scene.dd_document
             self._scene.dd_history=history.store(self.session)
-        self.refresh_controls()
 
     def reconcile_generated_document(self):
         if self._scene.dd_document != self._stored:
@@ -405,13 +336,6 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                         'KNIFE': 'Click cut points. Enter or double-click finishes; Esc cancels. Shift locks the segment. Internal options: Cut or Cut & Sew.',
                         'PLACE': 'Click to place the selected garment panel in 3D.',
                         'SEW': "Click an edge, then its partner. Select a seam: B reverses it, X removes it."}.get(name, "Ready.")
-        section = 'SEW' if name == 'SEW' else 'AVATAR' if name in {'PLACE', 'PIN', 'TACK'} else 'DESIGN'
-        self.inspector_tab = section
-        self.sidebar_sections = [section]
-        self.inspector_scroll = 0
-        self.search_query = ''
-        self.search_active = False
-        self.refresh_controls()
         if name == 'PLACE' and self.session.selected:
             self.design_action('PLACE')
             self.reveal_3d()
@@ -466,14 +390,9 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                 body = candidates[0] if len(candidates) == 1 else None
             if body is None:
                 self.pending_simulation = True
-                if self.minimal_ui:
-                    self.show_card('BODY')
-                    self.message = 'Choose the body. Simulation will start automatically.'
-                    return False
-                self.open_context('AVATAR', select=False)
-                self.body_open = True
-                self.refresh_controls()
-                self.message = 'Choose the body once. Simulation will start automatically.'
+                self.show_card('BODY')
+                self.message = 'Choose the body. Simulation will start automatically.'
+                return False
                 return False
             self.choose_body(body, context)
         if len(self.session.document.patterns) == 2 and all(pattern.placement_mode=='LEGACY' for pattern in self.session.document.patterns) and not garment.generated(self._scene, 'panel'):
@@ -515,7 +434,6 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                     self.update_reference(bpy.context, align=True)
                     self.fit()
                 if button == 'SIMULATE':
-                    self.settings_open = False
                     self.choose_tool('SELECT')
                     self.reveal_3d()
                 self.message = {'DEMO': 'Sewing demo ready. Simulate to drape the bodice around the torso.',
@@ -563,7 +481,6 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
             return
         try:
             self.canvas_layout = self.make_layout()
-            self.refresh_controls()
             self.renderer.draw(self)
             if self.tool != 'SHAPE':
                 self.fit_overlay.legend(self.renderer)
@@ -599,10 +516,43 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
             self.confirm_action = None
             self.confirm_message = ''
         self.canvas_layout = self.make_layout()
-        self.refresh_controls()
         self.pointer = (event.mouse_x - self._region.x, event.mouse_y - self._region.y)
         panel = self.canvas_layout.panel.contains(*self.pointer)
         canvas = self.canvas_layout.canvas.contains(*self.pointer)
+        arrow_keys = {'UP_ARROW', 'DOWN_ARROW', 'LEFT_ARROW', 'RIGHT_ARROW'}
+        burst = getattr(self, '_nudge_burst', None)
+        if burst and (event.type == 'WINDOW_DEACTIVATE' or not canvas or self.numeric or self.library_edit
+                      or self.gesture or self.card_kind or burst['session'] is not self.session
+                      or burst['document'] != self.session.document.dumps()
+                      or burst['selection'] != self.session.get_selection_state()
+                      or (event.value == 'PRESS' and
+                          (event.type, event.alt, event.shift, event.ctrl) != burst['key'])
+                      or (event.value == 'RELEASE' and event.type == burst['key'][0])):
+            self._nudge_burst = None
+        pending = getattr(self, 'pending_transform', None)
+        if pending and (pending['source'] != self.session.document.dumps()
+                        or pending['selection'] != self.session.get_selection_state()
+                        or self.card_kind != 'SEAM_WARNING'):
+            self.cancel_transform()
+            pending = None
+        if event.type == 'WINDOW_DEACTIVATE':
+            if pending or (self.gesture and self.gesture.get('mode') in
+                           {'MOVE', 'BOX_SELECT', 'LASSO_SELECT', 'SET_PIVOT', 'TRANSFORM'}):
+                self.cancel_transform()
+            return {'PASS_THROUGH'}
+        if pending and event.value == 'PRESS':
+            if event.type in {'ESC', 'RIGHTMOUSE'}:
+                self.cancel_transform()
+                return {'RUNNING_MODAL'}
+            if event.type == 'LEFTMOUSE':
+                card = self.minimal_card()
+                if card is None or not card[0].contains(*self.pointer):
+                    self.cancel_transform()
+                    return {'RUNNING_MODAL'}
+            elif event.ctrl and event.type in {'Z', 'Y'}:
+                self.cancel_transform()
+            elif not (event.ctrl and event.type == 'S'):
+                return {'RUNNING_MODAL'}
         result = self.shaping_event(context, event, panel)
         if result is not None:
             return result
@@ -639,7 +589,7 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                 return {'RUNNING_MODAL'}
         press = event.value == 'PRESS'
         if event.type == 'TIMER':
-            if self.minimal_ui and self.card_kind and self.card_kind.startswith('LIBRARY'):
+            if self.card_kind and self.card_kind.startswith('LIBRARY'):
                 self.refresh_library()
                 self._area.tag_redraw()
             self._timer_ticks = getattr(self, '_timer_ticks', 0) + 1
@@ -674,7 +624,7 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                     self.message = 'Now click the other end of the measured length.'
                 return {'RUNNING_MODAL'}
             return {'PASS_THROUGH'} if not panel else {'RUNNING_MODAL'}
-        if self.minimal_ui and press and event.type in {'ESC', 'RIGHTMOUSE'} and (self.pending_place or self.pending_tack):
+        if press and event.type in {'ESC', 'RIGHTMOUSE'} and (self.pending_place or self.pending_tack):
             return self.design_pending_event(context, event, panel)
         if self.confirm_action:
             if press and event.type == 'ESC':
@@ -692,22 +642,9 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
             if press and event.ctrl and event.type == 'S':
                 return {'PASS_THROUGH'}
             return {'RUNNING_MODAL'}
-        if self.minimal_ui:
-            result = self.minimal_event(context, event)
-            if result is not None:
-                return result
-        if not self.minimal_ui and (self.context_anchor is not None or self.setting_drag):
-            result = self.controls_event(context, event)
-            if result is not None:
-                return result
-            result = self.search_event(event)
-            if result is not None:
-                return result
-            return {'RUNNING_MODAL'}
-        if not self.minimal_ui and not self.numeric and not self.gesture:
-            result = self.search_event(event)
-            if result is not None:
-                return result
+        result = self.minimal_event(context, event)
+        if result is not None:
+            return result
         result = self.design_pending_event(context, event, panel)
         if result is not None:
             return result
@@ -717,10 +654,6 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                 return {'RUNNING_MODAL'}
             self.cleanup()
             return {'FINISHED'}
-        if not self.minimal_ui and not self.gesture:
-            result = self.controls_event(context, event)
-            if result is not None:
-                return result
         if event.ctrl and event.type == 'S':
             return {'PASS_THROUGH'}
         if self.gesture and self.gesture.get('mode') == 'DRAFT_POINT':
@@ -728,6 +661,73 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                 self.gesture = None
         if self.gesture:
             mode = self.gesture['mode']
+            if mode == 'TRANSFORM':
+                if event.type in {'ESC', 'RIGHTMOUSE'} and press:
+                    self.cancel_gesture()
+                    self.message = "Transform cancelled."
+                    return {'RUNNING_MODAL'}
+                if press and event.type in {'RET', 'NUMPAD_ENTER'}:
+                    cand = self.gesture.get('candidate')
+                    pre = self.gesture.get('preflight')
+                    if not cand:
+                        if pre and pre.get('status') == 'BLOCK':
+                            self.message = f"Cannot apply transform: {pre.get('reason', 'Blocked')}"
+                        return {'RUNNING_MODAL'}
+                    if pre and pre.get('status') == 'BLOCK':
+                        self.message = f"Cannot apply transform: {pre.get('reason', 'Blocked')}"
+                        return {'RUNNING_MODAL'}
+                    if pre and pre.get('status') == 'WARN':
+                        self.pending_transform = dict(candidate=cand, report=pre, op=self.gesture.get('kind', 'MOVE'),
+                                                      param=self.gesture.get('param'), pivot=self.session.get_pivot(),
+                                                      source=self.session.document.dumps(),
+                                                      selection=self.session.get_selection_state())
+                        self.card_kind = 'SEAM_WARNING'
+                        self.gesture = None
+                        return {'RUNNING_MODAL'}
+                    self.run_edit(lambda: self.apply_transform_candidate(cand, self.gesture.get('kind', 'MOVE'), self.gesture.get('param')), "Transform applied.")
+                    self.gesture = None
+                    return {'RUNNING_MODAL'}
+                if press and event.type == 'BACK_SPACE':
+                    txt = self.gesture.get('numeric_text', '')
+                    if txt:
+                        self.gesture['numeric_text'] = txt[:-1]
+                        self.update_transform_preview(event)
+                    return {'RUNNING_MODAL'}
+                if press and event.type in {'X', 'Y'} and not event.ctrl and not event.alt:
+                    cur = self.gesture.get('axis_lock')
+                    self.gesture['axis_lock'] = None if cur == event.type else event.type
+                    self.update_transform_preview(event)
+                    return {'RUNNING_MODAL'}
+                if press and getattr(event, 'unicode', '') and event.unicode in '0123456789.-+%mc':
+                    self.gesture['numeric_text'] = self.gesture.get('numeric_text', '') + event.unicode
+                    self.update_transform_preview(event)
+                    return {'RUNNING_MODAL'}
+                if event.type == 'MOUSEMOVE':
+                    if math.dist(self.pointer, self.gesture.get('pointer_start', self.pointer)) > 4 * self.canvas_layout.scale:
+                        self.gesture['dragged'] = True
+                    self.update_transform_preview(event)
+                    return {'RUNNING_MODAL'}
+                if event.type == 'LEFTMOUSE' and event.value == 'RELEASE':
+                    if not self.gesture.get('dragged', False):
+                        if self.gesture.get('handle'):
+                            self.cancel_gesture()
+                            self.message = 'Drag a handle to rotate or scale around the pivot.'
+                        return {'RUNNING_MODAL'}
+                    cand = self.gesture.get('candidate')
+                    pre = self.gesture.get('preflight')
+                    if cand and (not pre or pre.get('status') != 'BLOCK'):
+                        if pre and pre.get('status') == 'WARN':
+                            self.pending_transform = dict(candidate=cand, report=pre, op=self.gesture.get('kind', 'MOVE'),
+                                                          param=self.gesture.get('param'), pivot=self.session.get_pivot(),
+                                                          source=self.session.document.dumps(),
+                                                          selection=self.session.get_selection_state())
+                            self.card_kind = 'SEAM_WARNING'
+                            self.gesture = None
+                            return {'RUNNING_MODAL'}
+                        self.run_edit(lambda: self.apply_transform_candidate(cand, self.gesture.get('kind', 'MOVE'), self.gesture.get('param')), "Transform applied.")
+                    self.gesture = None
+                    return {'RUNNING_MODAL'}
+                return {'RUNNING_MODAL'}
             if event.type in {'ESC', 'RIGHTMOUSE'} and press:
                 self.cancel_gesture()
                 self.message = "Edit cancelled."
@@ -849,9 +849,22 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                     self.gesture['delta'] = (dx, dy)
                     if abs(dx) > 1e-6 or abs(dy) > 1e-6:
                         self.gesture['moved'] = True
+                    if self.gesture.get('moved') and self.session.has_selection():
+                        self.gesture['candidate'], self.gesture['preflight'] = self.session.build_transform_candidate('MOVE', (dx, dy))
                     if 'points' in self.gesture:
                         self.preview = [(x + dx, y + dy) if self.session.corner is None or i == self.session.corner
                                         else (x, y) for i, (x, y) in enumerate(self.gesture['points'])]
+                elif mode == 'SET_PIVOT':
+                    c = self.canvas_layout.canvas
+                    world_now = self.view.world(self.pointer, c)
+                    tol = 8 * self.canvas_layout.scale / self.view.zoom
+                    cand_pt, cand_lbl = self.session.find_pivot_candidate(world_now, tol)
+                    self.gesture['chosen'] = cand_pt
+                    self.gesture['label'] = cand_lbl
+                elif mode == 'LASSO_SELECT':
+                    w = self.view.world(self.pointer, self.canvas_layout.canvas)
+                    self.gesture.setdefault('points', []).append(w)
+                    self.gesture.setdefault('screen_points', []).append(self.pointer)
                 return {'RUNNING_MODAL'}
             if event.value == 'RELEASE' and event.type == ('MIDDLEMOUSE' if mode == 'PAN' else 'LEFTMOUSE'):
                 if mode == 'ELLIPSE' and self.preview:
@@ -892,7 +905,20 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                     if self.gesture.get('moved'):
                         dx, dy = self.gesture.get('delta', (0.0, 0.0))
                         if abs(dx) > 1e-6 or abs(dy) > 1e-6:
-                            self.run_edit(lambda: self.session.move_selection(dx, dy), "Pattern updated.")
+                            cand_doc, pre = self.session.build_transform_candidate('MOVE', (dx, dy))
+                            if not cand_doc:
+                                if pre and pre.get('status') == 'BLOCK':
+                                    self.message = f"Cannot apply move: {pre.get('reason', 'Blocked')}"
+                            elif pre and pre.get('status') == 'WARN':
+                                self.pending_transform = dict(candidate=cand_doc, report=pre, op='MOVE',
+                                                              param=(dx, dy), pivot=self.session.get_pivot(),
+                                                              source=self.session.document.dumps(),
+                                                              selection=self.session.get_selection_state())
+                                self.card_kind = 'SEAM_WARNING'
+                                self.gesture, self.preview, self.handle_preview = None, None, None
+                                return {'RUNNING_MODAL'}
+                            else:
+                                self.run_edit(lambda: self.session.move_selection(dx, dy, confirm=True), "Pattern updated.")
                     elif self.preview:
                         self.run_edit(lambda: self.session.move(self.preview), "Pattern updated.")
                     else:
@@ -902,24 +928,45 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                                 self.session.select_point(pending[1], pending[2], pending[3], toggle=False)
                             elif pending[0] == 'PIECE':
                                 self.session.select_piece(pending[1], toggle=False)
+                            elif pending[0] == 'EDGE':
+                                self.session.select_edge(pending[1], toggle=False)
                             self.sync_selection()
+                elif mode == 'SET_PIVOT':
+                    tolerance = 8 * self.canvas_layout.scale / self.view.zoom
+                    pt, _ = self.session.find_pivot_candidate(self.view.world(self.pointer, self.canvas_layout.canvas), tolerance)
+                    self.session.set_pivot(pt[0], pt[1])
+                    self.gesture = None
+                    self.message = f"Pivot set ({self.session.placed_pivot[0]:.3f}, {self.session.placed_pivot[1]:.3f})."
+                    return {'RUNNING_MODAL'}
                 elif mode == 'BOX_SELECT':
                     if math.dist(self.gesture['start'], self.pointer) < 4 * self.canvas_layout.scale:
-                        if not self.gesture.get('shift'):
+                        if not self.gesture.get('shift') and not self.gesture.get('alt'):
                             self.session.clear_selection()
                             self.sync_selection()
                             self.message = "Selection cleared."
                     else:
                         w0 = self.gesture['world_start']
                         w1 = self.view.world(self.pointer, self.canvas_layout.canvas)
-                        kind, count = self.session.box_select(w0[0], w0[1], w1[0], w1[1], shift=self.gesture.get('shift', False))
+                        kind, count = self.session.box_select(w0[0], w0[1], w1[0], w1[1],
+                                                             shift=self.gesture.get('shift', False),
+                                                             alt=self.gesture.get('alt', False))
                         self.sync_selection()
-                        if kind == 'POINTS':
-                            self.message = f"{count} points selected." if count != 1 else "1 point selected."
-                        elif kind == 'PIECES':
-                            self.message = f"{count} pieces selected." if count != 1 else "1 piece selected."
+                        if count > 0:
+                            self.message = f"{count} {kind.lower()} selected."
                         else:
-                            self.message = "Selection cleared." if not self.gesture.get('shift') else "No items selected."
+                            self.message = "No items selected."
+                elif mode == 'LASSO_SELECT':
+                    pts = self.gesture.get('points', [])
+                    if len(pts) >= 3:
+                        kind, count = self.session.lasso_select(pts,
+                                                               shift=self.gesture.get('shift', False) or event.shift,
+                                                               alt=self.gesture.get('alt', False) or event.alt,
+                                                               rule=self.gesture.get('rule', 'ENCLOSE'))
+                        self.sync_selection()
+                        if count > 0:
+                            self.message = f"{count} {kind.lower()} selected."
+                        else:
+                            self.message = "No items selected."
                 self.gesture, self.preview, self.handle_preview = None, None, None
                 return {'RUNNING_MODAL'}
             return {'RUNNING_MODAL'}
@@ -927,6 +974,7 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
             self.fit_overlay.toggle()
             return {'RUNNING_MODAL'}
         if not panel:
+            self._nudge_burst = None
             return {'PASS_THROUGH'}
         if event.type == 'ESC' and press:
             if self.draft or self.pending_edge or self.free_clicks or self.pending_place or self.pending_tack:
@@ -944,82 +992,6 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                 return {'RUNNING_MODAL'}
             self.cleanup()
             return {'FINISHED'}
-        if press and event.type == 'LEFTMOUSE':
-            button = self.canvas_layout.button(*self.pointer)
-            if button:
-                if button == 'CLOSE':
-                    if self.draft or self.gesture:
-                        self.cancel_gesture()
-                    self.cleanup()
-                    return {'FINISHED'}
-                if button == 'STAGE_NEXT':
-                    guidance, label, enabled = self.workflow_guidance()
-                    if enabled:
-                        self.advance_stage()
-                    else:
-                        self.message = guidance
-                    return {'RUNNING_MODAL'}
-                if button.startswith('STAGE_'):
-                    st = {'STAGE_DRAFT': 'DRAFT', 'STAGE_SEW': 'SEW', 'STAGE_ARRANGE': 'ARRANGE', 'STAGE_SIMULATE': 'SIMULATE'}.get(button)
-                    if st:
-                        self.set_stage(st)
-                    return {'RUNNING_MODAL'}
-                if button == 'LIBRARY':
-                    self.open_context('LIBRARY', select=False)
-                    return {'RUNNING_MODAL'}
-                if button == 'MORE_TOOLS':
-                    self.advanced_tools = not self.advanced_tools
-                    self.canvas_layout = self.make_layout()
-                    self.refresh_controls()
-                    return {'RUNNING_MODAL'}
-                if button == 'SEARCH':
-                    self.open_context(select=False)
-                    self.search_active = True
-                    self.canvas_layout = self.make_layout()
-                    self.refresh_controls()
-                    return {'RUNNING_MODAL'}
-                if button in {'FINISH_DRAFT', 'CANCEL_DRAFT', 'CONFIRM_ACTION', 'CANCEL_ACTION'}:
-                    self.perform_action(button)
-                    return {'RUNNING_MODAL'}
-                if button == 'VIEW_3D':
-                    self.reveal_3d()
-                    return {'RUNNING_MODAL'}
-                if button in {'SETTINGS', 'INSPECTOR'}:
-                    self.settings_open = not self.settings_open
-                    self.canvas_layout = self.make_layout()
-                    self.refresh_controls()
-                    self.save_window()
-                    return {'RUNNING_MODAL'}
-                if button in {'SELECT', 'POLYGON', 'RECTANGLE', 'ELLIPSE', 'INTERNAL', 'SEW', 'PIN', 'TACK', 'DART', 'PLACE', 'FREE_SEW'}:
-                    self.choose_tool(button)
-                    return {'RUNNING_MODAL'}
-                if button in {'BUILD', 'ARRANGE', 'SIMULATE', 'STOP', 'RESET', 'KEEP'}:
-                    self.perform_action(button)
-                    return {'RUNNING_MODAL'}
-                if button in {'UNDO', 'REDO'}:
-                    self.perform_action(button)
-                    return {'RUNNING_MODAL'}
-                if button == 'LENGTHS':
-                    self._scene.dd_lengths_visible = not self._scene.dd_lengths_visible
-                    return {'RUNNING_MODAL'}
-                if button == 'REFERENCE':
-                    self._scene.dd_reference_visible = not self._scene.dd_reference_visible
-                    return {'RUNNING_MODAL'}
-                if button == 'SNAP':
-                    self.snap = not self.snap
-                    return {'RUNNING_MODAL'}
-                if button == 'FIT':
-                    self.fit()
-                    return {'RUNNING_MODAL'}
-                if button == 'FULL':
-                    if not self.minimal_ui:
-                        self.toggle_full()
-                    return {'RUNNING_MODAL'}
-                if button == 'HELP':
-                    self.show_card('HELP')
-                    self.message = "Shortcuts: V select, P polygon, R rect, E ellipse, I internal, D dart, N cut, J sew, K pin, T tack, F fit map, Home fit design, S snap, Ctrl+Z undo, Ctrl+Shift+Z redo."
-                    return {'RUNNING_MODAL'}
-                return {'RUNNING_MODAL'}
         if press and not self.numeric:
             if event.type == 'A':
                 if event.alt and not event.ctrl and not event.shift:
@@ -1033,28 +1005,61 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                     n = len(self.session.selected_patterns)
                     self.message = f"{n} pieces selected." if n != 1 else "1 piece selected."
                     return {'RUNNING_MODAL'}
-            if event.type in {'UP_ARROW', 'DOWN_ARROW', 'LEFT_ARROW', 'RIGHT_ARROW'}:
-                if self.session.has_selection():
-                    step = 0.10 if event.shift else 0.01
-                    dx = step if event.type == 'RIGHT_ARROW' else (-step if event.type == 'LEFT_ARROW' else 0.0)
-                    dy = step if event.type == 'UP_ARROW' else (-step if event.type == 'DOWN_ARROW' else 0.0)
-                    self.run_edit(lambda: self.session.move_selection(dx, dy), "Selection nudged.")
-                    return {'RUNNING_MODAL'}
             if event.type == 'H' and event.shift and not event.ctrl and not event.alt:
                 self.perform_action('FLIP_H')
                 return {'RUNNING_MODAL'}
             if event.type == 'V' and event.shift and not event.ctrl and not event.alt:
                 self.perform_action('FLIP_V')
                 return {'RUNNING_MODAL'}
-            if event.type == 'R' and event.shift and not event.ctrl and not event.alt:
-                self.perform_action('ROTATE_CW')
-                return {'RUNNING_MODAL'}
-            if event.type in {'LEFT_BRACKET', 'RIGHT_BRACKET'}:
-                self.perform_action('ROTATE_CW' if event.type == 'RIGHT_BRACKET' else 'ROTATE_CCW')
-                return {'RUNNING_MODAL'}
-        if not self.minimal_ui and event.type == 'TAB' and press:
-            self.toggle_full()
+        if press and event.alt and event.type == 'A' and not event.ctrl:
+            self.session.clear_selection()
+            self.sync_selection()
+            self.message = "Selection cleared."
             return {'RUNNING_MODAL'}
+        if press and event.ctrl and event.type == 'I' and not event.alt:
+            self.design_action('SELECT_INVERT')
+            return {'RUNNING_MODAL'}
+        if press and event.ctrl and event.type == 'L' and not event.alt:
+            self.design_action('SELECT_CONNECTED_PATH')
+            return {'RUNNING_MODAL'}
+        if press and event.type in arrow_keys:
+            if not panel or self.numeric or self.library_edit or self.gesture or not self.session.has_selection():
+                self._nudge_burst = None
+                return {'RUNNING_MODAL'}
+            step = 0.001 if event.alt else (0.10 if event.shift else 0.01)
+            dx = -step if event.type == 'LEFT_ARROW' else (step if event.type == 'RIGHT_ARROW' else 0.0)
+            dy = -step if event.type == 'DOWN_ARROW' else (step if event.type == 'UP_ARROW' else 0.0)
+            cand_doc, pre = self.session.build_transform_candidate('MOVE', (dx, dy))
+            if not cand_doc:
+                self._nudge_burst = None
+                if pre and pre.get('status') == 'BLOCK':
+                    self.message = f"Cannot nudge: {pre.get('reason', 'Blocked')}"
+                return {'RUNNING_MODAL'}
+            if pre and pre.get('status') == 'WARN':
+                self._nudge_burst = None
+                self.pending_transform = dict(candidate=cand_doc, report=pre, op='MOVE',
+                                              param=(dx, dy), pivot=self.session.get_pivot(),
+                                              source=self.session.document.dumps(),
+                                              selection=self.session.get_selection_state())
+                self.card_kind = 'SEAM_WARNING'
+                self.message = self.transform_warning_message(pre) + ' Burst paused.'
+                return {'RUNNING_MODAL'}
+            coalesce = bool(getattr(self, '_nudge_burst', None))
+            res = self.session.move_selection(dx, dy, confirm=True, coalesce=coalesce)
+            if res:
+                self.persist()
+                self.sync_selection()
+                self._nudge_burst = dict(key=(event.type, event.alt, event.shift, event.ctrl),
+                                         session=self.session, document=self.session.document.dumps(),
+                                         selection=self.session.get_selection_state())
+                self.message = f"Nudge ({dx*100:.1f}, {dy*100:.1f}) cm."
+            else:
+                self._nudge_burst = None
+            return {'RUNNING_MODAL'}
+        if event.value == 'RELEASE' and event.type in arrow_keys:
+            self._nudge_burst = None
+        if press and event.type not in arrow_keys:
+            self._nudge_burst = None
         if press and event.ctrl and event.type in {'Z', 'Y'}:
             redo = event.type == 'Y' or event.shift
             self.perform_action('REDO' if redo else 'UNDO')
@@ -1120,26 +1125,6 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         if event.type == 'MIDDLEMOUSE' and press:
             self.gesture = {'mode': 'PAN', 'last': self.pointer}
         elif event.type == 'LEFTMOUSE' and press:
-            if self.advanced_tools and not self.session.document.patterns and not self.draft and not self.gesture and not self.reference_corners():
-                card1, card2 = self.canvas_layout.starters
-                if card1.contains(*self.pointer):
-                    self.workflow_action('DEMO')
-                    return {'RUNNING_MODAL'}
-                elif card2.contains(*self.pointer):
-                    ref_bounds = self.reference.bounds
-                    ref_h = (ref_bounds[1][1] - ref_bounds[0][1]) if ref_bounds else 0.0
-                    ref_y = self._scene.dd_reference_y
-                    ref_x = self._scene.dd_reference_x
-                    base_y = (ref_y + max(0.20, ref_h * 0.50)) if ref_h > 0 else 0.0
-                    base_x = ref_x if ref_h > 0 else 0.0
-                    self.session.add([(base_x - 0.20, base_y), (base_x + 0.20, base_y),
-                                      (base_x + 0.20, base_y + 0.45), (base_x - 0.20, base_y + 0.45)])
-                    self.session.document.patterns[-1].name = "Front panel"
-                    self.persist()
-                    self.fit()
-                    self.choose_tool('SELECT')
-                    self.message = "Created basic 40 × 45 cm panel. Drag corners to reshape."
-                    return {'RUNNING_MODAL'}
             if self.tool == 'SEW':
                 self.sew_click()
             elif self.tool == 'KNIFE':
@@ -1182,12 +1167,17 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                     self.message = str(exc)
             else:
                 self.selected_anchor = None
+                handle = self.transform_frame_hit()
+                if (handle == 'PIVOT' and event.alt and not event.shift and not event.ctrl) or (
+                        handle in {'ROTATE', 'SCALE'} and not event.shift and not event.ctrl and not event.alt):
+                    self.start_frame_gesture(handle)
+                    return {'RUNNING_MODAL'}
                 p, corner = self.hit()
                 if p is None:
                     if self.tool == 'SELECT':
                         self.gesture = dict(mode='BOX_SELECT', start=self.pointer,
                                             world_start=self.view.world(self.pointer, self.canvas_layout.canvas),
-                                            shift=event.shift)
+                                            shift=event.shift, alt=event.alt)
                     else:
                         if not event.shift:
                             self.session.clear_selection()
@@ -1221,34 +1211,28 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                             self.sync_selection()
                             self.gesture = dict(mode='MOVE', start=cursor_world, ref_pos=(v.x, v.y), delta=(0.0, 0.0), moved=False)
                 else:
-                    self.session.path = self.hit_path
-                    self.session.segment = self.hit_segment
-                    if self.hit_segment and not event.shift:
+                    if self.hit_segment:
+                        self.session.path = self.hit_path
+                        self.session.segment = self.hit_segment
                         edge = self.hit_segment
-                        a, b = self.session.document.edge_vertices(edge)
-                        ctrl = self.session.document.edge_curve(edge)
-                        click_w = self.view.world(self.pointer, self.canvas_layout.canvas)
-                        t_frac, _ = curves.closest_fraction(ctrl, click_w)
-                        t0 = max(0.15, min(0.85, curves.parameter(ctrl, t_frac)))
-                        p_orig = curves.evaluate(ctrl, t0)
-                        self.gesture = dict(
-                            mode='EDGE_BEND', edge=edge, start=click_w, t0=t0, p_orig=p_orig,
-                            orig_c1=ctrl[1], orig_c2=ctrl[2], anchor_a=(a.x, a.y), anchor_b=(b.x, b.y),
-                            moved=False, new_outgoing=a.outgoing, new_incoming=b.incoming
-                        )
-                        self.session.selected = p.id
-                        self.session.selected_patterns = {p.id}
-                        self.session.selected_points.clear()
-                        self.session.corner = None
-                        self.session.point_selection = []
-                        self.sync_selection()
-                        return {'RUNNING_MODAL'}
-                    if event.shift:
+                        if event.shift:
+                            self.session.select_edge(edge, toggle=True)
+                            self.sync_selection()
+                            self.gesture = dict(mode='MOVE', start=cursor_world, ref_pos=cursor_world, delta=(0.0, 0.0), moved=False)
+                        else:
+                            if edge in self.session.selected_edges:
+                                self.gesture = dict(mode='MOVE', start=cursor_world, ref_pos=cursor_world, delta=(0.0, 0.0), moved=False,
+                                                    pending_single_select=('EDGE', edge))
+                            else:
+                                self.session.select_edge(edge, toggle=False)
+                                self.sync_selection()
+                                self.gesture = dict(mode='MOVE', start=cursor_world, ref_pos=cursor_world, delta=(0.0, 0.0), moved=False)
+                    elif event.shift:
                         self.session.select_piece(p.id, toggle=True)
                         self.sync_selection()
                         self.gesture = dict(mode='MOVE', start=cursor_world, ref_pos=cursor_world, delta=(0.0, 0.0), moved=False)
                     else:
-                        if p.id in self.session.selected_patterns and not self.session.selected_points:
+                        if p.id in self.session.selected_patterns:
                             self.gesture = dict(mode='MOVE', start=cursor_world, ref_pos=cursor_world, delta=(0.0, 0.0), moved=False,
                                                 pending_single_select=('PIECE', p.id))
                         else:
@@ -1286,7 +1270,7 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         return Rect(available.x, available.y, max(0, self.canvas_layout.panel.x - available.x), available.h)
 
     def shaping_controls_layout(self):
-        if not self.minimal_ui or self.tool != 'SHAPE':
+        if self.tool != 'SHAPE':
             return {}
         s = self.canvas_layout.scale
         panel = self.shaping_view_bounds()
@@ -1379,8 +1363,6 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         from .cloth_shaping import Phase, ShapingSession
         from bpy_extras import view3d_utils
         import math
-        if not self.minimal_ui:
-            return None
         press = event.value == 'PRESS'
         if self.tool != 'SHAPE':
             if not panel and press and event.type == 'RIGHTMOUSE':
@@ -1562,6 +1544,114 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                 if first is not None and second is not None:
                     self.shape_hover = (tuple(first), (second - first).length)
             return {'RUNNING_MODAL'}
+
+    def _parse_dist(self, s):
+        s = s.strip().lower()
+        if not s:return None
+        factor = 1.0
+        if s.endswith('mm'):factor = 0.001;s = s[:-2].strip()
+        elif s.endswith('cm'):factor = 0.01;s = s[:-2].strip()
+        elif s.endswith('m'):factor = 1.0;s = s[:-1].strip()
+        try:
+            val = float(s)
+            if math.isfinite(val):return val * factor
+        except ValueError:pass
+        return None
+
+    def _parse_angle(self, s):
+        s = s.strip().lower().removesuffix('deg').removesuffix('°').strip()
+        if not s:return None
+        try:
+            val = float(s)
+            if math.isfinite(val):return val
+        except ValueError:pass
+        return None
+
+    def _parse_scale(self, s):
+        s = s.strip().lower()
+        if not s:return None
+        is_pct = False
+        if s.endswith('%'):is_pct = True;s = s[:-1].strip()
+        try:
+            val = float(s)
+            if math.isfinite(val) and val > 0:
+                return (val / 100.0) if is_pct else val
+        except ValueError:pass
+        return None
+
+    def update_transform_preview(self, event=None):
+        if not self.gesture or self.gesture.get('mode') != 'TRANSFORM':return
+        kind = self.gesture.get('kind', 'MOVE')
+        txt = self.gesture.get('numeric_text', '').strip()
+        c = self.canvas_layout.canvas
+        world_now = self.view.world(self.pointer, c)
+        world_start = self.gesture.get('start', world_now)
+        pivot = self.session.get_pivot()
+        px, py = pivot
+        axis = self.gesture.get('axis_lock')
+        shift = getattr(event, 'shift', False) if event else False
+        ctrl = getattr(event, 'ctrl', False) if event else False
+
+        if kind == 'MOVE':
+            if txt:
+                parsed = self._parse_dist(txt)
+                if parsed is None:
+                    self.gesture['candidate'] = None
+                    self.gesture['preflight'] = {'status': 'BLOCK', 'reason': 'Invalid move distance.'}
+                    self.gesture['param'] = None
+                    return
+                if axis == 'X':dx, dy = parsed, 0.0
+                elif axis == 'Y':dx, dy = 0.0, parsed
+                else:dx, dy = parsed, 0.0
+            else:
+                raw_dx = world_now[0] - world_start[0]
+                raw_dy = world_now[1] - world_start[1]
+                if self.snap != ctrl:
+                    raw_dx = round(raw_dx / 0.01) * 0.01
+                    raw_dy = round(raw_dy / 0.01) * 0.01
+                if shift:
+                    if abs(raw_dx) >= abs(raw_dy):raw_dy = 0.0
+                    else:raw_dx = 0.0
+                if axis == 'X':raw_dy = 0.0
+                elif axis == 'Y':raw_dx = 0.0
+                dx, dy = raw_dx, raw_dy
+            param = (dx, dy)
+        elif kind == 'ROTATE':
+            if txt:
+                parsed = self._parse_angle(txt)
+                if parsed is None:
+                    self.gesture['candidate'] = None
+                    self.gesture['preflight'] = {'status': 'BLOCK', 'reason': 'Invalid rotation angle.'}
+                    self.gesture['param'] = None
+                    return
+                deg = parsed
+            else:
+                ang_now = math.atan2(world_now[1] - py, world_now[0] - px)
+                ang_start = math.atan2(world_start[1] - py, world_start[0] - px)
+                deg = math.degrees(ang_now - ang_start)
+                if shift:
+                    deg = round(deg / 15.0) * 15.0
+            param = deg
+        elif kind == 'SCALE':
+            if txt:
+                parsed = self._parse_scale(txt)
+                if parsed is None:
+                    self.gesture['candidate'] = None
+                    self.gesture['preflight'] = {'status': 'BLOCK', 'reason': 'Scale factor must be positive and finite.'}
+                    self.gesture['param'] = None
+                    return
+                factor = parsed
+            else:
+                d0 = math.hypot(world_start[0] - px, world_start[1] - py)
+                d1 = math.hypot(world_now[0] - px, world_now[1] - py)
+                factor = (d1 / d0) if d0 > 1e-6 else 1.0
+                if shift:
+                    factor = round(factor * 10.0) / 10.0
+            param = factor
+        cand_doc, pre = self.session.build_transform_candidate(kind, param, pivot=pivot)
+        self.gesture['candidate'] = cand_doc
+        self.gesture['preflight'] = pre
+        self.gesture['param'] = param
 
     def cleanup(self):
         global _active

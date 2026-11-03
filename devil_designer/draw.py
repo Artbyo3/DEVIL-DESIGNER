@@ -6,28 +6,20 @@ import gpu
 from gpu_extras.batch import batch_for_shader
 from mathutils import Matrix
 from .canvas import Rect, grid_step
-from .core import area, triangulate, contains, Vertex
+from .core import area, triangulate, contains, Vertex, sample_path
 from . import curves
 from .controls import CONTROL_SETTINGS as SETTINGS
 from .icons import icon_spans
 from .construction import sew_reverse
 
 from .ui_system import (
-    BG_BASE, BG_PANEL, BG_ELEVATED, BG_WELL,
-    TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED,
-    ACCENT, ACCENT_BG, ACCENT_BORDER, ACCENT_HOVER,
-    BORDER, BORDER_SUBTLE,
-    RADIUS_WINDOW, RADIUS_BADGE, RADIUS_DEFAULT,
-    Tooltip, ComponentRenderer, SURFACE_FLOATING, SURFACE_OUTLINE, SELECTION, TEXT_ON_ACCENT,
-    MinimalMetrics
+    BG_BASE, BG_PANEL, BG_ELEVATED, BG_WELL, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, ACCENT, ACCENT_BG, ACCENT_BORDER, ACCENT_HOVER, BORDER, BORDER_SUBTLE, RADIUS_WINDOW, RADIUS_BADGE, Tooltip, ComponentRenderer, SURFACE_FLOATING, SURFACE_OUTLINE, SELECTION, TEXT_ON_ACCENT, MinimalMetrics,
+    TRANSFORM_FRAME, TRANSFORM_HANDLE, TRANSFORM_HANDLE_HOVER, TRANSFORM_PIVOT, TRANSFORM_PREVIEW_OK,
+    TRANSFORM_PREVIEW_WARN, TRANSFORM_PREVIEW_BLOCK, TRANSFORM_HANDLE_SIZE, TRANSFORM_KNOB_RADIUS, TRANSFORM_HIT_RADIUS
 )
-from .canvas import ALL_TOOLS
 
 BG = BG_BASE
 SHELL = BG_BASE
-CHROME = BG_PANEL
-RAIL_BG = BG_PANEL
-VIEWBAR = (0.120, 0.141, 0.165, 1.0)
 INSPECTOR = BG_PANEL
 FIELD_BG = BG_WELL
 ELEVATED = BG_ELEVATED
@@ -39,14 +31,7 @@ MUTED = TEXT_MUTED
 ACCENT = ACCENT
 ACCENT_BG = ACCENT_BG
 ACCENT_BORDER = ACCENT_BORDER
-STEP_ACTIVE_BG = BG_ELEVATED
 
-PALETTE = [
-    (0.741, 0.651, 0.914),
-    (0.843, 0.694, 0.482),
-    (0.475, 0.733, 0.816),
-    (0.486, 0.804, 0.659),
-]
 
 SEAM_PAIR_TONES = [
     (0.42, 0.66, 0.65),
@@ -414,7 +399,7 @@ class Renderer:
     def draw(self, ed):
         self.s = s = ed.canvas_layout.scale
         l, view = ed.canvas_layout, ed.view
-        metrics = l.metrics if ed.minimal_ui else None
+        metrics = l.metrics
         p, c = l.panel, l.canvas
         blend = gpu.state.blend_get()
         depth = gpu.state.depth_test_get()
@@ -438,34 +423,9 @@ class Renderer:
                 self.body_reference(ed)
                 self.grid(view, c)
 
-                if (not l.advanced and not ed.session.document.patterns and not ed.draft
-                        and not (ed.minimal_ui and ed.card_kind)):
+                if not ed.session.document.patterns and not ed.draft and not ed.card_kind:
                     self.text(c.x + c.w / 2, c.y + c.h / 2 + 12 * s, 'Drag to draw your first panel', 17, TEXT, True, max_width=c.w - 32 * s)
                     self.text(c.x + c.w / 2, c.y + c.h / 2 - 14 * s, 'Then pick Sew, pair the edges, and Simulate.', 11, TEXT_SUB, True, max_width=c.w - 32 * s)
-
-                if l.advanced and not ed.session.document.patterns and not ed.draft and not ed.gesture and not ed.reference_corners():
-                    midx, midy = c.x + c.w / 2, c.y + c.h / 2
-                    title_offset = 92 if l.starter_stacked else 54
-                    subtitle_offset = 70 if l.starter_stacked else 32
-                    self.text(midx, midy + title_offset * s, "Start Designing Garments", 15, TEXT, True, max_width=c.w - 32 * s)
-                    self.text(midx, midy + subtitle_offset * s, "Choose a template or draw from scratch", 11, TEXT_SUB, True, max_width=c.w - 24 * s)
-
-                    card1, card2 = l.starters
-
-                    h1 = card1.contains(*ed.pointer)
-                    self.round_rect(card1, ACCENT_BG if h1 else ELEVATED, radius=8)
-                    self.round_rect_outline(card1, ACCENT_BORDER if h1 else BORDER_SUBTLE, radius=8, width=1.0)
-                    self.text(card1.x + card1.w / 2, card1.y + 24 * s, "✨ Load Bodice Demo", 11, ACCENT if h1 else TEXT, True)
-                    self.text(card1.x + card1.w / 2, card1.y + 10 * s, "Two-piece sewn top + avatar", 9, MUTED, True)
-
-                    h2 = card2.contains(*ed.pointer)
-                    self.round_rect(card2, ACCENT_BG if h2 else ELEVATED, radius=8)
-                    self.round_rect_outline(card2, ACCENT_BORDER if h2 else BORDER_SUBTLE, radius=8, width=1.0)
-                    self.text(card2.x + card2.w / 2, card2.y + 24 * s, "+ Add Basic Panel", 11, ACCENT if h2 else TEXT, True)
-                    self.text(card2.x + card2.w / 2, card2.y + 10 * s, "40 × 45 cm rectangle", 9, MUTED, True)
-
-                    shortcut_offset = 66 if l.starter_stacked else 52
-                    self.text(midx, midy - shortcut_offset * s, "P Polygon / R Rectangle / E Ellipse / V Select", 10, MUTED, True, max_width=c.w - 24 * s)
 
                 ed.measurement_rects = []
                 from .linked_editing import pair_for
@@ -473,7 +433,7 @@ class Renderer:
                 twin_pairs = list(getattr(ed.session.document, 'linked_pairs', []))
                 piece_labels=[]
                 pointer_world=view.world(ed.pointer,c)
-                hovered_piece=next((pattern for pattern in reversed(ed.session.document.patterns) if pattern.contains(pointer_world)),None) if ed.minimal_ui and not ed.card_kind and not ed.gesture else None
+                hovered_piece=next((pattern for pattern in reversed(ed.session.document.patterns) if pattern.contains(pointer_world)),None) if not ed.card_kind and not ed.gesture else None
                 ed.twin_tethers=[]
                 for pair in twin_pairs:
                     if not pair['enabled']:continue
@@ -494,11 +454,8 @@ class Renderer:
                     world = pat.outline()
                     outline = [view.screen(point, c) for point in world]
                     holes = [path.outline() for path in pat.paths if path.role == 'HOLE']
-                    color = PALETTE[index % len(PALETTE)]
-                    if ed.minimal_ui:
-                        color = (.70, .76, .82)
-
-                    opacity = (.10 if selected else .055) if ed.minimal_ui else (.22 if selected else .12)
+                    color = (.70, .76, .82)
+                    opacity = .10 if selected else .055
                     self.fill_pattern(pat.id, world, outline, (*color, opacity), holes, view, c)
 
                     for path, nodes, closed, role in pat.loops():
@@ -530,7 +487,18 @@ class Renderer:
                                 hv_screen = [view.screen(curves.evaluate(hv_ctrl, t / 16.0), c) for t in range(17)]
                                 self.lines(hv_screen, (*ACCENT[:3], 0.85), 2.4, True)
 
-                        if ed.session.segment and ed.session.segment.pattern == source.id and ed.session.segment.path == path:
+                        for edge in ed.session.selected_edges:
+                            if edge.pattern == source.id and edge.path == path:
+                                ea = next((v for v in nodes if v.id == edge.start), None)
+                                eb = next((v for v in nodes if v.id == edge.end), None)
+                                if ea and eb:
+                                    ectrl = curves.controls(ea, eb)
+                                    escr = [view.screen(curves.evaluate(ectrl, t / 16.0), c) for t in range(17)]
+                                    self.lines(escr, SELECTION, 3.6, True)
+                                    self.dot(escr[0], 4.6, SELECTION)
+                                    self.dot(escr[-1], 4.6, SELECTION)
+
+                        if ed.session.segment and ed.session.segment.pattern == source.id and ed.session.segment.path == path and ed.session.segment not in ed.session.selected_edges:
                             seg = ed.session.segment
                             v_start = next((v for v in nodes if v.id == seg.start), None)
                             v_end = next((v for v in nodes if v.id == seg.end), None)
@@ -540,6 +508,19 @@ class Renderer:
                                 self.lines(seg_screen, SELECTION, 3.6, True)
                                 self.dot(seg_screen[0], 4.6, SELECTION)
                                 self.dot(seg_screen[-1], 4.6, SELECTION)
+
+                        if ed.gesture and ed.gesture.get('mode') in {'MOVE', 'TRANSFORM'}:
+                            for edge in ed.session.document.edges(source.id, path):
+                                if edge not in ed.session.selected_edges:
+                                    ea = next((v for v in nodes if v.id == edge.start), None)
+                                    eb = next((v for v in nodes if v.id == edge.end), None)
+                                    if ea and eb:
+                                        ea_sel = (source.id, path, nodes.index(ea)) in ed.session.selected_points
+                                        eb_sel = (source.id, path, nodes.index(eb)) in ed.session.selected_points
+                                        if ea_sel != eb_sel:
+                                            nctrl = curves.controls(ea, eb)
+                                            nscr = [view.screen(curves.evaluate(nctrl, t / 16.0), c) for t in range(17)]
+                                            self.lines(nscr, (*ACCENT[:3], 0.75), 2.2, True)
 
                         for i, v in enumerate(nodes):
                             point = view.screen((v.x, v.y), c)
@@ -555,7 +536,7 @@ class Renderer:
                                 self.lines([(point[0], point[1] - 11 * s), (point[0], point[1] - 7.5 * s)], SELECTION, 1.6)
                                 self.lines([(point[0], point[1] + 7.5 * s), (point[0], point[1] + 11 * s)], SELECTION, 1.6)
                                 self.dot(point, 4.2, ACCENT)
-                            elif selected or not ed.minimal_ui:
+                            elif selected:
                                 self.dot(point, 3.6, (*color, 1))
                             if show_handles:
                                 for name in ('incoming', 'outgoing'):
@@ -572,7 +553,7 @@ class Renderer:
                                 if not (a and b):
                                     continue
                                 control = curves.controls(a, b)
-                                if (ed.minimal_ui and edge != ed.session.segment and
+                                if (edge != ed.session.segment and
                                         math.dist(view.screen((a.x, a.y), c), view.screen((b.x, b.y), c)) < 80 * s):
                                     continue
                                 mid = view.screen(curves.at_length(control, 0.5), c)
@@ -587,7 +568,7 @@ class Renderer:
                                 self.text(dim_r.x + 3 * s, dim_r.y + 2 * s, dim_str, 10, TEXT_SUB)
 
                     xs, ys = [pt[0] for pt in outline], [pt[1] for pt in outline]
-                    label_txt = pat.name if ed.minimal_ui else pat.name + ' / ' + pat.preset.title()
+                    label_txt = pat.name
                     from .piece_states import label
                     state_label = label(pat)
                     if state_label:
@@ -617,7 +598,95 @@ class Renderer:
                     if rw > 1 and rh > 1:
                         box_rect = Rect(rx, ry, rw, rh)
                         self.round_rect(box_rect, (*ACCENT[:3], 0.12), radius=0 if metrics else 3)
-                        self.round_rect_outline(box_rect, (*ACCENT[:3], 0.55), radius=0 if metrics else 3, width=1.0)
+                        self.round_rect_outline(box_rect, (*ACCENT[:3], 0.65), radius=0 if metrics else 3, width=1.0)
+
+                if ed.gesture and ed.gesture.get('mode') == 'LASSO_SELECT':
+                    scr_pts = ed.gesture.get('screen_points', [])
+                    if len(scr_pts) >= 2:
+                        self.lines(scr_pts + [ed.pointer], ACCENT, 1.5, True)
+
+                if ed.gesture and ed.gesture.get('mode') == 'SET_PIVOT':
+                    chosen = ed.gesture.get('chosen')
+                    if chosen:
+                        pt = view.screen(chosen, c)
+                        self.dot(pt, 5 * s, SELECTION)
+                        ring = [(pt[0] + math.cos(step * math.tau / 16) * 8 * s,
+                                 pt[1] + math.sin(step * math.tau / 16) * 8 * s) for step in range(17)]
+                        self.lines(ring, SELECTION, 1.5, True)
+                        lbl = ed.gesture.get('label', 'Pivot')
+                        self.text(pt[0] + 10 * s, pt[1] + 5 * s, lbl, 10, TEXT_PRIMARY)
+
+                gesture = ed.gesture
+                preview_doc = gesture.get('candidate') if gesture and gesture.get('mode') in {'MOVE', 'TRANSFORM'} else None
+                preflight = (gesture.get('preflight') or {}) if preview_doc is not None else {}
+                if preview_doc is not None:
+                    status = preflight.get('status', 'OK')
+                    tone = TRANSFORM_PREVIEW_BLOCK if status == 'BLOCK' else TRANSFORM_PREVIEW_WARN if status == 'WARN' else TRANSFORM_PREVIEW_OK
+                    for pid in {key[0] for key in ed.session.resolve_selection()[0]}:
+                        ghost = preview_doc.find(pid)
+                        if ghost is None:
+                            continue
+                        for _, nodes, closed, _ in ghost.loops():
+                            ghost_points = [view.screen(point, c) for point in sample_path(nodes, closed)]
+                            if closed and ghost_points:
+                                ghost_points.append(ghost_points[0])
+                            self.lines(ghost_points, tone, 2.0, True)
+
+                frame = ed.transform_frame()
+                hover = ed.transform_frame_hit(frame) if frame is not None else None
+                if frame is not None:
+                    self.round_rect_outline(frame['rect'], TRANSFORM_FRAME, radius=0, width=1.0)
+                    self.lines([frame['stem'], frame['knob']], TRANSFORM_FRAME, 1.0)
+                    half = TRANSFORM_HANDLE_SIZE * s / 2
+                    for corner in frame['corners']:
+                        hot = hover == 'SCALE' and math.dist(ed.pointer, corner) <= TRANSFORM_HIT_RADIUS * s
+                        square = Rect(corner[0] - half, corner[1] - half, 2 * half, 2 * half)
+                        self.round_rect(square, TRANSFORM_HANDLE_HOVER if hot else TRANSFORM_HANDLE, radius=1)
+                        self.round_rect_outline(square, TRANSFORM_FRAME, radius=1, width=1.0)
+                    self.dot(frame['knob'], TRANSFORM_KNOB_RADIUS, TRANSFORM_HANDLE_HOVER if hover == 'ROTATE' else TRANSFORM_HANDLE)
+                    knob_ring = [(frame['knob'][0] + math.cos(step * math.tau / 20) * (TRANSFORM_KNOB_RADIUS + 1.5) * s,
+                                  frame['knob'][1] + math.sin(step * math.tau / 20) * (TRANSFORM_KNOB_RADIUS + 1.5) * s) for step in range(21)]
+                    self.lines(knob_ring, TRANSFORM_FRAME, 1.0, True)
+
+                if ed.session.has_selection() and not (gesture and gesture.get('mode') == 'SET_PIVOT'):
+                    p_screen = view.screen(ed.session.get_pivot(), c)
+                    arm = (9 if hover == 'PIVOT' else 6) * s
+                    self.dot(p_screen, 4.5 if hover == 'PIVOT' else 3.0, TRANSFORM_PIVOT)
+                    self.lines([(p_screen[0] - arm, p_screen[1]), (p_screen[0] + arm, p_screen[1])], TRANSFORM_PIVOT, 1.2)
+                    self.lines([(p_screen[0], p_screen[1] - arm), (p_screen[0], p_screen[1] + arm)], TRANSFORM_PIVOT, 1.2)
+
+                readout = None
+                if gesture and gesture.get('mode') == 'TRANSFORM':
+                    kind = gesture.get('kind', 'MOVE')
+                    param = gesture.get('param')
+                    typed = gesture.get('numeric_text', '')
+                    if param is None:
+                        readout = ('Type a value or drag' if not typed else f'{kind.title()}: {typed}')
+                    elif kind == 'ROTATE':
+                        readout = f'Rotate {param:.1f}Â°'
+                    elif kind == 'SCALE':
+                        readout = f'Scale {param * 100:.1f}%'
+                    else:
+                        readout = f'Move {param[0] * 100:.1f}, {param[1] * 100:.1f} cm'
+                elif gesture and gesture.get('mode') == 'MOVE' and preview_doc is not None:
+                    delta = gesture.get('delta', (0.0, 0.0))
+                    readout = f'Move {delta[0] * 100:.1f}, {delta[1] * 100:.1f} cm'
+                elif hover:
+                    readout = {'ROTATE': 'Drag to rotate  Â·  Shift snaps 15Â°',
+                               'SCALE': 'Drag to scale  Â·  Shift snaps 10%',
+                               'PIVOT': 'Alt+drag to move the pivot'}[hover]
+                if readout:
+                    if preflight.get('status') == 'WARN':
+                        readout += '  Â·  asks before applying'
+                    elif preflight.get('status') == 'BLOCK':
+                        readout += '  Â·  blocked'
+                    blf.size(0, 10 * s)
+                    badge_w = blf.dimensions(0, readout)[0] + 14 * s
+                    bx, by = ed.pointer[0] + 16 * s, ed.pointer[1] - 30 * s
+                    badge = Rect(bx, by, badge_w, 20 * s)
+                    self.round_rect(badge, SURFACE_FLOATING, radius=3)
+                    self.round_rect_outline(badge, SURFACE_OUTLINE, radius=3, width=1.0)
+                    self.text(bx + 7 * s, by + 6 * s, readout, 10, TEXT_PRIMARY)
 
                 if ed.tool == 'SEW' and ed.pending_edge:
                     doc = ed.session.document
@@ -708,213 +777,7 @@ class Renderer:
             except Exception as exc:
                 ed.error_message = f"Render error: {exc}"
 
-            if ed.minimal_ui:
-                self.minimal_workspace(ed)
-                return
-
-            guide_txt = ed.tool_hint() if ed.tool == 'SELECT' else f"{ed.tool.title()}: {ed.message}"
-            hud_r = Rect(c.x + 16 * s, c.y + 14 * s, min(360 * s, c.w - 32 * s), 28 * s)
-            self.round_rect(hud_r, (0.098, 0.129, 0.153, 0.92), radius=6)
-            self.round_rect_outline(hud_r, BORDER_SUBTLE, radius=6, width=1)
-            key_pill = Rect(hud_r.x + 5 * s, hud_r.y + 4 * s, 18 * s, 20 * s)
-            self.round_rect(key_pill, (0.188, 0.231, 0.267, 1.0), radius=4)
-            tool_key = {'SELECT': 'V', 'POLYGON': 'P', 'RECTANGLE': 'R', 'ELLIPSE': 'E',
-                        'INTERNAL': 'I', 'DART': 'D', 'KNIFE': 'N', 'SEW': 'J', 'PIN': 'K', 'TACK': 'T'}.get(ed.tool, 'V')
-            self.text(key_pill.x + key_pill.w / 2, key_pill.y + 5 * s, tool_key, 9, TEXT, True)
-            self.text(hud_r.x + 28 * s, hud_r.y + 7 * s, guide_txt, 10, TEXT_SUB, max_width=hud_r.w - 34 * s)
-
-            grid_txt = f"1 cm grid  ·  {int(view.zoom / 8)}%"
-            blf.size(0, 10 * s)
-            gw = blf.dimensions(0, grid_txt)[0]
-            self.text(c.x + c.w - gw - 14 * s, c.y + 18 * s, grid_txt, 10, MUTED)
-
-            if not ed._scene.dd_reference_visible or not ed.reference.vertices:
-                self.text(c.x + 14 * s, c.y + c.h - 18 * s, "FRONT VIEW  ·  Centimetres", 9, MUTED)
-
-            self.clip(p)
-            self.rulers(ed)
-
-            self.rect(l.viewbar, VIEWBAR)
-            self.lines([(l.viewbar.x, l.viewbar.y), (l.viewbar.x + l.viewbar.w, l.viewbar.y)], BORDER_SUBTLE)
-            stage_names = {
-                'DRAFT': ('Pattern canvas', f"{len(ed.session.document.patterns)} piece{'s' if len(ed.session.document.patterns) != 1 else ''} · Cotton"),
-                'SEW': ('Sewing workspace', f"{len(ed.session.document.seams)} seam pair{'s' if len(ed.session.document.seams) != 1 else ''} · {len(ed.session.document.patterns)} pieces"),
-                'ARRANGE': ('Arrangement workspace', 'Avatar body · Ready for placement'),
-                'SIMULATE': ('Cloth simulation', 'Native Blender cloth'),
-                'LIBRARY': ('Pattern library', 'Editable garments stored locally'),
-            }
-            v_title = 'Pattern workspace'
-            v_sub = f'{len(ed.session.document.patterns)} pieces / {len(ed.session.document.seams)} seams'
-            utility_start = l.buttons['FIT'][0].x
-            title_width = utility_start - l.viewbar.x - 26 * s
-            if title_width >= 90 * s:
-                self.text(l.viewbar.x + 16 * s, l.viewbar.y + 24 * s, v_title, 13, TEXT, max_width=title_width)
-                self.text(l.viewbar.x + 16 * s, l.viewbar.y + 9 * s, v_sub, 10, MUTED, max_width=title_width)
-
-            self.rect(l.workflow, SHELL)
-            self.lines([(l.workflow.x, l.workflow.y), (l.workflow.x + l.workflow.w, l.workflow.y)], BORDER_SUBTLE)
-            guidance, next_label, next_enabled = ed.workflow_guidance()
-            self.text(l.workflow.x + 12 * s, l.workflow.y + l.workflow.h - 20 * s, ed.workspace_hint(), 10, TEXT_SECONDARY,
-                      max_width=l.workflow.w - 24 * s)
-
-            self.rect(l.header, CHROME)
-            self.lines([(p.x, l.header.y), (p.x + p.w, l.header.y)], BORDER)
-            self.text(p.x + 16 * s, l.header.y + (l.header.h - 11 * s) / 2, "DEVIL DESIGNER", 11, TEXT)
-
-            draft_btn = l.buttons.get('STAGE_DRAFT')
-            sim_btn = l.buttons.get('STAGE_SIMULATE')
-            if draft_btn and sim_btn:
-                d_r, _ = draft_btn
-                s_r, _ = sim_btn
-                seg_w = (s_r.x + s_r.w) - d_r.x
-                container = Rect(d_r.x - 3 * s, d_r.y - 2 * s, seg_w + 6 * s, d_r.h + 4 * s)
-                self.round_rect(container, (0.07, 0.09, 0.12, 0.95), radius=8)
-                self.round_rect_outline(container, BORDER_SUBTLE, radius=8, width=0.8)
-
-            self.rect(l.rail, RAIL_BG)
-            self.lines([(l.rail.x + l.rail.w, l.rail.y), (l.rail.x + l.rail.w, l.rail.y + l.rail.h)], BORDER)
-            self.text(l.rail.x + l.rail.w / 2, l.rail.y + l.rail.h - 16 * s, "TOOLS", 8, MUTED, center=True)
-            self.lines([(l.rail.x + 8 * s, l.rail.y + 34 * s), (l.rail.x + l.rail.w - 8 * s, l.rail.y + 34 * s)], BORDER_SUBTLE)
-
-            cur_stage = getattr(ed, 'stage', 'DRAFT')
-            stage_map = {'STAGE_DRAFT': 'DRAFT', 'STAGE_SEW': 'SEW', 'STAGE_ARRANGE': 'ARRANGE', 'STAGE_SIMULATE': 'SIMULATE'}
-            stage_active_tools = {tool[0] for tool in ALL_TOOLS}
-            active_tooltip = None
-
-            for name, (r, label) in l.buttons.items():
-                hover = r.contains(*ed.pointer)
-                if name == 'STAGE_NEXT':
-                    self.round_rect(r, ACCENT_BG if next_enabled else CHROME, radius=6)
-                    self.round_rect_outline(r, ACCENT_BORDER if next_enabled else BORDER_SUBTLE, radius=6, width=1)
-                    self.text(r.x + r.w / 2, r.y + 7 * s, next_label, 10,
-                              ACCENT if next_enabled else MUTED, True, max_width=r.w - 6 * s)
-                elif name.startswith('STAGE_'):
-                    active = stage_map.get(name) == cur_stage
-                    if active:
-                        self.round_rect(r, STEP_ACTIVE_BG, radius=RADIUS_DEFAULT)
-                        self.round_rect_outline(r, ACCENT_BORDER, radius=RADIUS_DEFAULT, width=1.0)
-                    elif hover:
-                        self.round_rect(r, (0.16, 0.19, 0.22, 1.0), radius=RADIUS_DEFAULT)
-                    self.text(r.x + r.w / 2, r.y + (r.h - 11 * s) / 2, label, 11, ACCENT if active else (TEXT if hover else TEXT_SUB), center=True)
-                elif name in {'LIBRARY', 'CLOSE', 'FULL', 'SETTINGS', 'SEARCH'}:
-                    if hover:
-                        self.round_rect(r, ELEVATED, radius=7)
-                    if name == 'SEARCH':
-                        self.round_rect_outline(r, BORDER_SUBTLE, radius=6, width=1)
-                        self.text(r.x + r.w / 2, r.y + 8 * s, 'Find anything', 10, TEXT_SUB, True,
-                                  max_width=r.w - 6 * s)
-                    elif name == 'LIBRARY':
-                        self.draw_icon('LIBRARY', r.x + 14 * s, r.y + r.h / 2, 14, TEXT_SUB if not hover else TEXT)
-                        self.text(r.x + 28 * s, r.y + 8 * s, "Library", 11, TEXT_SUB if not hover else TEXT)
-                    elif name == 'CLOSE':
-                        self.draw_icon('CLOSE', r.x + r.w / 2, r.y + r.h / 2, 12, MUTED if not hover else TEXT)
-                    elif name == 'FULL':
-                        self.draw_icon('FULL', r.x + 14 * s, r.y + r.h / 2, 12, MUTED if not hover else TEXT)
-                        self.text(r.x + 24 * s, r.y + 8 * s, "Restore" if ed.full else "Expand", 10, MUTED if not hover else TEXT)
-                    elif name == 'SETTINGS':
-                        self.text(r.x + r.w / 2, r.y + 8 * s, 'Details', 10, TEXT_SUB if not hover else TEXT, True)
-                elif name in {'RECTANGLE', 'SEW', 'BUILD', 'ARRANGE', 'SIMULATE', 'STOP', 'RESET', 'KEEP', 'VIEW_3D',
-                              'FINISH_DRAFT', 'CANCEL_DRAFT', 'CONFIRM_ACTION', 'CANCEL_ACTION'}:
-                    blocker = '' if name in {'CONFIRM_ACTION', 'CANCEL_ACTION'} else ed.action_blocker(name)
-                    is_primary = (name in {'SIMULATE', 'FINISH_DRAFT', 'CONFIRM_ACTION'} or name == ed.tool) and not blocker
-                    if is_primary:
-                        if hover:
-                            self.round_rect(r, ACCENT_HOVER, radius=6)
-                        else:
-                            self.round_rect(r, ACCENT_BG, radius=6)
-                            self.round_rect_outline(r, ACCENT_BORDER, radius=6, width=1.0)
-                    else:
-                        if hover:
-                            self.round_rect(r, ELEVATED, radius=6)
-                        else:
-                            self.round_rect(r, CHROME, radius=6)
-                            self.round_rect_outline(r, BORDER_SUBTLE, radius=6, width=1)
-                    playing = False
-                    try:
-                        import bpy
-                        playing = bool(bpy.context.screen.is_animation_playing)
-                    except Exception:
-                        pass
-                    color = ACCENT if (name == 'SIMULATE' and playing) else (TEXT if (is_primary or hover) else TEXT_SUB)
-                    if blocker:
-                        color = MUTED
-                        if hover:
-                            active_tooltip = (blocker, '', (r.x, r.y + r.h + 8 * s))
-                    display_lbl = ('Pause' if playing else '3  Simulate') if name == 'SIMULATE' else label
-                    self.text(r.x + r.w / 2, r.y + 7 * s, display_lbl, 10, color, True,
-                              max_width=r.w - 6 * s)
-                elif name in {'REFERENCE', 'LENGTHS', 'SNAP', 'FIT', 'INSPECTOR', 'UNDO', 'REDO'}:
-                    active = (name == 'SNAP' and ed.snap) or \
-                             (name == 'REFERENCE' and ed._scene.dd_reference_visible) or \
-                             (name == 'LENGTHS' and ed._scene.dd_lengths_visible) or \
-                             (name == 'INSPECTOR' and ed.settings_open)
-                    if active:
-                        self.round_rect(r, ACCENT_BG, radius=6)
-                        self.round_rect_outline(r, ACCENT_BORDER, radius=6, width=1)
-                    elif hover:
-                        self.round_rect(r, ELEVATED, radius=6)
-                    else:
-                        self.round_rect_outline(r, BORDER_SUBTLE, radius=6, width=0.8)
-
-                    icon_name = {'REFERENCE': 'BODY', 'LENGTHS': 'RULER', 'SNAP': 'GRID', 'FIT': 'FIT',
-                                 'INSPECTOR': 'SETTINGS'}.get(name)
-                    color = ACCENT if active else (TEXT if hover else TEXT_SUB)
-                    if icon_name and r.w > 40 * s:
-                        self.draw_icon(icon_name, r.x + 12 * s, r.y + r.h / 2, 12, color)
-                        self.text(r.x + 22 * s, r.y + 8 * s, label.split()[0], 10, color)
-                    else:
-                        self.text(r.x + r.w / 2, r.y + 8 * s, label.split()[0], 10, color, True)
-                elif name in {'SELECT', 'POLYGON', 'RECTANGLE', 'ELLIPSE', 'INTERNAL', 'DART',
-                              'SEW', 'PIN', 'TACK', 'PLACE', 'FREE_SEW', 'HELP', 'MORE_TOOLS'}:
-                    if name not in {'HELP', 'MORE_TOOLS'} and name not in stage_active_tools:
-                        continue
-                    active = (name == ed.tool and not (name == 'SEW' and ed._scene.dd_free_sewing)) or (name == 'FREE_SEW' and ed.tool == 'SEW' and ed._scene.dd_free_sewing)
-                    if active:
-                        self.round_rect(r, ACCENT_BG, radius=RADIUS_DEFAULT)
-                        self.round_rect_outline(r, ACCENT_BORDER, radius=RADIUS_DEFAULT, width=1.2)
-                    elif hover:
-                        self.round_rect(r, ELEVATED, radius=RADIUS_DEFAULT)
-
-                    color = ACCENT if active else (TEXT if hover else TEXT_SUB)
-                    if name != 'HELP':
-                        self.draw_icon('MORE' if name == 'MORE_TOOLS' else name, r.x + r.w / 2, r.y + 27 * s, 15, color)
-                        self.text(r.x + r.w / 2, r.y + 5 * s, label, 8, color, True, max_width=r.w - 2 * s)
-                        if hover:
-                            tool_lbl = label.split()[0]
-                            sc = {'SELECT': 'V', 'POLYGON': 'P', 'RECTANGLE': 'R', 'ELLIPSE': 'E',
-                                  'INTERNAL': 'I', 'DART': 'D', 'SEW': 'J', 'PIN': 'K', 'TACK': 'T', 'PLACE': 'G', 'FREE_SEW': ''}.get(name, '')
-                            active_tooltip = (tool_lbl, sc, (r.x + r.w + 6 * s, r.y + r.h / 2))
-                    else:
-                        self.text(r.x + r.w / 2, r.y + 6 * s, "?", 12, color, True)
-                        if hover:
-                            active_tooltip = ("Shortcuts", "?", (r.x + r.w + 6 * s, r.y + r.h / 2))
-
-            if ed.context_anchor is None:
-                self.settings(ed)
-
-            self.clip(p)
-            self.rect(l.footer, BG_PANEL)
-            self.lines([(p.x, l.footer.y + l.footer.h), (p.x + p.w, l.footer.y + l.footer.h)], BORDER)
-            op_msg = ed.message if ed.message else "Ready"
-            self.text(p.x + 14 * s, l.footer.y + (l.footer.h - 10 * s) / 2, op_msg, 10, TEXT_SECONDARY, max_width=p.w * 0.55)
-            world = view.world(ed.pointer, c)
-            count = len(ed.session.document.patterns)
-            sel_msg = f"{count} piece{'s' if count != 1 else ''}  ·  X {world[0] * 100:.1f}  Y {world[1] * 100:.1f} cm"
-            blf.size(0, 10 * s)
-            mw = blf.dimensions(0, sel_msg)[0]
-            self.text(p.x + p.w - mw - 14 * s, l.footer.y + (l.footer.h - 10 * s) / 2, sel_msg, 10, TEXT_MUTED)
-
-            if not ed.full:
-                for inset in (4, 8, 12):
-                    self.lines([(p.x + p.w - inset * s, p.y + 3 * s), (p.x + p.w - 3 * s, p.y + inset * s)], MUTED)
-
-            if ed.context_anchor is not None:
-                self.settings(ed)
-            self.body_picker(ed)
-
-            if active_tooltip and ed.context_anchor is None:
-                txt, sc, pos = active_tooltip
-                ComponentRenderer.draw_tooltip(self, Tooltip(text=txt, shortcut=sc, pos=pos, visible=True), s)
+            self.minimal_workspace(ed)
         finally:
             blf.disable(0, blf.CLIPPING)
             gpu.state.scissor_set(*scissor)
@@ -924,7 +787,7 @@ class Renderer:
 
     def piece_labels(self,ed,labels):
         scale=self.s
-        radius=ed.canvas_layout.metrics.box if ed.minimal_ui else RADIUS_BADGE
+        radius=ed.canvas_layout.metrics.box
         canvas=ed.canvas_layout.canvas
         reserved=list(ed.measurement_rects)
         ed.piece_label_rects=[]
@@ -1302,7 +1165,7 @@ class Renderer:
             ComponentRenderer.draw_tooltip(self, Tooltip(text=tooltip[0], shortcut=tooltip[1], pos=tooltip[2], visible=True), scale, metrics)
         if card_tooltip:
             ComponentRenderer.draw_tooltip(self, card_tooltip, scale, metrics)
-        if ed.minimal_ui and ed.tool == 'SHAPE':
+        if ed.tool == 'SHAPE':
             self.clip(ed.shaping_view_bounds())
             if not layout.panel.contains(*ed.pointer) and ed.shape_hover is not None:
                 center, radius = ed.shape_hover
@@ -1331,47 +1194,20 @@ class Renderer:
         self.lines([(origin[0], c.y), (origin[0], c.y + c.h),
                     (c.x, origin[1]), (c.x + c.w, origin[1])], (0.29, 0.44, 0.42, 0.6))
 
-    def rulers(self, ed):
-        l, v = ed.canvas_layout, ed.view
-        c, p, s = l.canvas, l.panel, self.s
-        self.rect(l.ruler_top, (0.09, 0.11, 0.13, 1.0))
-        self.rect(l.ruler_left, (0.09, 0.11, 0.13, 1.0))
-        step = grid_step(v.zoom)
-        low, high = v.world((c.x, c.y), c), v.world((c.x + c.w, c.y + c.h), c)
-        self.clip(l.ruler_top)
-        for i in range(math.floor(low[0] / step), math.ceil(high[0] / step) + 1):
-            x = v.screen((i * step, 0), c)[0]
-            self.lines([(x, l.ruler_top.y), (x, l.ruler_top.y + 4 * s)], MUTED)
-            self.text(x + 3 * s, l.ruler_top.y + 6 * s, f"{i * step * 100:g}", 8, MUTED)
-        self.clip(l.ruler_left)
-        for i in range(math.floor(low[1] / step), math.ceil(high[1] / step) + 1):
-            y = v.screen((0, i * step), c)[1]
-            self.text(l.ruler_left.x + 2 * s, y + 2 * s, f"{i * step * 100:g}", 8, MUTED, max_width=18 * s)
-        self.clip(p)
-        corner = Rect(l.ruler_left.x, l.ruler_top.y, l.ruler_left.w, l.ruler_top.h)
-        self.rect(corner, (0.08, 0.10, 0.12, 1.0))
-        self.lines([(corner.x, corner.y), (corner.x + corner.w, corner.y)], BORDER_SUBTLE)
-        self.lines([(corner.x + corner.w, corner.y), (corner.x + corner.w, corner.y + corner.h)], BORDER_SUBTLE)
-        self.text(corner.x + corner.w / 2, corner.y + 7 * s, "cm", 8, ACCENT, center=True)
-
     def seams(self, ed):
         doc = ed.session.document
         c = ed.canvas_layout.canvas
         preview = ed.viewport_sewing
         preview.request_truth(bpy.context)
-        badges = {identity: rect for rect, identity, _ in ed.seam_badges()} if ed.minimal_ui else {}
+        badges = {identity: rect for rect, identity, _ in ed.seam_badges()}
         for index, seam in enumerate(doc.seams):
             mids = []
             tone = SEAM_PAIR_TONES[index % len(SEAM_PAIR_TONES)]
             selected = seam.id in (ed.seam_selected, getattr(ed, 'seam_hover', None))
             record = preview.truth['records'].get(seam.id) if preview.truth else None
             mismatch = doc.seam_stats(seam)[3] > 1 or bool(record and any(flag != 'B reversed' for flag in record['flags']))
-            if ed.minimal_ui:
-                color = SELECTION if mismatch else (*TEXT_SUB[:3], 0.55 if selected else 0.20)
-                notch_col = SELECTION if mismatch else (*tone, 0.92 if selected else 0.65)
-            else:
-                color = (1.0, 0.67, 0.31, 1.0) if (selected or mismatch) else (0.83, 0.48, 0.75, 0.45)
-                notch_col = color
+            color = SELECTION if mismatch else (*TEXT_SUB[:3], 0.55 if selected else 0.20)
+            notch_col = SELECTION if mismatch else (*tone, 0.92 if selected else 0.65)
             seam_width = 2.6 if (selected or mismatch) else 1.2
             dot_rad = 4.6 if (selected or mismatch) else 3.0
             for side in (0, 1):
@@ -1397,8 +1233,6 @@ class Renderer:
                 self.dot(first, dot_rad, notch_col)
                 middle = points[len(points) // 2]
                 mids.append(middle)
-                if ed.tool == 'SEW' and not ed.minimal_ui:
-                    self.text(middle[0] + 8 * self.s, middle[1] + 8 * self.s, str(index + 1), 11, color)
             chain_0, chain_1 = seam.side(0), seam.side(1)
             for step_i in range(5):
                 u = step_i / 4.0
@@ -1493,208 +1327,6 @@ class Renderer:
             self.lines(points, (1, 0.82, 0.3, 1), 3, True)
         for edge, t in ed.free_clicks + ed.dart_base:
             self.dot(ed.view.screen(doc.edge_point(edge, t), c), 6, (1, 0.82, 0.3, 1))
-
-    def settings(self, ed):
-        inspector = ed.inspector
-        if inspector is None:
-            return
-        s = self.s
-        r = inspector.rect
-        self.clip(r)
-        self.rect(r, INSPECTOR)
-        self.lines([(r.x, r.y), (r.x, r.y + r.h)], BORDER)
-        if inspector.tab == 'ALL':
-            field = inspector.search
-            self.round_rect(field, FIELD_BG, radius=6)
-            self.round_rect_outline(field, ACCENT_BORDER if ed.search_active else BORDER_SUBTLE, radius=6, width=1)
-            text = ed.search_query + ('|' if ed.search_active else '') if ed.search_query or ed.search_active else 'Find any action or setting...'
-            self.text(field.x + 8 * s, field.y + 9 * s, text, 10,
-                      TEXT if ed.search_active or ed.search_query else MUTED, max_width=field.w - 16 * s)
-
-        tab_items = list(inspector.tabs.items())
-        if tab_items:
-            first_tab = tab_items[0][1]
-            last_tab = tab_items[-1][1]
-            seg_w = (last_tab.x + last_tab.w) - first_tab.x
-            seg_box = Rect(first_tab.x - 2 * s, first_tab.y + 3 * s, seg_w + 4 * s, first_tab.h - 6 * s)
-            self.round_rect(seg_box, (0.08, 0.10, 0.13, 0.95), radius=7)
-            self.round_rect_outline(seg_box, BORDER_SUBTLE, radius=7, width=0.8)
-
-            for name, tab in tab_items:
-                active = name == ed.inspector_tab
-                hover = tab.contains(*ed.pointer)
-                pill = Rect(tab.x, tab.y + 4 * s, tab.w, tab.h - 8 * s)
-                if active:
-                    self.round_rect(pill, ELEVATED, radius=5)
-                    self.round_rect_outline(pill, ACCENT_BORDER, radius=5, width=0.8)
-                elif hover:
-                    self.round_rect(pill, (0.16, 0.20, 0.24, 0.7), radius=5)
-                color = ACCENT if active else (TEXT if hover else TEXT_SECONDARY)
-                self.text(pill.x + pill.w / 2, pill.y + 6 * s, name.title(), 9, color, True, max_width=pill.w - 4 * s)
-
-            self.lines([(r.x, first_tab.y - 2 * s), (r.x + r.w, first_tab.y - 2 * s)], BORDER_SUBTLE)
-
-        self.clip(inspector.content)
-        cr = inspector.content
-        pending_tooltip = None
-        for item in inspector.controls:
-            box = item.rect
-            if box.y > cr.y + cr.h or box.y + box.h < cr.y:
-                continue
-
-            if item.kind == 'obj_h':
-                swatch_box = Rect(box.x, box.y + 18 * s, 14 * s, 14 * s)
-                self.round_rect(swatch_box, (*item.swatch, 0.4), radius=4)
-                self.round_rect_outline(swatch_box, (*item.swatch, 1.0), radius=4, width=1.4)
-                self.text(box.x + 22 * s, box.y + 18 * s, item.label, 15, TEXT)
-                self.text(box.x + 22 * s, box.y + 4 * s, item.meta, 10, MUTED)
-            elif item.kind == 'field_pair':
-                hw = (box.w - 8 * s) / 2
-                for fx, lab, key in [(box.x, item.label, item.key), (box.x + hw + 8 * s, item.sub, item.meta)]:
-                    card_r = Rect(fx, box.y + 4 * s, hw, 48 * s)
-                    editing = ed.numeric and ed.numeric['key'] == key
-                    self.round_rect(card_r, (0.15, 0.26, 0.28, 1.0) if editing else FIELD_BG, radius=7)
-                    self.round_rect_outline(card_r, ACCENT_BORDER if editing else BORDER_SUBTLE, radius=7, width=1)
-                    self.text(card_r.x + 10 * s, card_r.y + 30 * s, lab, 9, MUTED)
-                    spec = SETTINGS[key]
-                    val_str = ed.numeric['text'] if editing else spec.format(getattr(ed._scene, key))
-                    self.text(card_r.x + 10 * s, card_r.y + 12 * s, val_str, 13, TEXT)
-                    self.text(card_r.x + card_r.w - 24 * s, card_r.y + 12 * s, spec.unit, 10, MUTED)
-            elif item.kind == 'preset_chips':
-                pattern = ed.session.document.find(ed.session.selected)
-                active_preset = pattern.preset.upper() if pattern else None
-                for chip_r, chip_act, chip_lbl in getattr(item, 'chips', []):
-                    p_name = chip_act.replace('SET_PRESET_', '')
-                    is_active = (p_name == active_preset)
-                    disabled = bool(ed.action_blocker(chip_act))
-                    hover = chip_r.contains(*ed.pointer) and not disabled
-                    if is_active:
-                        self.round_rect(chip_r, ACCENT_BG, radius=5)
-                        self.round_rect_outline(chip_r, ACCENT_BORDER, radius=5, width=1.0)
-                    elif hover:
-                        self.round_rect(chip_r, ELEVATED, radius=5)
-                        self.round_rect_outline(chip_r, BORDER_SUBTLE, radius=5, width=0.8)
-                    else:
-                        self.round_rect(chip_r, (0.12, 0.15, 0.18, 1.0), radius=5)
-                        self.round_rect_outline(chip_r, BORDER_SUBTLE, radius=5, width=0.8)
-                    color = MUTED if disabled else ACCENT if is_active else (TEXT if hover else TEXT_SUB)
-                    self.text(chip_r.x + chip_r.w / 2, chip_r.y + 6 * s, chip_lbl, 9, color, center=True)
-            elif item.kind == 'pair_buttons':
-                for btn_rect, btn_key, btn_lbl in (item.btn_a, item.btn_b):
-                    disabled = bool(ed.action_blocker(btn_key))
-                    hover = btn_rect.contains(*ed.pointer) and not disabled
-                    self.round_rect(btn_rect, (0.18, 0.23, 0.28, 1.0) if hover else ELEVATED, radius=7)
-                    self.round_rect_outline(btn_rect, BORDER, radius=7, width=1)
-                    self.text(btn_rect.x + btn_rect.w / 2, btn_rect.y + 8 * s, btn_lbl, 10, MUTED if disabled else TEXT if hover else TEXT_SUB, True)
-            elif item.kind == 'fold':
-                opened = item.key in ed.inspector_sections or bool(ed.search_query)
-                self.round_rect(Rect(box.x, box.y + 3 * s, box.w, box.h - 6 * s), ELEVATED, radius=6)
-                self.text(box.x + 8 * s, box.y + 13 * s, ('- ' if opened else '+ ') + item.label,
-                          11, ACCENT if opened else TEXT_SUB, max_width=box.w - 16 * s)
-            elif item.kind in {'title', 'section'}:
-                self.text(box.x, box.y + 9 * s, item.label, 11 if item.kind == 'title' else 9, ACCENT if item.kind == 'title' else MUTED)
-                if item.kind == 'section':
-                    self.lines([(box.x, box.y + 26 * s), (box.x + box.w, box.y + 26 * s)], BORDER_SUBTLE)
-            elif item.kind in {'number', 'text'}:
-                self.text(box.x, box.y + 36 * s, item.label, 10, TEXT_SUB, max_width=box.w)
-                spec = SETTINGS[item.key]
-                field = item.value_rect
-                editing = ed.numeric and ed.numeric['key'] == item.key
-                self.round_rect(field, (0.16, 0.27, 0.29, 1.0) if editing else FIELD_BG, radius=6)
-                self.round_rect_outline(field, ACCENT_BORDER if editing else BORDER_SUBTLE, radius=6, width=1)
-                text = ed.numeric['text'] if editing else spec.display(getattr(ed._scene, item.key))
-                if editing and ed.numeric['selected']:
-                    self.rect(Rect(field.x + 4 * s, field.y + 4 * s, field.w - 8 * s, field.h - 8 * s), (0.23, 0.39, 0.45, 1.0))
-                self.text(field.x + 8 * s, field.y + 8 * s, text if editing else text + ' ' + spec.unit, 11, TEXT, max_width=field.w - 12 * s)
-                if editing and not ed.numeric['selected']:
-                    blf.size(0, 11 * s)
-                    cursor_x = field.x + 8 * s + blf.dimensions(0, text[:ed.numeric['cursor']])[0]
-                    if cursor_x < field.x + field.w - 3 * s:
-                        self.lines([(cursor_x, field.y + 5 * s), (cursor_x, field.y + 20 * s)], ACCENT)
-                for button, label in ((item.minus, '-'), (item.plus, '+')):
-                    if button is None:
-                        continue
-                    b_hover = button.contains(*ed.pointer)
-                    self.round_rect(button, ELEVATED if b_hover else (0.12, 0.16, 0.20, 1.0), radius=5)
-                    self.round_rect_outline(button, BORDER_SUBTLE, radius=5, width=1)
-                    self.text(button.x + button.w / 2, button.y + 7 * s, label, 12, TEXT, True)
-            elif item.kind == 'body':
-                self.text(box.x, box.y + 36 * s, item.label, 10, TEXT_SUB)
-                field = item.value_rect
-                self.round_rect(field, FIELD_BG, radius=6)
-                self.round_rect_outline(field, BORDER_SUBTLE, radius=6, width=1)
-                obj = ed._scene.dd_avatar
-                self.text(field.x + 8 * s, field.y + 9 * s, obj.name if obj else 'Choose body mesh...', 10, TEXT, max_width=field.w - 25 * s)
-                self.text(field.x + field.w - 14 * s, field.y + 9 * s, 'v', 10, MUTED, True)
-            elif item.kind == 'button':
-                field = Rect(box.x, box.y + 3 * s, box.w, 28 * s)
-                disabled = bool(ed.action_blocker(item.key)) or (item.key == 'DEMO' and bool(ed.session.document.patterns))
-                b_hover = field.contains(*ed.pointer) and not disabled
-                self.round_rect(field, ELEVATED if b_hover else (0.12, 0.16, 0.20, 1.0), radius=7)
-                self.round_rect_outline(field, BORDER, radius=7, width=1)
-                self.text(field.x + field.w / 2, field.y + 8 * s, item.label, 10, MUTED if disabled else TEXT, True, max_width=field.w - 10 * s)
-                if disabled and field.contains(*ed.pointer):
-                    reason = ed.action_blocker(item.key) or 'The demo needs an empty document.'
-                    pending_tooltip = Tooltip(text=reason, shortcut='',
-                                              pos=(field.x, field.y + field.h + 8 * s), visible=True)
-            elif item.kind == 'cycle':
-                self.text(box.x, box.y + 11 * s, item.label, 10, TEXT_SUB, max_width=box.w - 75 * s)
-                chip = Rect(box.x + box.w - 75 * s, box.y + 4 * s, 75 * s, 26 * s)
-                self.round_rect(chip, ELEVATED, radius=6)
-                self.round_rect_outline(chip, BORDER, radius=6, width=1)
-                pattern = ed.session.document.find(ed.session.selected)
-                value = ed._scene.dd_reference_view.title() if item.key == 'REFERENCE_VIEW' else pattern.preset.title() if pattern else 'Select'
-                self.text(chip.x + chip.w / 2, chip.y + 8 * s, value + ' >', 10, ACCENT, True, max_width=chip.w - 4 * s)
-            elif item.kind == 'toggle':
-                self.text(box.x, box.y + 11 * s, item.label, 10, TEXT_SUB, max_width=box.w - 48 * s)
-                active = getattr(ed._scene, item.key)
-                chip = Rect(box.x + box.w - 44 * s, box.y + 4 * s, 44 * s, 25 * s)
-                self.round_rect(chip, ACCENT_BG if active else (0.12, 0.16, 0.20, 1.0), radius=6)
-                self.round_rect_outline(chip, ACCENT_BORDER if active else BORDER_SUBTLE, radius=6, width=1)
-                self.text(chip.x + chip.w / 2, chip.y + 7 * s, 'On' if active else 'Off', 10, ACCENT if active else MUTED, True)
-            elif item.kind == 'seam':
-                seam = next((seam for seam in ed.session.document.seams if seam.id == item.key), None)
-                if seam is None:
-                    continue
-                a, b = ed.session.document.find(seam.a.pattern), ed.session.document.find(seam.b.pattern)
-                card_r = Rect(box.x, box.y + 2 * s, box.w, box.h - 4 * s)
-                self.round_rect(card_r, FIELD_BG, radius=7)
-                self.round_rect_outline(card_r, BORDER_SUBTLE, radius=7, width=1)
-                self.text(card_r.x + 8 * s, card_r.y + 42 * s, f"{item.label}. {a.name}", 10, ACCENT if ed.seam_selected == item.key else TEXT, max_width=card_r.w - 74 * s)
-                self.text(card_r.x + 8 * s, card_r.y + 27 * s, b.name, 9, MUTED, max_width=card_r.w - 74 * s)
-                lengths = ed.session.document.seam_stats(seam)
-                self.text(card_r.x + 8 * s, card_r.y + 9 * s, f"{lengths[0] * 100:.1f} / {lengths[1] * 100:.1f} cm ({lengths[3]:.1f}%)", 9, (1, 0.72, 0.31, 1) if lengths[3] > 1 else MUTED, max_width=card_r.w - 10 * s)
-                for rect, lbl in [(Rect(card_r.x + card_r.w - 68 * s, card_r.y + 6 * s, 40 * s, 28 * s), 'Flip'),
-                                   (Rect(card_r.x + card_r.w - 24 * s, card_r.y + 6 * s, 22 * s, 28 * s), 'X')]:
-                    self.round_rect(rect, ELEVATED, radius=5)
-                    self.round_rect_outline(rect, BORDER, radius=5, width=1)
-                    self.text(rect.x + rect.w / 2, rect.y + 9 * s, lbl, 9, TEXT, True)
-            elif item.kind == 'info':
-                first, second = ed.design_info(item.key)
-                self.text(box.x, box.y + 34 * s, first, 10, TEXT, max_width=box.w)
-                self.text(box.x, box.y + 15 * s, second, 9, MUTED, max_width=box.w)
-            elif item.kind == 'hint':
-                self.text(box.x, box.y + 10 * s, item.label, 9, MUTED, max_width=box.w)
-
-        if inspector.max_scroll:
-            self.round_rect(inspector.scrollbar, (0.11, 0.14, 0.18, 1.0), radius=2)
-            self.round_rect(inspector.thumb, (0.35, 0.44, 0.50, 1.0), radius=2)
-        if pending_tooltip:
-            self.clip(r)
-            ComponentRenderer.draw_tooltip(self, pending_tooltip, s)
-
-    def body_picker(self, ed):
-        menu = ed.body_menu
-        if menu is None:
-            return
-        self.clip(menu.rect)
-        self.round_rect(menu.rect, CHROME, radius=8)
-        self.round_rect_outline(menu.rect, BORDER, radius=8, width=1.2)
-        for r, obj, label in menu.rows:
-            selected = obj == ed._scene.dd_avatar
-            if r.contains(*ed.pointer) or selected:
-                self.round_rect(r, ACCENT_BG if selected else ELEVATED, radius=5)
-            self.text(r.x + 8 * self.s, r.y + 10 * self.s, label, 10, ACCENT if selected else TEXT, max_width=r.w - 16 * self.s)
 
     def body_reference(self, ed):
         scene = ed._scene

@@ -34,7 +34,7 @@ def after_load(_):
 classes = (DD_OT_pattern_editor,DD_OT_viewport_seam_action)+CLASSES
 PROPERTIES = ('dd_document','dd_history','dd_collection','dd_avatar','dd_spacing','dd_clearance',
               'dd_quality','dd_frames','dd_self_collision','dd_pin_top','dd_weld_distance','dd_thickness',
-              'dd_ui_rect','dd_ui_settings','dd_reference_visible','dd_reference_view',
+              'dd_ui_rect','dd_reference_visible','dd_reference_view',
               'dd_reference_opacity','dd_reference_x','dd_reference_y','dd_reference_placed',
               'dd_point_x','dd_point_y','dd_width','dd_height','dd_segment_length','dd_offset','dd_wrap_radius',
               'dd_sew_a0','dd_sew_a1','dd_sew_b0','dd_sew_b1','dd_free_sewing','dd_sew_reverse','dd_internal_mode',
@@ -48,7 +48,6 @@ def register():
     Scene = bpy.types.Scene
     Scene.dd_history = bpy.props.StringProperty(default='', options={'HIDDEN'})
     Scene.dd_ui_rect = bpy.props.FloatVectorProperty(name='Editor window bounds',size=4,default=(-1,-1,0,0))
-    Scene.dd_ui_settings = bpy.props.BoolProperty(name='Editor settings visible',default=True)
     Scene.dd_reference_visible = bpy.props.BoolProperty(name='Body silhouette',default=True)
     Scene.dd_reference_view = bpy.props.EnumProperty(name='Body reference view',items=[
         ('FRONT','Front','Front orthographic projection'),('BACK','Back','Back orthographic projection'),

@@ -1,7 +1,6 @@
 import math
 import unittest
-from devil_designer.core import Session,Document,EdgeRef,area
-from devil_designer import curves
+from devil_designer.core import Session,Document,area
 from devil_designer.construction import chain_range,path_range
 from devil_designer.meshing import edge_counts
 

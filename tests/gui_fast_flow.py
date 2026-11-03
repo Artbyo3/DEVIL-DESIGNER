@@ -14,7 +14,7 @@ bpy.context.preferences.view.show_splash = False
 
 def check_interaction_regressions(workspace, event, point, check):
     from devil_designer import library
-    from devil_designer.canvas import Layout, Rect
+    from devil_designer.canvas import Layout
     from devil_designer.core import Document, Session
     from devil_designer.minimal import minimal_layout
 
@@ -141,7 +141,7 @@ def check_interaction_regressions(workspace, event, point, check):
         workspace.setting_drag = dict(key='dd_point_x', value=original_x, pointer=point, moved=True)
         workspace._scene.dd_point_x = .6
         workspace.pointer = point
-        workspace.controls_event(bpy.context, event('LEFTMOUSE', point, 'RELEASE'))
+        workspace.setting_drag_event(event('LEFTMOUSE', point, 'RELEASE'))
         check(workspace.setting_drag is None and workspace.session.document.dumps() == before_numeric and
               abs(workspace._scene.dd_point_x - original_x) < 1e-6 and 'updated' not in workspace.message,
               'a rejected numeric drag restores the displayed source value and preserves its validation error')
@@ -552,7 +552,7 @@ def check_interaction_regressions(workspace, event, point, check):
                       'minimal Fit clears the dock and fills the canvas at scale ' + str(scale))
         compact = Layout(628, 700, 1, full=True)
         minimal_layout(compact)
-        check(compact.inspector is None and compact.canvas.w >= compact.panel.w - 16,
+        check(compact.canvas.w >= compact.panel.w - 16,
               '628 pixel compact workspace maintains full canvas without sidebars')
         workspace.clear_interaction_references()
         workspace.session = Session(Document())
@@ -645,6 +645,129 @@ def check_interaction_regressions(workspace, event, point, check):
             workspace.error_message = ''
             workspace.renderer.draw(workspace)
             check(not workspace.error_message, f'{card} card draw renders without error')
+        workspace.session = Session(Document())
+        workspace.session.add([(0, 0), (.2, 0), (.2, .3), (0, .3)])
+        workspace.session.add([(.3, 0), (.5, 0), (.5, .3), (.3, .3)])
+        first, second = workspace.session.document.patterns
+        workspace.session.selected = second.id
+        internal = workspace.session.add_path([(.34, .1), (.45, .2)])
+        workspace.session.sew(workspace.session.document.edge(first.id, 1),
+                              workspace.session.document.edge(second.id, 3))
+        workspace.session.select_point(first.id, 'OUTER', 2)
+        workspace.session.select_edge(workspace.session.document.edge(second.id, 0), toggle=True)
+        workspace.session.select_path(second.id, internal.id, toggle=True)
+        workspace.persist()
+        workspace.fit()
+        workspace.choose_tool('SELECT')
+        c = workspace.canvas_layout.canvas
+        workspace.pointer = (c.x + c.w / 2, c.y + c.h / 2)
+
+        def draw_selection_state(label):
+            workspace.error_message = None
+            workspace.renderer.draw(workspace)
+            check(not workspace.error_message, label + ' draws without render errors')
+
+        draw_selection_state('Mixed point, boundary edge, and internal path selection')
+        for target in ('PIECES', 'POINTS', 'EDGES', 'PATHS'):
+            workspace.session.acquisition_target = target
+            for crossing in (False, True):
+                workspace.gesture = dict(mode='BOX_SELECT', start=(c.x + 20, c.y + 20),
+                                         world_start=(0, 0), shift=False, alt=False)
+                workspace.pointer = (c.x + (10 if crossing else 150), c.y + 150)
+                draw_selection_state(f'{target} {"crossing" if crossing else "enclose"} marquee')
+                workspace.gesture = dict(mode='LASSO_SELECT',
+                                         rule='CROSSING' if crossing else 'ENCLOSE',
+                                         screen_points=[(c.x + 20, c.y + 20),
+                                                        (c.x + 130, c.y + 90),
+                                                        (c.x + 30, c.y + 150)])
+                draw_selection_state(f'{target} {workspace.gesture["rule"]} lasso')
+        workspace.cancel_gesture()
+        workspace.session.set_pivot(.1, .15)
+        workspace.start_set_pivot()
+        for label, point in (('Free', (.11, .14)), ('Vertex', (0, 0)),
+                             ('Midpoint', (.1, 0)), ('Selection center', (.25, .15))):
+            workspace.gesture.update(chosen=point, label=label)
+            draw_selection_state(label + ' pivot placement')
+        workspace.cancel_gesture()
+        draw_selection_state('Placed pivot marker after gesture cancellation')
+        for kind, value in (('MOVE', '1mm'), ('ROTATE', '37.5'), ('SCALE', '110%')):
+            workspace.start_transform(kind)
+            workspace.gesture['numeric_text'] = value
+            workspace.update_transform_preview()
+            draw_selection_state(kind + ' numeric candidate and affected neighbors')
+            workspace.cancel_gesture()
+            draw_selection_state(kind + ' cancelled preview')
+        workspace.session.select_point(first.id, 'OUTER', 2)
+        workspace.start_transform('MOVE')
+        workspace.gesture['axis_lock'] = 'Y'
+        workspace.gesture['numeric_text'] = '5cm'
+        workspace.update_transform_preview()
+        check(workspace.gesture['preflight']['status'] == 'WARN',
+              'draw coverage reaches a genuine seam-risk candidate')
+        workspace.handle_event(bpy.context, event('RET', workspace.pointer))
+        check(workspace.card_kind == 'SEAM_WARNING',
+              'draw coverage opens the real pre-commit seam warning')
+        draw_selection_state('Seam warning before confirmation')
+        for card in ('SELECT_MENU', 'TRANSFORM_MENU'):
+            workspace.show_card(card)
+            draw_selection_state(card)
+        workspace.cancel_transform()
+        draw_selection_state('Seam warning cancellation')
+        unchanged = workspace.session.document.dumps()
+        history_count = len(workspace.session.undo_stack)
+        workspace.start_transform('ROTATE')
+        workspace.gesture['numeric_text'] = '37.5'
+        workspace.update_transform_preview()
+        workspace.handle_event(bpy.context, event('WINDOW_DEACTIVATE', workspace.pointer, 'NOTHING'))
+        check(workspace.gesture is None and workspace.session.document.dumps() == unchanged and
+              len(workspace.session.undo_stack) == history_count,
+              'focus loss cancels the temporary transform without a transaction')
+        draw_selection_state('Focus-loss transform cancellation')
+        workspace.session.set_point_type('AUTO', [(first.id, 'OUTER', index) for index in range(4)])
+        workspace.persist()
+        for edge_index, label in ((0, 'AUTO curve warning'), (1, 'Combined seam and AUTO curve warning')):
+            workspace.session.clear_selection()
+            workspace.session.select_edge(workspace.session.document.edge(first.id, edge_index))
+            workspace.start_transform('MOVE')
+            workspace.gesture['numeric_text'] = '1cm'
+            workspace.update_transform_preview()
+            workspace.handle_event(bpy.context, event('RET', workspace.pointer))
+            report = workspace.pending_transform['report'] if workspace.pending_transform else {}
+            check(workspace.card_kind == 'SEAM_WARNING' and report.get('curve_deviation_mm', 0) > 0 and
+                  bool(report.get('details')) == (edge_index == 1),
+                  'draw coverage opens the real ' + label)
+            draw_selection_state(label + ' before confirmation')
+            workspace.cancel_transform()
+            draw_selection_state(label + ' cancellation')
+        workspace.session.clear_selection()
+        workspace.session.select_piece(second.id)
+        frame = workspace.transform_frame()
+        check(frame is not None, 'draw coverage reaches the selection transform frame')
+        draw_selection_state('Selection transform frame')
+        for handle, point in (('ROTATE', frame['knob']), ('SCALE', frame['corners'][0]), ('PIVOT', frame['pivot'])):
+            workspace.pointer = point
+            check(workspace.transform_frame_hit() == handle, 'frame hover resolves ' + handle.lower())
+            draw_selection_state('Hovered frame ' + handle.lower() + ' handle with hint')
+        for kind, value, label in (('ROTATE', '30', 'rotation ghost'), ('SCALE', '120%', 'scale ghost'), ('SCALE', '-1', 'blocked scale ghost')):
+            workspace.start_transform(kind)
+            workspace.gesture['handle'] = True
+            workspace.gesture['numeric_text'] = value
+            workspace.update_transform_preview()
+            draw_selection_state('Live ' + label + ' with readout')
+            workspace.cancel_gesture()
+        workspace.session.clear_selection()
+        workspace.session.select_point(first.id, 'OUTER', 1)
+        workspace.session.select_point(first.id, 'OUTER', 2, toggle=True)
+        workspace.start_transform('SCALE')
+        workspace.gesture['numeric_text'] = '150%'
+        workspace.update_transform_preview()
+        check(workspace.gesture['preflight']['status'] == 'WARN', 'draw coverage reaches a warning-tinted live ghost')
+        draw_selection_state('Warning-tinted live ghost')
+        workspace.cancel_gesture()
+        workspace.gesture = dict(mode='MOVE', start=(0.0, 0.0), ref_pos=(0.0, 0.0), delta=(0.03, 0.0), moved=True)
+        workspace.gesture['candidate'], workspace.gesture['preflight'] = workspace.session.build_transform_candidate('MOVE', (0.03, 0.0))
+        draw_selection_state('Live drag-move ghost with readout')
+        workspace.cancel_gesture()
         workspace.card_kind = None
     finally:
         workspace.clear_interaction_references()
@@ -815,7 +938,7 @@ def run():
         import devil_designer
         from devil_designer import editor, garment
         from devil_designer.canvas import Layout
-        from devil_designer.minimal import FABRICS, DENSITY, QUALITY, THICKNESS, GUIDE_OPACITY, minimal_layout
+        from devil_designer.minimal import DENSITY, QUALITY, THICKNESS, GUIDE_OPACITY, minimal_layout
         devil_designer.register()
         scene = bpy.context.scene
         body = scene.objects['Cube']
@@ -850,7 +973,7 @@ def run():
                 rect = card_control(key)
                 click((rect.x + rect.w / 2, rect.y + rect.h / 2))
 
-            check(workspace.minimal_ui and workspace.canvas_layout.inspector is None,
+            check(workspace.canvas_layout.canvas.w >= workspace.canvas_layout.panel.w - 16,
                   'default workspace has pure canvas with zero sidebars')
             check(not {'SETTINGS', 'SEARCH', 'MORE_TOOLS', 'BUILD', 'SIMULATE_OPTIONS', 'WORKSPACE_PANEL'} & set(workspace.canvas_layout.buttons),
                   'default chrome contains reduced tool dock, close, garment, and keep options')
@@ -1012,7 +1135,7 @@ def run():
 
             narrow_layout = Layout(700, 800, 1, full=True)
             minimal_layout(narrow_layout)
-            check(narrow_layout.inspector is None and narrow_layout.canvas.w >= narrow_layout.panel.w - 16,
+            check(narrow_layout.canvas.w >= narrow_layout.panel.w - 16,
                   'narrow layout maintains clean full canvas without sidebar')
 
             from devil_designer.core import Document, Session
@@ -1087,7 +1210,7 @@ def run():
             bpy.context.view_layer.objects.active = None
             scene.dd_avatar = None
             button('SIMULATE')
-            check(workspace.card_kind == 'BODY' and workspace.pending_simulation and not workspace.settings_open,
+            check(workspace.card_kind == 'BODY' and workspace.pending_simulation,
                   'ambiguous bodies use a small body card, never a settings panel')
             index = workspace.card_models.index(body) if body in workspace.card_models else None
             if index is None:

@@ -9,7 +9,8 @@ except ImportError:
     import sys
     sys.modules['bpy'] = MagicMock()
 from devil_designer.construction import sew_reverse
-from devil_designer.core import Document, Session
+from devil_designer.core import Document, Session, EdgeRef
+from devil_designer.linked_editing import clone_twin, toggle_link
 from devil_designer.design_tools import DesignTools
 from devil_designer.meshing import edge_counts
 
@@ -178,6 +179,295 @@ class SeamTests(unittest.TestCase):
         self.assertFalse(chain_seam.reverse)
         self.assertEqual(chain_seam.reverse, sew_reverse(doc, chain_seam.side(0), chain_seam.side(1), scene.dd_sew_reverse))
 
+    def test_seam_warning_30_to_35_fixture(self):
+        s = Session()
+        s.add([(0.0, 0.0), (0.2, 0.0), (0.2, 0.3), (0.0, 0.3)])
+        s.add([(0.3, 0.0), (0.5, 0.0), (0.5, 0.3), (0.3, 0.3)])
+        p1, p2 = s.document.patterns
+        e1 = s.document.edge(p1.id, 1)
+        e2 = s.document.edge(p2.id, 3)
+        s.sew(e1, e2)
+        s.select_point(p1.id, 'OUTER', 2)
+        doc_before = s.document.dumps()
+        u_before = len(s.undo_stack)
+        warn = s.move_selection(0.0, 0.05, confirm=False)
+        self.assertIsInstance(warn, dict)
+        self.assertEqual(warn['status'], 'WARN')
+        self.assertAlmostEqual(warn['diff_cm'], 5.0, delta=1e-4)
+        self.assertAlmostEqual(warn['percent'], 14.285714, delta=1e-4)
+        self.assertEqual(s.document.dumps(), doc_before)
+        self.assertEqual(len(s.undo_stack), u_before)
+        s.move_selection(0.0, 0.05, confirm=True)
+        self.assertEqual(len(s.undo_stack), u_before + 1)
+        self.assertEqual(len(s.document.seams), 1)
+        self.assertAlmostEqual(s.document.edge_length(s.document.edge(p1.id, 1)), 0.35, delta=1e-4)
+
+    def test_section9_check10_seam_follow_rigid_and_scale_ease_preservation(self):
+        s = Session()
+        s.add([(0.0, 0.0), (0.4, 0.0), (0.4, 0.5), (0.0, 0.5)])
+        p1 = s.document.patterns[0]
+        s.split_segment(s.document.edge(p1.id, 1), 0.5)
+        s.add([(0.6, 0.0), (1.0, 0.0), (1.0, 0.4), (0.6, 0.4)])
+        p2 = s.document.patterns[1]
+        s.add([(1.5, 0.0), (1.8, 0.0), (1.8, 0.4), (1.5, 0.4)])
+        p3 = s.document.patterns[2]
+
+        p1_edges = [s.document.edge(p1.id, 1), s.document.edge(p1.id, 2)]
+        p2_edge = s.document.edge(p2.id, 3)
+        p2_span = EdgeRef(p2_edge.pattern, p2_edge.start, p2_edge.end, t0=0.1, t1=0.9, path=p2_edge.path)
+        s.sew_chains(p1_edges, [p2_span], reverse=False)
+        seam = s.document.seams[0]
+        s.set_seam_shrink(seam.id, 10)
+
+        s.selected = p1.id
+        clone_twin(s)
+
+        seam = s.document.seams[0]
+        init_seam_id = seam.id
+        init_chain_a = [(e.pattern, e.path, e.start, e.end, e.t0, e.t1) for e in seam.side(0)]
+        init_chain_b = [(e.pattern, e.path, e.start, e.end, e.t0, e.t1) for e in seam.side(1)]
+        init_reverse = seam.reverse
+        init_shrink = seam.shrink
+        init_len0 = sum(s.document.edge_length(e) for e in seam.side(0))
+        init_len1 = sum(s.document.edge_length(e) for e in seam.side(1))
+        init_ease = init_len0 / init_len1
+
+        p2_verts_init = [(v.x, v.y) for v in s.document.find(p2.id).vertices]
+        p3_verts_init = [(v.x, v.y) for v in s.document.find(p3.id).vertices]
+
+        s.select_piece(p1.id)
+        self.assertTrue(s.move_selection(0.05, 0.02, confirm=True))
+
+        p2_verts = [(v.x, v.y) for v in s.document.find(p2.id).vertices]
+        p3_verts = [(v.x, v.y) for v in s.document.find(p3.id).vertices]
+        self.assertEqual(p2_verts, p2_verts_init)
+        self.assertEqual(p3_verts, p3_verts_init)
+
+        seam = s.document.seams[0]
+        self.assertEqual(seam.id, init_seam_id)
+        self.assertEqual([(e.pattern, e.path, e.start, e.end, e.t0, e.t1) for e in seam.side(0)], init_chain_a)
+        self.assertEqual([(e.pattern, e.path, e.start, e.end, e.t0, e.t1) for e in seam.side(1)], init_chain_b)
+        self.assertEqual(seam.reverse, init_reverse)
+        self.assertEqual(seam.shrink, init_shrink)
+        len0 = sum(s.document.edge_length(e) for e in seam.side(0))
+        len1 = sum(s.document.edge_length(e) for e in seam.side(1))
+        self.assertAlmostEqual(len0, init_len0, delta=1e-6)
+        self.assertAlmostEqual(len1, init_len1, delta=1e-6)
+        self.assertAlmostEqual(len0 / len1, init_ease, delta=1e-6)
+
+        self.assertTrue(s.rotate(30.0, pivot=(0.2, 0.2), confirm=True))
+        p2_verts = [(v.x, v.y) for v in s.document.find(p2.id).vertices]
+        p3_verts = [(v.x, v.y) for v in s.document.find(p3.id).vertices]
+        self.assertEqual(p2_verts, p2_verts_init)
+        self.assertEqual(p3_verts, p3_verts_init)
+        seam = s.document.seams[0]
+        self.assertEqual(seam.id, init_seam_id)
+        self.assertEqual([(e.pattern, e.path, e.start, e.end, e.t0, e.t1) for e in seam.side(0)], init_chain_a)
+        self.assertEqual([(e.pattern, e.path, e.start, e.end, e.t0, e.t1) for e in seam.side(1)], init_chain_b)
+        self.assertEqual(seam.reverse, init_reverse)
+        self.assertEqual(seam.shrink, init_shrink)
+        len0 = sum(s.document.edge_length(e) for e in seam.side(0))
+        len1 = sum(s.document.edge_length(e) for e in seam.side(1))
+        self.assertAlmostEqual(len0, init_len0, delta=1e-6)
+        self.assertAlmostEqual(len1, init_len1, delta=1e-6)
+        self.assertAlmostEqual(len0 / len1, init_ease, delta=1e-6)
+
+        toggle_link(s)
+
+        s.select_piece(p1.id)
+        s.select_piece(p2.id, toggle=True)
+        self.assertTrue(s.move_selection(0.03, -0.01, confirm=True))
+        p3_verts = [(v.x, v.y) for v in s.document.find(p3.id).vertices]
+        self.assertEqual(p3_verts, p3_verts_init)
+        seam = s.document.seams[0]
+        self.assertEqual(seam.id, init_seam_id)
+        self.assertEqual([(e.pattern, e.path, e.start, e.end, e.t0, e.t1) for e in seam.side(0)], init_chain_a)
+        self.assertEqual([(e.pattern, e.path, e.start, e.end, e.t0, e.t1) for e in seam.side(1)], init_chain_b)
+        self.assertEqual(seam.reverse, init_reverse)
+        self.assertEqual(seam.shrink, init_shrink)
+        len0 = sum(s.document.edge_length(e) for e in seam.side(0))
+        len1 = sum(s.document.edge_length(e) for e in seam.side(1))
+        self.assertAlmostEqual(len0, init_len0, delta=1e-6)
+        self.assertAlmostEqual(len1, init_len1, delta=1e-6)
+        self.assertAlmostEqual(len0 / len1, init_ease, delta=1e-6)
+
+        self.assertTrue(s.rotate(-20.0, pivot=(0.5, 0.2), confirm=True))
+        p3_verts = [(v.x, v.y) for v in s.document.find(p3.id).vertices]
+        self.assertEqual(p3_verts, p3_verts_init)
+        seam = s.document.seams[0]
+        self.assertEqual(seam.id, init_seam_id)
+        self.assertEqual([(e.pattern, e.path, e.start, e.end, e.t0, e.t1) for e in seam.side(0)], init_chain_a)
+        self.assertEqual([(e.pattern, e.path, e.start, e.end, e.t0, e.t1) for e in seam.side(1)], init_chain_b)
+        self.assertEqual(seam.reverse, init_reverse)
+        self.assertEqual(seam.shrink, init_shrink)
+        len0 = sum(s.document.edge_length(e) for e in seam.side(0))
+        len1 = sum(s.document.edge_length(e) for e in seam.side(1))
+        self.assertAlmostEqual(len0, init_len0, delta=1e-6)
+        self.assertAlmostEqual(len1, init_len1, delta=1e-6)
+        self.assertAlmostEqual(len0 / len1, init_ease, delta=1e-6)
+
+        cand_doc, pre = s.build_transform_candidate('SCALE', 1.1, pivot=(0.5, 0.2))
+        self.assertEqual(pre['status'], 'OK')
+        self.assertTrue(s.scale(1.1, pivot=(0.5, 0.2), confirm=True))
+        p3_verts = [(v.x, v.y) for v in s.document.find(p3.id).vertices]
+        self.assertEqual(p3_verts, p3_verts_init)
+        seam = s.document.seams[0]
+        self.assertEqual(seam.id, init_seam_id)
+        self.assertEqual([(e.pattern, e.path, e.start, e.end, e.t0, e.t1) for e in seam.side(0)], init_chain_a)
+        self.assertEqual([(e.pattern, e.path, e.start, e.end, e.t0, e.t1) for e in seam.side(1)], init_chain_b)
+        self.assertEqual(seam.reverse, init_reverse)
+        self.assertEqual(seam.shrink, init_shrink)
+        len0 = sum(s.document.edge_length(e) for e in seam.side(0))
+        len1 = sum(s.document.edge_length(e) for e in seam.side(1))
+        self.assertAlmostEqual(len0, 1.1 * init_len0, delta=1e-5)
+        self.assertAlmostEqual(len1, 1.1 * init_len1, delta=1e-5)
+        self.assertAlmostEqual(len0 / len1, init_ease, delta=1e-5)
+
+    def test_section9_check12_chain_breakpoint_shift_warns(self):
+        s = Session()
+        s.add([(0.0, 0.0), (0.2, 0.0), (0.5, 0.0), (0.5, 0.4), (0.0, 0.4)])
+        p1 = s.document.patterns[0]
+        s.add([(0.7, 0.0), (1.2, 0.0), (1.2, 0.4), (0.7, 0.4)])
+        p2 = s.document.patterns[1]
+        e1a = s.document.edge(p1.id, 0)
+        e1b = s.document.edge(p1.id, 1)
+        e2 = s.document.edge(p2.id, 0)
+        s.sew_chains([e1a, e1b], [e2], reverse=False)
+        s.select_point(p1.id, 'OUTER', 1)
+        cand, pre = s.build_transform_candidate('MOVE', (0.15, 0.0))
+        self.assertIsInstance(pre, dict)
+        self.assertEqual(pre['status'], 'WARN')
+
+    def test_section9_check12_invalid_references_prune_and_near_zero_block(self):
+        s = Session()
+        s.add([(0.0, 0.0), (0.2, 0.0), (0.2, 0.3), (0.0, 0.3)])
+        s.add([(0.3, 0.0), (0.5, 0.0), (0.5, 0.3), (0.3, 0.3)])
+        p1, p2 = s.document.patterns
+        s.sew(s.document.edge(p1.id, 1), s.document.edge(p2.id, 3))
+        s.select_point(p1.id, 'OUTER', 2)
+        doc_before = s.document.dumps()
+        u_before = len(s.undo_stack)
+        sel_patterns_before = set(s.selected_patterns)
+        sel_points_before = set(s.selected_points)
+        cand, pre = s.build_transform_candidate('MOVE', (-0.3, -0.2))
+        self.assertEqual(pre['status'], 'BLOCK')
+        self.assertNotIn('can_proceed', pre)
+        with self.assertRaises(ValueError):
+            s.move_selection(-0.3, -0.2, confirm=True)
+        self.assertEqual(s.document.dumps(), doc_before)
+        self.assertEqual(len(s.undo_stack), u_before)
+        self.assertEqual(s.selected_patterns, sel_patterns_before)
+        self.assertEqual(s.selected_points, sel_points_before)
+
+        cand_doc_prune = Document.loads(doc_before)
+        cand_doc_prune.seams.clear()
+        pre_prune = s.preflight_transform(cand_doc_prune, set(), {})
+        self.assertEqual(pre_prune['status'], 'BLOCK')
+        self.assertNotIn('can_proceed', pre_prune)
+        self.assertEqual(s.document.dumps(), doc_before)
+        self.assertEqual(len(s.undo_stack), u_before)
+        self.assertEqual(s.selected_patterns, sel_patterns_before)
+        self.assertEqual(s.selected_points, sel_points_before)
+
+        cand_doc_inv = Document.loads(doc_before)
+        cand_doc_inv.seams[0].a = EdgeRef(p1.id, 'missing', 'missing')
+        pre_inv = s.preflight_transform(cand_doc_inv, set(), {})
+        self.assertEqual(pre_inv['status'], 'BLOCK')
+        self.assertNotIn('can_proceed', pre_inv)
+        self.assertEqual(s.document.dumps(), doc_before)
+        self.assertEqual(len(s.undo_stack), u_before)
+        self.assertEqual(s.selected_patterns, sel_patterns_before)
+        self.assertEqual(s.selected_points, sel_points_before)
+
+        s_tiny = Session()
+        s_tiny.add([(0.0, 0.0), (0.2, 0.0), (0.2, 0.3), (0.0, 0.3)])
+        s_tiny.add([(0.3, 0.0), (0.5, 0.0), (0.5, 0.3), (0.3, 0.3)])
+        pt1, pt2 = s_tiny.document.patterns
+        e1 = s_tiny.document.edge(pt1.id, 1)
+        e2 = s_tiny.document.edge(pt2.id, 3)
+        tiny_span = EdgeRef(e1.pattern, e1.start, e1.end, 0.1, 0.10001, e1.path)
+        s_tiny.sew(tiny_span, e2)
+        s_tiny.select_piece(pt1.id)
+        doc_tiny_before = s_tiny.document.dumps()
+        u_tiny_before = len(s_tiny.undo_stack)
+        sel_tiny_patterns = set(s_tiny.selected_patterns)
+        sel_tiny_points = set(s_tiny.selected_points)
+        cand_tiny, pre_tiny = s_tiny.build_transform_candidate('MOVE', (0.01, 0.01))
+        self.assertEqual(pre_tiny['status'], 'BLOCK')
+        self.assertIn('near zero', pre_tiny['reason'].lower())
+        self.assertNotIn('can_proceed', pre_tiny)
+        with self.assertRaises(ValueError):
+            s_tiny.move_selection(0.01, 0.01, confirm=True)
+        self.assertEqual(s_tiny.document.dumps(), doc_tiny_before)
+        self.assertEqual(len(s_tiny.undo_stack), u_tiny_before)
+        self.assertEqual(s_tiny.selected_patterns, sel_tiny_patterns)
+        self.assertEqual(s_tiny.selected_points, sel_tiny_points)
+
+        s_chain = Session()
+        s_chain.add([(0.0, 0.0), (0.2, 0.0), (0.5, 0.0), (0.5, 0.4), (0.0, 0.4)])
+        pc1 = s_chain.document.patterns[0]
+        s_chain.add([(0.7, 0.0), (1.2, 0.0), (1.2, 0.4), (0.7, 0.4)])
+        pc2 = s_chain.document.patterns[1]
+        ec1a = s_chain.document.edge(pc1.id, 0)
+        ec1b = s_chain.document.edge(pc1.id, 1)
+        ec1b_tiny = EdgeRef(ec1b.pattern, ec1b.start, ec1b.end, 0.0, 1e-6, ec1b.path)
+        ec2 = s_chain.document.edge(pc2.id, 0)
+        s_chain.sew_chains([ec1a, ec1b_tiny], [ec2], reverse=False)
+        s_chain.select_piece(pc1.id)
+        doc_chain_before = s_chain.document.dumps()
+        u_chain_before = len(s_chain.undo_stack)
+        sel_chain_patterns = set(s_chain.selected_patterns)
+        sel_chain_points = set(s_chain.selected_points)
+        cand_chain_tiny, pre_chain_tiny = s_chain.build_transform_candidate('MOVE', (0.02, 0.01))
+        self.assertEqual(pre_chain_tiny['status'], 'BLOCK')
+        self.assertIn('near zero', pre_chain_tiny['reason'].lower())
+        self.assertNotIn('can_proceed', pre_chain_tiny)
+        with self.assertRaises(ValueError):
+            s_chain.move_selection(0.02, 0.01, confirm=True)
+        self.assertEqual(s_chain.document.dumps(), doc_chain_before)
+        self.assertEqual(len(s_chain.undo_stack), u_chain_before)
+        self.assertEqual(s_chain.selected_patterns, sel_chain_patterns)
+        self.assertEqual(s_chain.selected_points, sel_chain_points)
+
+        s_order = Session()
+        s_order.add([(0.0, 0.0), (0.2, 0.0), (0.5, 0.0), (0.5, 0.4), (0.0, 0.4)])
+        po1 = s_order.document.patterns[0]
+        s_order.add([(0.7, 0.0), (1.2, 0.0), (1.2, 0.4), (0.7, 0.4)])
+        po2 = s_order.document.patterns[1]
+        eo1a = s_order.document.edge(po1.id, 0)
+        eo1b = s_order.document.edge(po1.id, 1)
+        eo2 = s_order.document.edge(po2.id, 0)
+        s_order.sew_chains([eo1a, eo1b], [eo2], reverse=False)
+        s_order.select_piece(po1.id)
+        doc_order_before = s_order.document.dumps()
+        u_order_before = len(s_order.undo_stack)
+        sel_order_patterns = set(s_order.selected_patterns)
+        sel_order_points = set(s_order.selected_points)
+
+        cand_doc_reorder = Document.loads(doc_order_before)
+        cand_doc_reorder.seams[0].chain_a = (eo1b, eo1a)
+        cand_doc_reorder.seams[0].a = eo1b
+        pre_reorder = s_order.preflight_transform(cand_doc_reorder, {po1.id}, {})
+        self.assertEqual(pre_reorder['status'], 'BLOCK')
+        self.assertIn('reorder', pre_reorder['reason'].lower())
+        self.assertNotIn('can_proceed', pre_reorder)
+        self.assertEqual(s_order.document.dumps(), doc_order_before)
+        self.assertEqual(len(s_order.undo_stack), u_order_before)
+        self.assertEqual(s_order.selected_patterns, sel_order_patterns)
+        self.assertEqual(s_order.selected_points, sel_order_points)
+
+        cand_doc_span = Document.loads(doc_order_before)
+        new_eo2 = EdgeRef(eo2.pattern, eo2.start, eo2.end, 0.1, 0.9, eo2.path)
+        cand_doc_span.seams[0].chain_b = (new_eo2,)
+        cand_doc_span.seams[0].b = new_eo2
+        pre_span = s_order.preflight_transform(cand_doc_span, {po1.id}, {})
+        self.assertEqual(pre_span['status'], 'BLOCK')
+        self.assertNotIn('can_proceed', pre_span)
+        self.assertEqual(s_order.document.dumps(), doc_order_before)
+        self.assertEqual(len(s_order.undo_stack), u_order_before)
+        self.assertEqual(s_order.selected_patterns, sel_order_patterns)
+        self.assertEqual(s_order.selected_points, sel_order_points)
+
 
 class DummyScene(SimpleNamespace):
     def get(self, key, default=None):
@@ -200,9 +490,6 @@ class DummyEditor(DesignTools):
         return None
 
     def sync_selection(self):
-        pass
-
-    def refresh_controls(self):
         pass
 
 if __name__=='__main__':

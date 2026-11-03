@@ -36,11 +36,7 @@ def minimal_layout(layout, pending=False, confirmation=False, playing=False, kep
     scale = layout.scale
     panel = layout.panel
     layout.minimal = True
-    layout.inspector = None
-    layout.inspector_collapsed = True
     layout.metrics = MinimalMetrics.resolve()
-    layout.header = Rect(round(panel.x), round(panel.y + panel.h - 32 * scale), round(panel.w), round(32 * scale))
-    layout.footer = Rect(round(panel.x), round(panel.y), round(panel.w), 0)
     tool_count = 9
     tool_pitch = min(35, max(22, (panel.h / scale - 156) / tool_count))
     dock_height = round((tool_count * tool_pitch + 50) * scale)
@@ -102,7 +98,6 @@ def minimal_layout(layout, pending=False, confirmation=False, playing=False, kep
 class MinimalCards:
     def initialize_minimal(self):
         self.minimal_ui = True
-        self.advanced_tools = False
         self.weld_manual = False
         self.card_kind = None
         self.card_anchor = None
@@ -181,9 +176,6 @@ class MinimalCards:
         self.card_anchor = anchor or self.pointer
         self.card_page = 0
         self.wear_over_offset = 0
-        self.search_active = False
-        self.context_anchor = None
-        self.settings_open = False
         if kind.startswith('LIBRARY'):
             self.refresh_library()
 
@@ -440,8 +432,9 @@ class MinimalCards:
             linked=pair_for(doc,pattern.id)
             rows.append(('TOGGLE_LINKED', 'Linked twin', 'On' if linked and linked['enabled'] else 'Off'))
             rows.append(('PAIR_ACTIONS', 'FLIP_H', 'FLIP_V', 'Flip H', 'Flip V'))
-            rows.append(('PAIR_ACTIONS', 'ROTATE_CW', 'ROTATE_CCW', 'Rotate 90°', 'Rotate -90°'))
             rows.append(('PAIR_ACTIONS', 'UNFOLD', 'DELETE_PIECE', 'Unfold', 'Delete'))
+            rows.append(('MENU', 'TRANSFORM_MENU', 'Transform', ''))
+            rows.append(('MENU', 'SELECT_MENU', 'Select', ''))
             rows.append(('RESET_LAYOUT', 'Reset to 2D layout', ''))
         elif kind == 'CANVAS_MENU':
             title = 'Garment & View'
@@ -452,6 +445,7 @@ class MinimalCards:
             rows.append(('MENU', 'MENU_GARMENT', 'Garment settings', getattr(doc, 'preset', 'COTTON').title()))
             rows.append(('CHOICES', 'Mesh density', ('INSP_GARMENT_DENSITY', DENSITY, self.named_choice(scene.dd_spacing, DENSITY))))
             rows.append(('CHOICES', 'Quality', ('INSP_QUALITY', QUALITY, self.named_choice(scene.dd_quality, QUALITY))))
+            rows.append(('MENU', 'SELECT_MENU', 'Select', ''))
             rows.append(('INSP_FIT', 'Fit design', 'Home'))
         elif kind == 'POINT':
             title = 'Point'
@@ -464,20 +458,25 @@ class MinimalCards:
             active_type = getattr(v, 'point_type', 'CORNER').title() if v else 'Corner'
             rows = [('CHOICES', 'Point type', ('POINT_TYPE', ('Corner', 'Smooth', 'Auto'), active_type)),
                     ('SLIDER', 'dd_point_x', 'X position'),
-                    ('SLIDER', 'dd_point_y', 'Y position')]
+                    ('SLIDER', 'dd_point_y', 'Y position'),
+                    ('PAIR_ACTIONS', 'TRANSFORM_MENU', 'SELECT_MENU', 'Transform', 'Select')]
             if len(self.session.point_selection) > 1:
                 rows.append(('MERGE', 'Merge selected points', ''))
         elif kind == 'EDGE':
             title = 'Edge'
             rows = [('SLIDER', 'dd_segment_length', 'Exact length'),
-                    ('SPLIT', 'Split edge', ''),
-                    ('PAIR_ACTIONS', 'UNFOLD', 'MIRROR_SEW', 'Unfold', 'Mirror')]
+                    ('PAIR_ACTIONS', 'BEND_EDGE', 'SPLIT', 'Bend', 'Split'),
+                    ('PAIR_ACTIONS', 'UNFOLD', 'MIRROR_SEW', 'Unfold', 'Mirror'),
+                    ('PAIR_ACTIONS', 'TRANSFORM_MENU', 'SELECT_MENU', 'Transform', 'Select')]
         elif kind == 'INTERNAL_EDGE':
             title = 'Internal edge'
             rows = [('SLIDER', 'dd_segment_length', 'Exact length'),
+                    ('BEND_EDGE', 'Bend edge', ''),
                     ('SPLIT', 'Split edge', ''),
                     ('MENU', 'FOLD_MENU', 'Fold or pleat', 'Straight boundary-to-boundary path'),
-                    ('CUT', 'Cut along path', '')]
+                    ('CUT', 'Cut along path', ''),
+                    ('MENU', 'TRANSFORM_MENU', 'Transform', ''),
+                    ('MENU', 'SELECT_MENU', 'Select', '')]
             if pattern and pattern.path(self.session.path).closed:
                 rows.append(('TRACE', 'Trace as piece', ''))
         elif kind == 'FOLD':
@@ -545,12 +544,15 @@ class MinimalCards:
             pieces, points = self.session.selection_counts()
             if pieces > 0 and points > 0:
                 title = f'{pieces} pieces, {points} points'
-                rows = [('DELETE', 'Delete', 'Del')]
+                rows = [('MENU', 'TRANSFORM_MENU', 'Transform', ''),
+                        ('MENU', 'SELECT_MENU', 'Select', ''),
+                        ('DELETE', 'Delete', 'Del')]
             elif pieces > 0:
                 title = f'{pieces} pieces'
                 rows = [('DUPLICATE', 'Duplicate', 'Shift+D'),
                         ('PAIR_ACTIONS', 'FLIP_H', 'FLIP_V', 'Flip H', 'Flip V'),
-                        ('PAIR_ACTIONS', 'ROTATE_CW', 'ROTATE_CCW', 'Rotate 90°', 'Rotate -90°'),
+                        ('MENU', 'TRANSFORM_MENU', 'Transform', ''),
+                        ('MENU', 'SELECT_MENU', 'Select', ''),
                         ('MENU', 'PIECE_FABRIC_MENU', 'Fabric', ''),
                         ('MENU', 'PIECE_DENSITY_MENU', 'Mesh density', ''),
                         ('DELETE', 'Delete', 'Del')]
@@ -574,7 +576,8 @@ class MinimalCards:
                 if self.session.can_merge_selected_points():
                     rows.append(('MERGE', 'Merge points', 'M'))
                 rows.append(('PAIR_ACTIONS', 'FLIP_H', 'FLIP_V', 'Flip H', 'Flip V'))
-                rows.append(('PAIR_ACTIONS', 'ROTATE_CW', 'ROTATE_CCW', 'Rotate 90°', 'Rotate -90°'))
+                rows.append(('MENU', 'TRANSFORM_MENU', 'Transform', ''))
+                rows.append(('MENU', 'SELECT_MENU', 'Select', ''))
                 rows.append(('DELETE', 'Delete', 'Del'))
         elif kind == 'CUT_RECOVERY':
             title = 'Crossing cut'
@@ -585,12 +588,49 @@ class MinimalCards:
             if preview['can_retry']:
                 rows.append(('CUT_RETRY', 'Split and retry', f"{preview['split_count']} splits"))
             rows.append(('CANCEL_CUT', 'Back to editing', ''))
+        elif kind == 'SELECT_MENU':
+            title = 'Select'
+            cur_target = getattr(self.session, 'acquisition_target', 'PIECES').title()
+            tgt_display = 'Internal paths' if cur_target in {'Paths', 'Internal Paths'} else cur_target
+            rows = [('CHOICES', 'Area target', ('SET_SELECT_TARGET', ('Pieces', 'Points', 'Edges', 'Internal paths'), tgt_display)),
+                    ('SELECT_BOX', 'Box select', 'Drag'),
+                    ('SELECT_LASSO', 'Lasso select', 'Loop'),
+                    ('SELECT_CONNECTED_PATH', 'Connected path', 'Ctrl+L'),
+                    ('SELECT_CONNECTED_SEWN', 'Sewn pieces', 'Topology'),
+                    ('SELECT_INVERT', 'Invert selection', 'Ctrl+I'),
+                    ('SELECT_ALL', 'Select all', 'A'),
+                    ('SELECT_CLEAR', 'Clear selection', 'Alt+A')]
+        elif kind == 'TRANSFORM_MENU':
+            title = 'Transform'
+            rows = [('TRANSFORM_MOVE', 'Move', 'Arrows'),
+                    ('TRANSFORM_ROTATE', 'Rotate', 'Degrees'),
+                    ('TRANSFORM_SCALE', 'Uniform scale', 'Factor or %'),
+                    ('TRANSFORM_SET_PIVOT', 'Set pivot', 'Cursor click'),
+                    ('TRANSFORM_RESET_PIVOT', 'Reset pivot', 'Center'),
+                    ('PAIR_ACTIONS', 'FLIP_H', 'FLIP_V', 'Flip H', 'Flip V')]
+        elif kind == 'SEAM_WARNING':
+            pre = getattr(self, 'pending_transform', None) or {}
+            report = pre.get('report') if isinstance(pre, dict) and 'report' in pre else pre
+            seam_warning = bool(report.get('details'))
+            title = 'Seam warning' if seam_warning else 'Curve warning'
+            rows = []
+            if seam_warning:
+                rows.append(('INFO', 'Mismatch', f"{report.get('diff_cm', 0.0):.2f} cm ({report.get('percent', 0.0):.4f}%)"))
+            if report.get('curve_deviation_mm') is not None:
+                rows.append(('INFO', 'Curve change', f"{report['curve_deviation_mm']:.3f} mm"))
+                if report.get('exact_candidate') is not None:
+                    rows.append(('CONVERT_AUTO', 'Convert to smooth', f"{report.get('auto_point_count', 0)} AUTO pts"))
+            rows.append(('PAIR_ACTIONS', 'CANCEL_TRANSFORM', 'APPLY_MISMATCH', 'Cancel',
+                         'Apply with mismatch' if seam_warning else 'Apply with change'))
+            if report.get('can_include_sewn'):
+                rows.append(('INCLUDE_SEWN', 'Include sewn pieces', 'Closure'))
         else:
             return None
 
         scale = self.canvas_layout.scale
         is_menu = kind in {'CANVAS_MENU', 'DRAW_CHOOSER', 'INTERNAL_CHOOSER', 'PIN_CHOOSER',
-                           'PIECE_SIMULATION', 'PIECE_DENSITY', 'LIBRARY_TAGS', 'EDIT'} or kind.endswith('_MENU')
+                           'PIECE_SIMULATION', 'PIECE_DENSITY', 'LIBRARY_TAGS', 'EDIT',
+                           'SELECT_MENU', 'TRANSFORM_MENU', 'SEAM_WARNING'} or kind.endswith('_MENU')
         row_widths = []
         for r in rows:
             r_key = r[0]
@@ -789,36 +829,37 @@ class MinimalCards:
                 return 'Click edges in order'
             return 'Pick the matching edge' if self.pending_edge else 'Click two edges to sew'
         if self.tool == 'SELECT':
-            pieces, points = self.session.selection_counts()
-            if pieces > 0 and points > 0:
-                p_str = f"{pieces} piece{'s' if pieces != 1 else ''}"
-                pt_str = f"{points} point{'s' if points != 1 else ''}"
-                return f"{p_str}, {pt_str} · Drag to move"
-            if pieces > 0:
-                p_str = f"{pieces} piece{'s' if pieces != 1 else ''}"
-                return f"{p_str} · Drag to move"
-            if points > 0:
-                pt_types = []
-                for pid, path_id, idx in self.session.selected_points:
-                    pat = self.session.document.find(pid)
-                    if pat:
-                        try:
-                            v = pat.path(path_id).vertices[idx]
-                            pt_types.append(getattr(v, 'point_type', 'CORNER').title())
-                        except (IndexError, ValueError):
-                            pass
-                if not pt_types and self.session.selected and self.session.corner is not None:
-                    pat = self.session.document.find(self.session.selected)
-                    if pat:
-                        try:
-                            v = pat.path(self.session.path).vertices[self.session.corner]
-                            pt_types.append(getattr(v, 'point_type', 'CORNER').title())
-                        except (IndexError, ValueError):
-                            pass
-                type_str = pt_types[0] if (pt_types and len(set(pt_types)) == 1) else ('Mixed' if len(set(pt_types)) > 1 else 'Corner')
-                pt_str = f"{points} point{'s' if points != 1 else ''} ({type_str})"
-                return f"{pt_str} · Drag to move"
-            return 'Click to select / Drag to box select'
+            tgt = getattr(self.session, 'acquisition_target', 'PIECES').title()
+            if self.gesture and self.gesture.get('mode') == 'BOX_SELECT':
+                w0 = self.gesture.get('world_start', (0, 0))
+                c = self.canvas_layout.canvas
+                w1 = self.view.world(self.pointer, c)
+                rule = 'Fully inside' if w1[0] >= w0[0] else 'Touching'
+                mod = ' (Add)' if self.gesture.get('shift') else (' (Subtract)' if self.gesture.get('alt') else '')
+                return f"Box select: {rule}{mod} \u00b7 Target: {tgt}"
+            if self.gesture and self.gesture.get('mode') == 'LASSO_SELECT':
+                mod = ' (Add)' if self.gesture.get('shift') else (' (Subtract)' if self.gesture.get('alt') else '')
+                return f"Lasso select{mod} \u00b7 Target: {tgt}"
+            if self.gesture and self.gesture.get('mode') == 'SET_PIVOT':
+                label = self.gesture.get('label', 'Cursor')
+                return f"Set pivot: {label} \u00b7 Click to place \u00b7 Esc to cancel"
+            if self.gesture and self.gesture.get('mode') == 'TRANSFORM':
+                kind = self.gesture.get('kind', 'MOVE').title()
+                txt = self.gesture.get('numeric_text', '')
+                val_info = f": {txt}" if txt else ""
+                return f"Transform {kind}{val_info} \u00b7 Enter commits \u00b7 Esc cancels"
+            if self.session.has_selection():
+                pieces, points = self.session.selection_counts()
+                edges = len(self.session.selected_edges)
+                paths = len(self.session.selected_paths)
+                parts = []
+                if pieces: parts.append(f"{pieces} piece{'s' if pieces != 1 else ''}")
+                if points: parts.append(f"{points} point{'s' if points != 1 else ''}")
+                if edges: parts.append(f"{edges} edge{'s' if edges != 1 else ''}")
+                if paths: parts.append(f"{paths} path{'s' if paths != 1 else ''}")
+                summary = ', '.join(parts)
+                return f"{summary} \u00b7 Drag to move \u00b7 Knob rotates \u00b7 Corners scale \u00b7 Shift snaps \u00b7 Arrows nudge"
+            return f"Select: Target {tgt} \u00b7 Drag to box select \u00b7 Right-click for options"
         return {'SELECT': 'Drag points or pieces / Right-click for options',
                 'RECTANGLE': 'Drag to draw a panel / Shift for a square',
                 'ELLIPSE': 'Drag to draw an ellipse / Shift for a circle',
@@ -838,8 +879,6 @@ class MinimalCards:
         self._scene.dd_fabric_density = vals['density']
 
     def apply_local_setting(self, key):
-        if not self.minimal_ui:
-            return super().apply_local_setting(key)
         if key == 'dd_weld_distance':
             self.weld_manual = True
         if key in {'dd_fabric_structural', 'dd_fabric_shear', 'dd_fabric_bending', 'dd_fabric_density'}:
@@ -1127,9 +1166,24 @@ class MinimalCards:
         elif key == 'TRACE':
             self.perform_action('TRACE')
             self.card_kind = None
-        elif key in {'FLIP_H', 'FLIP_V', 'ROTATE_CW', 'ROTATE_CCW'}:
+        elif key in {'FLIP_H', 'FLIP_V'}:
             self.perform_action(key)
+            if not getattr(self, 'pending_transform', None):
+                self.card_kind = None
+        elif key.startswith('SET_SELECT_TARGET_'):
+            choice = key.removeprefix('SET_SELECT_TARGET_')
+            tgt = 'PATHS' if choice == 'Internal paths' else choice.upper()
+            self.session.acquisition_target = tgt
+            self.message = f'Selection target: {choice}.'
             self.card_kind = None
+        elif key in {'SELECT_BOX', 'SELECT_LASSO', 'SELECT_CONNECTED_PATH', 'SELECT_CONNECTED_SEWN',
+                     'SELECT_INVERT', 'SELECT_ALL', 'SELECT_CLEAR',
+                     'TRANSFORM_MOVE', 'TRANSFORM_ROTATE', 'TRANSFORM_SCALE',
+                     'TRANSFORM_SET_PIVOT', 'TRANSFORM_RESET_PIVOT', 'BEND_EDGE',
+                     'APPLY_MISMATCH', 'CANCEL_TRANSFORM', 'INCLUDE_SEWN', 'CONVERT_AUTO'}:
+            self.design_action(key)
+            if not getattr(self, 'pending_transform', None):
+                self.card_kind = None
         elif key.startswith('SEAM_SHRINK_'):
             shrink = int(key.removeprefix('SEAM_SHRINK_').removesuffix('%'))
             self.run_edit(lambda: self.session.set_seam_shrink(self.seam_selected, shrink), f'Seam Shrink set to {shrink}%.')
@@ -1208,6 +1262,8 @@ class MinimalCards:
         elif key == 'KEEP_RETRY':
             self.perform_action('KEEP')
             self.card_kind = None
+        elif key in {'FINISH_DRAFT', 'CANCEL_DRAFT'}:
+            self.perform_action(key)
 
     def minimal_event(self, context, event):
         if self.library_edit:
@@ -1220,7 +1276,7 @@ class MinimalCards:
             if result is not None:
                 return result
         if self.setting_drag:
-            return self.controls_event(context, event)
+            return self.setting_drag_event(event)
         card = next((c for c in self.visible_cards() if c[0].contains(*point)), None)
         press = event.value == 'PRESS'
         if self.gesture or (press and event.type == 'ESC' and (self.draft or self.free_clicks)):
@@ -1236,7 +1292,10 @@ class MinimalCards:
             self.perform_action('REDO' if redo else 'UNDO')
             return {'RUNNING_MODAL'}
         if press and event.type == 'ESC' and self.card_kind:
-            self.card_kind = None
+            if self.card_kind == 'SEAM_WARNING' or getattr(self, 'pending_transform', None):
+                self.cancel_transform()
+            else:
+                self.card_kind = None
             return {'RUNNING_MODAL'}
         pointer_event = event.type in {'LEFTMOUSE', 'RIGHTMOUSE', 'MIDDLEMOUSE', 'MOUSEMOVE',
                                        'WHEELUPMOUSE', 'WHEELDOWNMOUSE'}
@@ -1354,7 +1413,7 @@ class MinimalCards:
                         action1, action2 = row[1], row[2]
                         chosen = action1 if point[0] < rect.x + rect.w / 2 else action2
                         self.minimal_action(chosen)
-                        if chosen not in {'REFERENCE_IMAGE', 'MENU_LIBRARY', 'BODY_CHANGE','LIBRARY_SAVE'}:
+                        if chosen not in {'REFERENCE_IMAGE', 'MENU_LIBRARY', 'BODY_CHANGE','LIBRARY_SAVE'} and not getattr(self, 'pending_transform', None):
                             self.card_kind = None
                     elif key == 'SLIDER':
                         label = row[1]
@@ -1365,7 +1424,7 @@ class MinimalCards:
                     elif key != 'INFO':
                         action = row[1] if key == 'MENU' else key
                         self.minimal_action(action)
-                        if not action.startswith(('LOAD_','LIBRARY_','PAGE_LIBRARY')) and action not in {'BODY_CHANGE', 'GARMENT_FABRIC_MENU', 'PIECE_FABRIC_MENU', 'PIECE_DENSITY_MENU', 'PIECE_SIMULATION_MENU', 'EDIT_ACTIONS', 'SCROLL_WEAR_OVER', 'PAGE_BODY', 'NAME', 'REFERENCE_IMAGE', 'MENU_LIBRARY', 'MENU_GARMENT'}:
+                        if not action.startswith(('LOAD_','LIBRARY_','PAGE_LIBRARY')) and action not in {'BODY_CHANGE', 'GARMENT_FABRIC_MENU', 'PIECE_FABRIC_MENU', 'PIECE_DENSITY_MENU', 'PIECE_SIMULATION_MENU', 'EDIT_ACTIONS', 'SCROLL_WEAR_OVER', 'PAGE_BODY', 'NAME', 'REFERENCE_IMAGE', 'MENU_LIBRARY', 'MENU_GARMENT'} and not getattr(self, 'pending_transform', None):
                             self.card_kind = None
                     break
             return {'RUNNING_MODAL'}
