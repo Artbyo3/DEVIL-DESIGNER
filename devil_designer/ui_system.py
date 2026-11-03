@@ -24,7 +24,6 @@ except ImportError:
             return self.x <= x <= self.x + self.w and self.y <= y <= self.y + self.h
 
 BG_BASE = (0.098, 0.114, 0.133, 1.0)
-BG_PANEL = (0.137, 0.161, 0.188, 1.0)
 BG_ELEVATED = (0.188, 0.220, 0.251, 1.0)
 BG_WELL = (0.078, 0.094, 0.110, 1.0)
 
@@ -45,9 +44,6 @@ SELECTION = (1.0, .635, .337, 1.0)
 TEXT_ON_ACCENT = (.047, .145, .137, 1.0)
 
 RADIUS_WINDOW = 4.0
-RADIUS_DOCK = 4.0
-RADIUS_DOCK_ITEM = 4.0
-RADIUS_CARD = 4.0
 RADIUS_CONTROL = 4.0
 RADIUS_BADGE = 2.0
 

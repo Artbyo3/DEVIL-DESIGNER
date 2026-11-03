@@ -11,9 +11,7 @@ class OverlayControls:
         self.pending_simulation = False
         self.confirm_action = None
         self.confirm_message = ''
-        self.stage = 'DRAFT'
         self.numeric = None
-        self.window_gesture = None
         self.setting_drag = None
 
     def perform_action(self, action, confirmed=False):
@@ -43,8 +41,6 @@ class OverlayControls:
                 prompt = 'Replace current garment with this starter? You can undo this change.'
             elif action == 'LIBRARY_LOAD' and self.session.document.patterns:
                 prompt = 'Replace this garment with the library item? You can undo the source change.'
-            elif action == 'RESET':
-                prompt = 'Discard this drape and restore the positioned panels?'
             elif action == 'LIBRARY_SAVE':
                 import re
                 from . import library
@@ -55,15 +51,8 @@ class OverlayControls:
                 self.confirm_action = action
                 self.confirm_message = self.message = prompt
                 return False
-        tools = {'SELECT', 'POLYGON', 'RECTANGLE', 'ELLIPSE', 'INTERNAL', 'DART', 'KNIFE',
-                 'SEW', 'FREE_SEW', 'PLACE', 'PIN', 'TACK'}
-        if action in tools:
-            return self.choose_tool(action)
         if action == 'CANCEL_DRAFT':
             self.cancel_gesture()
-            self.chain_a = []
-            self.chain_b = []
-            self.chain_stage = None
             self.free_clicks = []
             self.dart_base = []
             self.pending_place = self.pending_tack = None
@@ -71,12 +60,8 @@ class OverlayControls:
         elif action == 'FINISH_DRAFT':
             if self.draft:
                 self.finish_polygon(self.tool != 'INTERNAL')
-            elif self.chain_stage:
-                self.design_action('CHAIN_SEW')
-        elif action in {'BUILD', 'ARRANGE', 'SIMULATE', 'STOP', 'RESET', 'KEEP', 'DEMO'}:
+        elif action in {'SIMULATE', 'KEEP'}:
             return self.workflow_action(action)
-        elif action == 'VIEW_3D':
-            self.reveal_3d()
         elif action in {'UNDO', 'REDO'}:
             if self.draft:
                 if action == 'UNDO':
@@ -104,40 +89,24 @@ class OverlayControls:
                 self.pending_edge = None
             else:
                 self.run_edit(self.session.delete, 'Selection deleted.')
-        elif action == 'FIT':
-            self.fit()
-        elif action == 'SNAP':
-            self.snap = not self.snap
-        elif action in {'REFERENCE', 'LENGTHS'}:
-            key = 'dd_reference_visible' if action == 'REFERENCE' else 'dd_lengths_visible'
-            setattr(self._scene, key, not getattr(self._scene, key))
-        elif action == 'HELP':
-            self.message = 'Tools: V P R E I D J K T. Ctrl F finds every action and setting. Escape cancels.'
-        elif action == 'GUIDED_NEXT':
-            self.advance_stage()
         else:
             if self.design_action(action) is False:
                 return False
         return True
 
     def action_blocker(self, action):
-        if action == 'STOP':
-            return ''
-        if getattr(self, 'pending_release', False) and action in {'KEEP', 'RESET', 'SIMULATE'}:
+        if getattr(self, 'pending_release', False) and action in {'KEEP', 'SIMULATE'}:
             return 'Applying fold... please wait.'
         if self.confirm_action:
             return 'Confirm the pending action or choose Cancel first.'
-        if self.gesture and action not in {'CANCEL_DRAFT', 'HELP'}:
+        if self.gesture and action != 'CANCEL_DRAFT':
             return 'Finish the current drag or press Escape before another edit.'
-        if action == 'START_PANEL' and self.session.document.patterns:
-            return 'The starter panel is available for an empty garment. Draw or duplicate another piece instead.'
-        if self.draft and action not in {'FINISH_DRAFT', 'CANCEL_DRAFT', 'UNDO', 'REDO',
-                                        'FIT', 'SNAP', 'LENGTHS', 'REFERENCE', 'HELP', 'POINT_APPLY'}:
+        if self.draft and action not in {'FINISH_DRAFT', 'CANCEL_DRAFT', 'UNDO', 'REDO', 'POINT_APPLY'}:
             return 'Finish drawing or cancel before editing other garment data.'
-        if action in {'BUILD', 'ARRANGE', 'SIMULATE', 'STOP', 'RESET', 'KEEP', 'DEMO'}:
+        if action in {'SIMULATE', 'KEEP'}:
             return self.workflow_blocker('STOP' if action == 'SIMULATE' and bpy.context.screen.is_animation_playing else action)
         selected = self.session.document.find(self.session.selected)
-        if action in {'DELETE_PIECE', 'DUPLICATE', 'OFFSET', 'UNFOLD', 'MIRROR_SEW', 'CUT', 'TRACE', 'WRAP', 'PLACE', 'PRESET', 'FLIP_H', 'FLIP_V'} or action.startswith('SET_PRESET_'):
+        if action in {'DELETE_PIECE', 'DUPLICATE', 'UNFOLD', 'MIRROR_SEW', 'CUT', 'TRACE', 'PLACE', 'FLIP_H', 'FLIP_V'}:
             if selected is None and not self.session.selected_patterns and not self.session.selected_points and self.session.corner is None:
                 return 'Select a piece on the canvas first.'
         if action == 'CURVE' and self.session.corner is None and not self.session.selected_points:
@@ -146,14 +115,10 @@ class OverlayControls:
             return 'Select an edge on the canvas first.'
         if action == 'MERGE' and not self.session.can_merge_selected_points() and len(self.session.point_selection) < 2:
             return 'Shift-click at least two points to merge.'
-        if action == 'CHAIN_SEW' and (not self.chain_a or not self.chain_b):
-            return 'Pick an edge chain for both side A and side B first.'
         if action == 'LIBRARY_SAVE' and not self.session.document.patterns:
             return 'Create a garment before saving it.'
-        if action in {'LIBRARY_LOAD', 'LIBRARY_PREV', 'LIBRARY_NEXT'} and not self.library_items:
+        if action == 'LIBRARY_LOAD' and not self.library_items:
             return 'The local garment library is empty.'
-        if action == 'REMOVE_ANCHOR' and not any(anchor.id == self.selected_anchor for anchor in self.session.document.anchors):
-            return 'Select a pin or tack using K or T first.'
         return ''
 
     def set_window(self, rect):
@@ -251,7 +216,7 @@ class OverlayControls:
                 if state.get('absolute'):
                     track = state['absolute']
                     value = spec.low + (spec.high - spec.low) * max(0, min(1, (x - track.x) / track.w))
-                setattr(self._scene, key, int(round(value)) if spec.integer else round(value, 8))
+                setattr(self._scene, key, round(value, 8))
                 return RUNNING
             if event.type == 'LEFTMOUSE' and event.value == 'RELEASE':
                 self.setting_drag = None

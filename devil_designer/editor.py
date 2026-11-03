@@ -46,7 +46,6 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
 
         self._stored = self._scene.dd_document
         history.restore(self.session, self._scene.dd_history)
-        self.stage = 'DRAFT'
         self.initialize_controls()
         self.initialize_minimal()
         self.initialize_design()
@@ -68,7 +67,6 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         self.pending_release = False
         self.release_frame = None
         self.shape_save_pending = False
-        self.shape_committed_frame = None
         self.fit_overlay = FitOverlay(self)
         from .state_display import StateOverlay
         self.state_overlay = StateOverlay(self)
@@ -90,58 +88,6 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         _active = self
         self._area.tag_redraw()
         return {'RUNNING_MODAL'}
-
-    def set_stage(self, stage):
-        if self.draft or self.gesture:
-            self.message = "Finish or cancel the current draft before changing stages."
-            return False
-        self.stage = stage
-        if stage == 'DRAFT':
-            if self.tool not in {'SELECT', 'POLYGON', 'RECTANGLE', 'ELLIPSE', 'INTERNAL', 'DART'}:
-                self.choose_tool('SELECT')
-        elif stage == 'SEW':
-            self.choose_tool('SEW')
-        elif stage == 'ARRANGE':
-            if self.tool not in {'SELECT', 'PLACE', 'PIN', 'TACK'}:
-                self.choose_tool('SELECT')
-        elif stage == 'SIMULATE':
-            self.choose_tool('SELECT')
-        elif stage == 'LIBRARY':
-            self.choose_tool('SELECT')
-            self.refresh_library()
-        self.canvas_layout = self.make_layout()
-        self.message = {
-            'DRAFT': "Drafting workspace. Reshape, add points, or draw pieces.",
-            'SEW': "Sewing workspace. Pair edges to create seams before arranging.",
-            'ARRANGE': "Arrangement workspace. Position panels in 3D around the avatar.",
-            'SIMULATE': "Simulation workspace. Drape clothing with Blender cloth physics.",
-            'LIBRARY': "Library workspace. Save and load editable garments."
-        }.get(stage, "Ready.")
-        return True
-
-    def advance_stage(self):
-        if self.draft or self.gesture:
-            self.message = 'Finish or cancel the current draft before continuing.'
-            return
-        if not self.session.document.patterns:
-            self.set_stage('DRAFT')
-            self.choose_tool('RECTANGLE')
-            self.message = 'Drag across the canvas to draw your first rectangle.'
-            return
-        if self.stage == 'DRAFT':
-            self.set_stage('SEW')
-        elif self.stage == 'SEW':
-            if self.workflow_action('BUILD'):
-                self.set_stage('ARRANGE')
-        elif self.stage == 'ARRANGE':
-            self.set_stage('SIMULATE')
-        elif self.stage == 'SIMULATE':
-            if bpy.context.screen.is_animation_playing:
-                self.workflow_action('STOP')
-            else:
-                self.workflow_action('SIMULATE')
-        elif self.stage == 'LIBRARY':
-            self.design_action('LIBRARY_SAVE')
 
     def reveal_3d(self):
         self.full = False
@@ -181,9 +127,8 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
             system_scale = getattr(bpy.context.preferences.view, 'ui_scale', 1.0)
         scale = max(.5, system_scale)
         position = tuple(v * scale for v in self.window_rect) if self.window_rect else None
-        stage = getattr(self, 'stage', 'DRAFT')
         layout = Layout(region.width, region.height, scale, self.full, max(0, left), max(0, right), top, bottom,
-                        position=position, stage=stage)
+                        position=position)
         minimal_layout(layout, bool(self.draft), bool(self.confirm_action), bpy.context.screen.is_animation_playing,
                        kept=bool(layering.kept_garments(self._scene)))
         return layout
@@ -285,9 +230,6 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         self.seam_selected = None
         self.seam_hover = None
         self.selected_anchor = None
-        self.chain_a = []
-        self.chain_b = []
-        self.chain_stage = None
         self.free_clicks = []
         self.dart_base = []
         self.pending_place = self.pending_tack = None
@@ -312,15 +254,11 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         if sewing_mode_changed:
             self.selected_anchor = None
             self.seam_selected = None
-            self.chain_stage = None
-            self.chain_a = []
-            self.chain_b = []
             self.free_clicks = []
         if name == 'SEW':
             self._scene.dd_free_sewing = free
         self.pending_place = self.pending_tack = None
         if name != 'SEW':
-            self.chain_stage = None
             self.free_clicks = []
         if name != 'DART':
             self.dart_base = []
@@ -366,10 +304,8 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
             return ''
         if self.draft or self.gesture:
             return 'Finish or cancel the current draft before building clothing.'
-        if button in {'BUILD', 'ARRANGE', 'SIMULATE'} and not self.session.document.patterns:
+        if button == 'SIMULATE' and not self.session.document.patterns:
             return 'Create a pattern before building or simulating clothing.'
-        if button == 'ARRANGE' and self._scene.dd_avatar is None:
-            return 'Choose an avatar in Body & placement first, or search for Avatar body.'
         if button in {'KEEP', 'RESET'} and not any(
                 obj.get('dd_owner') == 'Artbyo3/DEVIL-DESIGNER' and obj.get('dd_kind') == 'simulation'
                 for obj in self._scene.objects):
@@ -410,17 +346,12 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
             return False
         if button == 'SIMULATE' and not self.prepare_simulation():
             return False
-        names = {'BUILD': 'build_panels', 'ARRANGE': 'arrange', 'SIMULATE': 'simulate',
-                 'STOP': 'stop', 'RESET': 'reset', 'KEEP': 'keep_drape', 'DEMO': 'demo'}
+        names = {'SIMULATE': 'simulate', 'STOP': 'stop', 'RESET': 'reset', 'KEEP': 'keep_drape'}
         try:
             if button == 'SIMULATE':
                 from . import tack_binding
                 self.session.commit(lambda: tack_binding.migrate_anchors(bpy.context, self.session.document))
                 self.persist()
-            if button == 'ARRANGE':
-                self.show_card('ARRANGEMENT')
-                self.message = 'Choose a named starting layout; adjust placements before simulation.'
-                return True
             self._scene.pop('dd_last_error', None)
             op = getattr(bpy.ops.devil_designer, names[button])
             result = op('EXEC_DEFAULT')
@@ -430,20 +361,14 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                     self.shaping = None
                 if self._scene.dd_document != self._stored:
                     self.reconcile_generated_document()
-                if button == 'DEMO':
-                    self.update_reference(bpy.context, align=True)
-                    self.fit()
                 if button == 'SIMULATE':
                     self.choose_tool('SELECT')
                     self.reveal_3d()
-                self.message = {'DEMO': 'Sewing demo ready. Simulate to drape the bodice around the torso.',
-                                'BUILD': 'Panels ready. Use G / R in the 3D scene to arrange them.',
-                                'ARRANGE': 'Panels arranged around the body. Adjust placement before simulation.',
-                                'SIMULATE': 'Simulation running. Stop on the frame you want to keep.',
+                self.message = {'SIMULATE': 'Simulation running. Stop on the frame you want to keep.',
                                 'STOP': 'Simulation paused. Keep mesh saves the current shape.',
                                 'RESET': 'Restored the positioned panels. Edit or arrange, then simulate again.',
                                 'KEEP': 'Draped mesh kept. Check the Blender report for any open seam pairs.'}[button]
-                if button in {'BUILD','SIMULATE'} and self._scene.get('dd_arrangement_message'):
+                if button == 'SIMULATE' and self._scene.get('dd_arrangement_message'):
                     self.message+=' '+self._scene['dd_arrangement_message']
                 return True
             err = self._scene.pop('dd_last_error', None)
@@ -632,7 +557,7 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                 return {'RUNNING_MODAL'}
             if press and event.type == 'LEFTMOUSE':
                 action = self.canvas_layout.button(*self.pointer)
-                if action in {'CONFIRM_ACTION', 'CANCEL_ACTION', 'STOP'}:
+                if action in {'CONFIRM_ACTION', 'CANCEL_ACTION'}:
                     self.perform_action(action)
                     return {'RUNNING_MODAL'}
             if press and event.ctrl and event.type in {'Z', 'Y'}:
@@ -1306,7 +1231,6 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
             self.shaping = ShapingSession(simulations[0])
         if not self.choose_tool('SHAPE'):
             return
-        self.stage = 'SIMULATE'
         if self.full:
             self.reveal_3d()
         self.card_kind = None
@@ -1435,7 +1359,6 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         if event.type == 'TIMER':
             if getattr(self, 'pending_release', False) and context.scene.frame_current >= (self.release_frame or 0):
                 session.release(context)
-                self.shape_committed_frame = context.scene.frame_current
                 self.pending_release = False
                 self.release_frame = None
                 self.shape_start = None
@@ -1455,7 +1378,6 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
             self.shape_cursor = 'HAND'
             if context.scene.frame_current >= (self.release_frame or 0):
                 session.release(context)
-                self.shape_committed_frame = context.scene.frame_current
                 self.pending_release = False
                 self.release_frame = None
                 self.shape_start = None

@@ -42,7 +42,6 @@ def run_selection_native(op, passed):
         op.session.clear_selection()
         op.full = True
         op.tool = 'SELECT'
-        op.stage = 'DRAFT'
         op.snap = False
         op._nudge_burst = None
         op.card_kind = None
@@ -1402,8 +1401,7 @@ def run():
             def click_rect(r):click_at((r.x+r.w/2,r.y+r.h/2))
             def action(key):op.perform_action(key)
             def world(point,**extra):click_at(op.view.screen(point,op.canvas_layout.canvas),**extra)
-            scene.dd_width=.3;scene.dd_height=.4
-            action('NUM_RECT');check(len(op.session.document.patterns)==1,'numeric rectangle creates centimetre-sized pattern')
+            op.session.add([(0,0),(.3,0),(.3,.4),(0,.4)]);op.persist()
             rectangle=op.session.selected
             op.fit();op.choose_tool('SELECT')
             world((0,0),shift=True);world((.3,0),shift=True)
@@ -1424,12 +1422,11 @@ def run():
             op.choose_tool('ELLIPSE');a=op.view.screen((.5,.05),op.canvas_layout.canvas);b=op.view.screen((.8,.35),op.canvas_layout.canvas)
             op.handle_event(bpy.context,event('LEFTMOUSE',point=a));op.handle_event(bpy.context,event('MOUSEMOVE',point=b));op.handle_event(bpy.context,event('LEFTMOUSE','RELEASE',point=b))
             ellipse=op.session.selected;check(len(op.session.document.find(ellipse).vertices)==4,'ellipse tool creates four Bezier anchors')
-            op.session.selected=rectangle;op.session.path='OUTER';scene.dd_internal_mode=True
-            scene.dd_point_x=.1;scene.dd_point_y=.14;scene.dd_width=.07;scene.dd_height=.08
-            action('NUM_ELLIPSE');hole=op.session.path;action('CUT')
+            op.session.selected=rectangle;op.session.path='OUTER'
+            op.session.add_ellipse((.1,.14),(.17,.22),True);op.persist();hole=op.session.path;action('CUT')
             check(op.session.document.find(rectangle).path(hole).role=='HOLE','internal ellipse cuts a real hole')
             action('TRACE');check(len(op.session.document.patterns)==3,'trace creates an independent pattern')
-            scene.dd_internal_mode=False;op.session.selected=rectangle;op.session.path='OUTER';op.choose_tool('INTERNAL')
+            op.session.selected=rectangle;op.session.path='OUTER';op.choose_tool('INTERNAL')
             world((.04,.05));world((.08,.1));op.handle_event(bpy.context,event('RET'));action('CUT')
             check(op.session.document.find(rectangle).path(op.session.path).role=='SLIT','internal polyline can become a slit')
             op.session.selected=ellipse;op.session.path='OUTER';op.fit();op.choose_tool('DART')
@@ -1440,19 +1437,13 @@ def run():
             action('MIRROR_SEW');check(len(op.session.document.patterns)==4,'mirror with seam produces a paired reflected pattern')
             op.session.selected=rectangle;op.session.segment=op.session.document.edge(rectangle,0);action('UNFOLD')
             check(len(op.session.document.patterns)==4,'seamless Unfold replaces the source outline')
-            scene.dd_offset=.005;action('OFFSET');check(len(op.session.document.patterns)==5,'outline offset produces a new editable piece')
             op.session.add([(1.3,0),(1.6,0),(1.6,.4),(1.3,.4)]);square_a=op.session.selected
             op.session.add([(1.9,0),(2.3,0),(2.3,.3),(1.9,.3)]);square_b=op.session.selected
             op.persist();op.fit()
-            old=len(op.session.document.seams);action('CHAIN_A')
-            for i in (0,1):world(op.session.document.edge_point(op.session.document.edge(square_a,i),.5))
-            op.handle_event(bpy.context,event('RET'));world(op.session.document.edge_point(op.session.document.edge(square_b,0),.5));op.handle_event(bpy.context,event('RET'))
-            check(len(op.session.document.seams)==old+1,'custom M:N chain sewing creates a pair')
-            check('warning' in op.message.lower(),'unequal chain lengths show a nonblocking warning')
-            scene.dd_free_sewing=True
+            old=len(op.session.document.seams);op.choose_tool('FREE_SEW')
             for owner,i,t in [(square_a,2,.2),(square_a,2,.8),(square_b,2,.1),(square_b,2,.9)]:
                 world(op.session.document.edge_point(op.session.document.edge(owner,i),t))
-            check(len(op.session.document.seams)==old+2,'four-click free sewing stores partial ranges')
+            check(len(op.session.document.seams)==old+1,'four-click free sewing stores partial ranges')
             op.choose_tool('PIN');world((1.45,.2));check(len(op.session.document.anchors)==1,'pin tool creates a fabric anchor')
             op.choose_tool('TACK');world((1.56,.32));check(op.pending_tack is not None,'tack tool waits for an avatar target')
             area.spaces.active.region_3d.update()
@@ -1467,11 +1458,6 @@ def run():
             op.session.document.find(square_a).placement_mode='LEGACY';op.persist()
             action('PLACE');click_at(tuple(target))
             panels=garment.generated(scene,'panel');check(any(o.get('dd_pattern_id')==square_a for o in panels),'click placement generates and places selected panel')
-            op.session.selected=square_a;scene.dd_wrap_radius=.1;before_points=op.session.document.find(square_a).points;action('WRAP')
-            panel=next(o for o in garment.generated(scene,'panel') if o['dd_pattern_id']==square_a)
-            check(max(v.co.z for v in panel.data.vertices)>.01 and op.session.document.find(square_a).points==before_points,'wrap bends 3D fabric while preserving flat source')
-            old_preset=op.session.document.find(square_a).preset;action('PRESET')
-            check(op.session.document.find(square_a).preset!=old_preset,'per-pattern preset changes in the custom Cloth tab')
             scene.dd_library_name='UI outfit';action('LIBRARY_SAVE')
             if op.confirm_action == 'LIBRARY_SAVE':
                 click_rect(op.make_layout().buttons['CANCEL_ACTION'][0])

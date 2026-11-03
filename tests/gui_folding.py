@@ -20,7 +20,6 @@ def run(workspace, event, click, button, check, cleanup):
             workspace.session = Session(Document())
             workspace.session.add([(0, 0), (.4, 0), (.4, .5), (0, .5)])
             workspace.persist()
-            workspace.stage = 'DRAFT'
             workspace.card_kind = None
             workspace.fit()
             workspace.choose_tool('INTERNAL')
@@ -62,11 +61,8 @@ def run(workspace, event, click, button, check, cleanup):
             workspace.renderer.draw(workspace)
             check(not workspace.error_message, style + ' fold arrows render during active box selection')
             workspace.gesture = None
-            for stage in ('DRAFT', 'SEW', 'ARRANGE', 'LIBRARY'):
-                workspace.stage = stage
-                workspace.renderer.draw(workspace)
-                check(not workspace.error_message, style + ' folded content draws in ' + stage)
-            workspace.stage = 'DRAFT'
+            workspace.renderer.draw(workspace)
+            check(not workspace.error_message, style + ' folded content draws')
             workspace.minimal_action('FOLD_MENU')
             workspace.renderer.draw(workspace)
             check(not workspace.error_message, style + ' existing-fold settings menu draws')
@@ -85,7 +81,6 @@ def run(workspace, event, click, button, check, cleanup):
             workspace.renderer.draw(workspace)
             check(not workspace.error_message and not fold_records(workspace.session.document.find(workspace.session.selected)), style + ' removed-fold state returns to plain internal paths')
             workspace.perform_action('UNDO')
-            workspace.stage = 'ARRANGE'
             workspace.persist()
             workspace.renderer.draw(workspace)
             check(not workspace.error_message and bool(garment.generated(scene, 'panel')), style + ' arranged real folded geometry draws')
@@ -107,7 +102,6 @@ def run(workspace, event, click, button, check, cleanup):
         workspace.session = Session(Document())
         workspace.persist()
         workspace.choose_tool('SELECT')
-        workspace.stage = 'DRAFT'
     finally:
         body.scale = previous_scale
         scene.dd_spacing = .04
