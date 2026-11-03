@@ -13,14 +13,13 @@ from .icons import icon_spans
 from .construction import sew_reverse
 
 from .ui_system import (
-    BG_BASE, BG_PANEL, BG_ELEVATED, BG_WELL, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, ACCENT, ACCENT_BG, ACCENT_BORDER, ACCENT_HOVER, BORDER, BORDER_SUBTLE, RADIUS_WINDOW, RADIUS_BADGE, Tooltip, ComponentRenderer, SURFACE_FLOATING, SURFACE_OUTLINE, SELECTION, TEXT_ON_ACCENT, MinimalMetrics,
+    BG_BASE, BG_ELEVATED, BG_WELL, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, ACCENT, ACCENT_BG, ACCENT_BORDER, ACCENT_HOVER, BORDER, BORDER_SUBTLE, RADIUS_WINDOW, RADIUS_BADGE, Tooltip, ComponentRenderer, SURFACE_FLOATING, SURFACE_OUTLINE, SELECTION, TEXT_ON_ACCENT, MinimalMetrics,
     TRANSFORM_FRAME, TRANSFORM_HANDLE, TRANSFORM_HANDLE_HOVER, TRANSFORM_PIVOT, TRANSFORM_PREVIEW_OK,
     TRANSFORM_PREVIEW_WARN, TRANSFORM_PREVIEW_BLOCK, TRANSFORM_HANDLE_SIZE, TRANSFORM_KNOB_RADIUS, TRANSFORM_HIT_RADIUS
 )
 
 BG = BG_BASE
 SHELL = BG_BASE
-INSPECTOR = BG_PANEL
 FIELD_BG = BG_WELL
 ELEVATED = BG_ELEVATED
 BORDER = BORDER
@@ -225,110 +224,12 @@ class Renderer:
             return
         s = px_size
         cx, cy = snap_cx, snap_cy
-        if name in {'SELECT', 'cursor'}:
-            pts = [(cx - 0.34 * s, cy + 0.45 * s), (cx - 0.34 * s, cy - 0.45 * s),
-                   (cx - 0.09 * s, cy - 0.15 * s), (cx + 0.21 * s, cy - 0.45 * s),
-                   (cx + 0.34 * s, cy - 0.35 * s), (cx + 0.04 * s, cy - 0.05 * s),
-                   (cx + 0.31 * s, cy - 0.05 * s)]
-            self.lines(pts + pts[:1], color, 1.4, strip=True)
-        elif name in {'POLYGON', 'poly'}:
-            pts = [(cx - 0.35 * s, cy - 0.35 * s), (cx + 0.35 * s, cy - 0.30 * s),
-                   (cx + 0.20 * s, cy + 0.35 * s), (cx - 0.25 * s, cy + 0.30 * s)]
-            self.lines(pts + pts[:1], color, 1.3, strip=True)
-            for p in pts:
-                self.dot(p, 2.2, color)
-        elif name in {'RECTANGLE', 'rect'}:
-            r = Rect(cx - 0.38 * s, cy - 0.30 * s, 0.76 * s, 0.60 * s)
-            self.round_rect_outline(r, color, radius=3, width=1.3)
-            self.dot((r.x, r.y + r.h), 2, color)
-            self.dot((r.x + r.w, r.y), 2, color)
-        elif name in {'ELLIPSE', 'ellipse'}:
-            pts = [(cx + math.cos(i * math.tau / 24) * 0.42 * s,
-                    cy + math.sin(i * math.tau / 24) * 0.30 * s) for i in range(25)]
-            self.lines(pts, color, 1.4, strip=True)
-        elif name in {'INTERNAL', 'internal'}:
-            r = Rect(cx - 0.38 * s, cy - 0.38 * s, 0.76 * s, 0.76 * s)
-            self.rect(r, (*color[:3], 0.15))
-            self.round_rect_outline(r, (*color[:3], 0.5), radius=2, width=1)
-            pts = [(cx - 0.25 * s, cy - 0.2 * s), (cx, cy + 0.2 * s), (cx + 0.25 * s, cy)]
-            self.lines(pts, color, 1.5, strip=True)
-        elif name == 'KNIFE':
-            self.lines([(cx - .38 * s, cy + .3 * s), (cx + .38 * s, cy + .3 * s),
-                        (cx + .38 * s, cy + .08 * s)], color, 1.3, strip=True)
-            self.lines([(cx - .38 * s, cy - .08 * s), (cx - .38 * s, cy - .3 * s),
-                        (cx + .38 * s, cy - .3 * s)], color, 1.3, strip=True)
-            self.lines([(cx - .48 * s, cy - .18 * s), (cx + .48 * s, cy + .18 * s)], color, 1.7)
-        elif name in {'DART', 'dart'}:
-            pts = [(cx - 0.35 * s, cy + 0.35 * s), (cx, cy - 0.40 * s), (cx + 0.35 * s, cy + 0.35 * s)]
-            self.lines(pts, color, 1.4, strip=True)
-            self.lines([(cx - 0.42 * s, cy + 0.35 * s), (cx + 0.42 * s, cy + 0.35 * s)], color, 1.3)
-            self.dot((cx, cy - 0.40 * s), 2.2, color)
-        elif name in {'SEW', 'sew', 'FREE_SEW'}:
-            self.lines([(cx - 0.35 * s, cy + 0.28 * s), (cx + 0.35 * s, cy + 0.28 * s)], color, 1.3)
-            self.lines([(cx - 0.35 * s, cy - 0.28 * s), (cx + 0.35 * s, cy - 0.28 * s)], color, 1.3)
-            stitch = [(cx - 0.3 * s, cy + 0.28 * s), (cx - 0.1 * s, cy - 0.28 * s),
-                      (cx + 0.1 * s, cy + 0.28 * s), (cx + 0.3 * s, cy - 0.28 * s)]
-            self.lines(stitch, (*color[:3], 0.75), 1.2, strip=True)
-        elif name in {'SHAPE', 'shape'}:
+        if name == 'SHAPE':
             pts = [(cx + math.cos(i * math.tau / 16) * 0.35 * s,
                     cy + math.sin(i * math.tau / 16) * 0.35 * s) for i in range(17)]
             self.lines(pts, color, 1.4, strip=True)
             self.lines([(cx - 0.22 * s, cy), (cx + 0.22 * s, cy)], color, 1.2)
             self.lines([(cx, cy - 0.22 * s), (cx, cy + 0.22 * s)], color, 1.2)
-        elif name in {'PIN', 'pin'}:
-            self.round_rect(Rect(cx - 0.25 * s, cy + 0.18 * s, 0.5 * s, 0.18 * s), color, radius=2)
-            self.lines([(cx, cy + 0.18 * s), (cx, cy - 0.42 * s)], color, 1.5)
-            self.dot((cx, cy - 0.42 * s), 1.5, color)
-        elif name in {'TACK', 'tack'}:
-            self.dot((cx, cy), 3.5, color)
-            self.lines([(cx - 0.35 * s, cy), (cx + 0.35 * s, cy)], color, 1.2)
-            self.lines([(cx, cy - 0.35 * s), (cx, cy + 0.35 * s)], color, 1.2)
-        elif name in {'PLACE', 'place'}:
-            self.round_rect_outline(Rect(cx - 0.35 * s, cy - 0.25 * s, 0.70 * s, 0.65 * s), color, radius=3, width=1.2)
-            self.lines([(cx, cy + 0.25 * s), (cx, cy - 0.15 * s)], color, 1.4)
-            self.lines([(cx - 0.18 * s, cy - 0.05 * s), (cx, cy - 0.20 * s), (cx + 0.18 * s, cy - 0.05 * s)], color, 1.4, strip=True)
-        elif name in {'BODY', 'REFERENCE', 'body'}:
-            self.dot((cx, cy + 0.30 * s), 2.5, color)
-            body = [(cx, cy + 0.20 * s), (cx, cy - 0.15 * s), (cx - 0.25 * s, cy - 0.42 * s),
-                    (cx, cy - 0.15 * s), (cx + 0.25 * s, cy - 0.42 * s)]
-            arms = [(cx - 0.35 * s, cy + 0.05 * s), (cx, cy + 0.15 * s), (cx + 0.35 * s, cy + 0.05 * s)]
-            self.lines(body, color, 1.3, strip=True)
-            self.lines(arms, color, 1.3, strip=True)
-        elif name in {'RULER', 'LENGTHS', 'ruler'}:
-            self.lines([(cx - 0.35 * s, cy - 0.20 * s), (cx + 0.35 * s, cy + 0.25 * s)], color, 1.4)
-            for t in (-0.18, 0.0, 0.18):
-                px, py = cx + t * s, cy + (t + 0.05) * s
-                self.lines([(px, py), (px - 0.12 * s, py + 0.12 * s)], color, 1.2)
-        elif name in {'GRID', 'SNAP', 'grid'}:
-            d = 0.25 * s
-            self.lines([(cx - d, cy - 0.35 * s), (cx - d, cy + 0.35 * s)], color, 1.2)
-            self.lines([(cx + d, cy - 0.35 * s), (cx + d, cy + 0.35 * s)], color, 1.2)
-            self.lines([(cx - 0.35 * s, cy - d), (cx + 0.35 * s, cy - d)], color, 1.2)
-            self.lines([(cx - 0.35 * s, cy + d), (cx + 0.35 * s, cy + d)], color, 1.2)
-        elif name in {'FIT', 'fit'}:
-            d = 0.32 * s
-            arm = 0.14 * s
-            self.lines([(cx - d, cy + d - arm), (cx - d, cy + d), (cx - d + arm, cy + d)], color, 1.3, strip=True)
-            self.lines([(cx + d - arm, cy + d), (cx + d, cy + d), (cx + d, cy + d - arm)], color, 1.3, strip=True)
-            self.lines([(cx - d, cy - d + arm), (cx - d, cy - d), (cx - d + arm, cy - d)], color, 1.3, strip=True)
-            self.lines([(cx + d - arm, cy - d), (cx + d, cy - d), (cx + d, cy - d + arm)], color, 1.3, strip=True)
-        elif name in {'BOOK', 'LIBRARY', 'library'}:
-            self.lines([(cx, cy - 0.30 * s), (cx, cy + 0.25 * s)], color, 1.3)
-            self.lines([(cx - 0.35 * s, cy - 0.22 * s), (cx, cy - 0.30 * s), (cx + 0.35 * s, cy - 0.22 * s)], color, 1.3, strip=True)
-            self.lines([(cx - 0.35 * s, cy + 0.32 * s), (cx, cy + 0.25 * s), (cx + 0.35 * s, cy + 0.32 * s)], color, 1.3, strip=True)
-            self.lines([(cx - 0.35 * s, cy - 0.22 * s), (cx - 0.35 * s, cy + 0.32 * s)], color, 1.3)
-            self.lines([(cx + 0.35 * s, cy - 0.22 * s), (cx + 0.35 * s, cy + 0.32 * s)], color, 1.3)
-        elif name in {'MORE', 'SETTINGS', 'dots'}:
-            self.dot((cx - 0.25 * s, cy), 1.8, color)
-            self.dot((cx, cy), 1.8, color)
-            self.dot((cx + 0.25 * s, cy), 1.8, color)
-        elif name in {'CLOSE', 'close'}:
-            d = 0.26 * s
-            self.lines([(cx - d, cy - d), (cx + d, cy + d)], color, 1.5)
-            self.lines([(cx - d, cy + d), (cx + d, cy - d)], color, 1.5)
-        elif name in {'FULL', 'expand'}:
-            r = Rect(cx - 0.28 * s, cy - 0.28 * s, 0.56 * s, 0.56 * s)
-            self.round_rect_outline(r, color, radius=2, width=1.3)
 
     def fill_pattern(self, identity, world, screen, color, holes=(), view=None, canvas=None):
         key = (identity, tuple(world), tuple(tuple(loop) for loop in holes))
@@ -832,8 +733,8 @@ class Renderer:
         shortcuts = {'SELECT': 'V', 'DRAW': 'R', 'INTERNAL': 'I', 'SEW': 'J', 'PIN': 'K',
                      'SHAPE': 'Live shaping correction',
                      'UNDO': 'Ctrl Z', 'REDO': 'Ctrl Shift Z',
-                     'CLOSE': 'Esc', 'INSPECTOR_TOGGLE': 'Inspector',
-                     'GARMENT': 'Garment & Body settings', 'HELP': '?',
+                     'CLOSE': 'Esc',
+                     'GARMENT': 'Garment & Body settings',
                      'RESTORE_CANVAS': 'Expand'}
         if ed.tool == 'KNIFE':
             shortcuts['INTERNAL'] = 'N'
@@ -854,11 +755,6 @@ class Renderer:
                     self.text(rect.x + 34 * scale, rect.y + (rect.h-11*scale)/2, label, 11, ink)
                 else:
                     self.text(rect.x + rect.w / 2, rect.y + (rect.h-11*scale)/2, label, 11, ink, True)
-            elif key == 'INSPECTOR_TOGGLE':
-                self.round_rect(rect, ELEVATED if hover else FIELD_BG, radius=metrics.regular)
-                self.text(rect.x + rect.w / 2, rect.y + 8 * scale, label, 10, TEXT_SUB, True)
-            elif key == 'INSPECTOR_COLLAPSE':
-                pass
             elif key == 'RESTORE_CANVAS':
                 self.round_rect(rect, ELEVATED if hover else FIELD_BG, radius=metrics.regular)
                 self.text(rect.x + rect.w / 2, rect.y + 8 * scale, label, 10, TEXT_SUB, True)
@@ -889,11 +785,11 @@ class Renderer:
                 if is_active or hover:
                     self.round_rect(rect, ACCENT_BG if is_active else ELEVATED, radius=metrics.toolbar_item)
                 self.draw_icon(icons.get(key, key), rect.x + rect.w / 2, rect.y + rect.h / 2, min(rect.w/scale*.8,rect.h/scale-1), ACCENT if is_active else TEXT_SUB)
-            if hover and key != 'INSPECTOR_COLLAPSE':
+            if hover:
                 position = (rect.x + rect.w + 8 * scale, rect.y + rect.h / 2)
                 if key in {'SIMULATE', 'KEEP'}:
                     position = (max(layout.panel.x + 8 * scale, rect.x - (220 if blocker else 60) * scale), rect.y + rect.h + 20 * scale)
-                elif key in {'CLOSE', 'RESTORE_CANVAS', 'INSPECTOR_TOGGLE'}:
+                elif key in {'CLOSE', 'RESTORE_CANVAS'}:
                     position = (rect.x - 70 * scale, rect.y - 18 * scale)
                 elif key == 'GARMENT':
                     position = (rect.x + 20 * scale, rect.y - 18 * scale)
@@ -922,11 +818,11 @@ class Renderer:
         card_tooltip = None
         for card in cards:
             rect, title, controls = card
-            is_menu = ed.card_kind in {'CANVAS_MENU', 'DRAW_CHOOSER', 'INTERNAL_CHOOSER', 'PIN_CHOOSER', 'PIECE_SIMULATION', 'PIECE_DENSITY', 'LIBRARY_TAGS', 'EDIT'} or (bool(ed.card_kind) and ed.card_kind.endswith('_MENU'))
+            is_menu = ed.card_kind in {'CANVAS_MENU', 'DRAW_CHOOSER', 'INTERNAL_CHOOSER', 'PIN_CHOOSER', 'PIECE_SIMULATION', 'PIECE_DENSITY', 'LIBRARY_TAGS'} or (bool(ed.card_kind) and ed.card_kind.endswith('_MENU'))
             self.round_rect(rect, SURFACE_FLOATING, radius=metrics.menu_back)
             self.round_rect_outline(rect, SURFACE_OUTLINE, radius=metrics.menu_back)
             mode_rects = ed.card_mode_rects(rect)
-            mode_items = list(mode_rects.items()) if isinstance(mode_rects, dict) else [(k, r) for k, _, r in mode_rects]
+            mode_items = list(mode_rects.items())
             if not mode_items:
                 self.text(rect.x + (8 if is_menu else 14) * scale, rect.y + rect.h - (19 if is_menu else 26) * scale, title, 11 if is_menu else 13, TEXT, max_width=rect.w - 52 * scale)
             if mode_items:
@@ -1135,7 +1031,7 @@ class Renderer:
                             self.text(val_x, row_y, val_str, 10, TEXT_SECONDARY if key == 'INFO' else TEXT_MUTED, max_width=val_w)
                         elif is_nav:
                             self.draw_icon('DISCLOSURE', control.x + control.w - 14 * scale, control.y + control.h / 2, 14, MUTED)
-        if ed.confirm_action or ed.pending_edge or ed.chain_stage or ed.pending_place or ed.pending_tack or ed.dart_base:
+        if ed.confirm_action or ed.pending_edge or ed.pending_place or ed.pending_tack or ed.dart_base:
             panel = layout.panel
             message = ed.confirm_message if ed.confirm_action else ed.message
             self.text(panel.x + 76 * scale, panel.y + 28 * scale, message, 11, TEXT_SUB, max_width=panel.w - 360 * scale)
@@ -1280,9 +1176,6 @@ class Renderer:
                 self.text(label_x, label_y, label, 10, notch_col, max_width=max(80 * self.s, c.x + c.w - label_x - 8 * self.s))
                 if record and record['flags']:
                     self.text(label_x, label_y - 12 * self.s, ' · '.join(record['flags']), 10, notch_col, max_width=max(80 * self.s, c.x + c.w - label_x - 8 * self.s))
-        for edge in ed.chain_a + ed.chain_b:
-            points = [ed.view.screen(doc.edge_point(edge, edge.t0 + (edge.t1-edge.t0) * i / 16), c) for i in range(17)]
-            self.lines(points, (1, 0.82, 0.3, 1), 3, True)
         if ed.tool == 'SEW':
             h_edge = ed.design_hit_edge()
             if ed.pending_edge:
@@ -1318,7 +1211,7 @@ class Renderer:
                         st_steps = max(2, int(dist_to_cursor / (10 * self.s)))
                         for st_i in range(0, st_steps, 2):
                             self.lines([curves.mix(mid_a, ed.pointer, st_i / st_steps), curves.mix(mid_a, ed.pointer, min(st_i + 1, st_steps) / st_steps)], (1, 0.82, 0.3, 0.35), 1.2)
-            elif not ed.chain_stage and h_edge:
+            elif h_edge:
                 pts_h = [ed.view.screen(doc.edge_point(h_edge, h_edge.t0 + (h_edge.t1 - h_edge.t0) * i / 16), c) for i in range(17)]
                 self.lines(pts_h, (0.35, 0.75, 0.95, 0.75), 2.5, True)
                 self.dot(pts_h[0], 4.5, (0.35, 0.75, 0.95, 0.75))

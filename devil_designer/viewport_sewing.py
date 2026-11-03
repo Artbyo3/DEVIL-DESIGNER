@@ -283,12 +283,12 @@ class ViewportSewing:
 
     def gestures(self):
         editor = self.editor
-        key = (editor.pending_edge, tuple(editor.free_clicks), tuple(editor.chain_a), tuple(editor.chain_b), self.hover, editor.tool)
+        key = (editor.pending_edge, tuple(editor.free_clicks), self.hover, editor.tool)
         if key == self.gesture_key:
             return
         positions = []
         unit = garment.metres_per_unit(editor._scene)
-        references = list(editor.chain_a) + list(editor.chain_b)
+        references = []
         if len(editor.free_clicks) >= 2:
             from .construction import path_range
             try:references.extend(path_range(editor.session.document, *editor.free_clicks[:2]))
@@ -402,7 +402,7 @@ class ViewportSewing:
             editor.perform_action('CHAIN_CLEAR')
             editor.seam_hover = None
             return {'RUNNING_MODAL'}
-        if press and event.type == 'RIGHTMOUSE' and editor.tool == 'SEW' and (editor.pending_edge or editor.free_clicks or editor.chain_stage):
+        if press and event.type == 'RIGHTMOUSE' and editor.tool == 'SEW' and (editor.pending_edge or editor.free_clicks):
             editor.perform_action('CHAIN_CLEAR')
             return {'RUNNING_MODAL'}
         if editor.tool not in {'SEW', 'SELECT'} or event.type not in {'MOUSEMOVE', 'LEFTMOUSE', 'RIGHTMOUSE'}:
@@ -424,7 +424,7 @@ class ViewportSewing:
                 editor.message = reason
                 return {'RUNNING_MODAL'}
             return None
-        choosing = editor.tool == 'SELECT' or event.type == 'RIGHTMOUSE' or editor.tool == 'SEW' and not editor.pending_edge and not editor.free_clicks and not editor._scene.dd_free_sewing and not editor.chain_stage
+        choosing = editor.tool == 'SELECT' or event.type == 'RIGHTMOUSE' or editor.tool == 'SEW' and not editor.pending_edge and not editor.free_clicks and not editor._scene.dd_free_sewing
         if choosing and matches:
             if len(matches) != 1:
                 editor.message = 'Ambiguous: multiple seams here. Select a unique sewn span; nothing selected.'

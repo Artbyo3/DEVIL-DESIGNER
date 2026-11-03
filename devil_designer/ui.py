@@ -36,7 +36,7 @@ PROPERTIES = ('dd_document','dd_history','dd_collection','dd_avatar','dd_spacing
               'dd_quality','dd_frames','dd_self_collision','dd_pin_top','dd_weld_distance','dd_thickness',
               'dd_ui_rect','dd_reference_visible','dd_reference_view',
               'dd_reference_opacity','dd_reference_x','dd_reference_y','dd_reference_placed',
-              'dd_point_x','dd_point_y','dd_width','dd_height','dd_segment_length','dd_offset','dd_wrap_radius',
+              'dd_point_x','dd_point_y','dd_segment_length',
               'dd_sew_a0','dd_sew_a1','dd_sew_b0','dd_sew_b1','dd_free_sewing','dd_sew_reverse','dd_internal_mode',
               'dd_lengths_visible','dd_measure_visible','dd_library_name','dd_library_dir','dd_library_selected','dd_library_refit','dd_fabric',
               'dd_fabric_structural','dd_fabric_shear','dd_fabric_bending','dd_fabric_density')
@@ -56,8 +56,7 @@ def register():
     Scene.dd_reference_x = bpy.props.FloatProperty(name='Reference X (m)',default=0,min=-100,max=100)
     Scene.dd_reference_y = bpy.props.FloatProperty(name='Reference Y (m)',default=0,min=-100,max=100)
     Scene.dd_reference_placed = bpy.props.BoolProperty(default=False)
-    for key,default,low,high in [('dd_point_x',0,-100,100),('dd_point_y',0,-100,100),('dd_width',.3,.001,100),
-        ('dd_height',.4,.001,100),('dd_segment_length',.1,.0001,100),('dd_offset',.01,-1,1),('dd_wrap_radius',.06,0,10),
+    for key,default,low,high in [('dd_point_x',0,-100,100),('dd_point_y',0,-100,100),('dd_segment_length',.1,.0001,100),
         ('dd_sew_a0',0,0,1),('dd_sew_a1',1,0,1),('dd_sew_b0',0,0,1),('dd_sew_b1',1,0,1)]:\
         setattr(Scene,key,bpy.props.FloatProperty(default=default,min=low,max=high,precision=4))
     Scene.dd_free_sewing=bpy.props.BoolProperty(default=False)
