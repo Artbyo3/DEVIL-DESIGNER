@@ -156,6 +156,33 @@ jobs:
           if [ ! -s release_notes.md ]; then
             echo "Release $VERSION" > release_notes.md
           fi
+          python -c "
+          import os
+
+          tag = os.environ.get('TAG', '')
+          max_len = 1000
+
+          with open('release_notes.md', 'r', encoding='utf-8') as f:
+              notes = f.read()
+
+          if len(notes) > max_len:
+              footer = f'\n\nFull release notes: https://github.com/Artbyo3/DEVIL-DESIGNER/releases/tag/{tag}'
+              target_len = max_len - len(footer)
+              lines = notes.splitlines()
+              trimmed_lines = []
+              curr_len = 0
+              for line in lines:
+                  extra = len(line) if not trimmed_lines else (1 + len(line))
+                  if curr_len + extra <= target_len:
+                      trimmed_lines.append(line)
+                      curr_len += extra
+                  else:
+                      break
+              trimmed_body = '\n'.join(trimmed_lines).rstrip()
+              final_notes = (trimmed_body + footer) if trimmed_body else footer.lstrip()
+              with open('release_notes.md', 'w', encoding='utf-8') as f:
+                  f.write(final_notes)
+          "
           HTTP_CODE=$(curl -s -S -o blender_response.json -w "%{http_code}" -X POST "https://extensions.blender.org/api/v1/extensions/devil-designer/versions/upload/" \
             -H "Authorization:bearer $BLENDER_EXTENSIONS_TOKEN" \
             -F "version_file=@$ZIP_PATH" \
