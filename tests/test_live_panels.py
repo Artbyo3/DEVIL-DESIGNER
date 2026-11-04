@@ -175,6 +175,37 @@ class LivePanelTests(unittest.TestCase):
         self.assertEqual(expected, [list(row) for row in obj.matrix_world])
         self.assert_full_panel_equivalence()
 
+    def test_linked_twin_auto_places_on_the_mirror_point(self):
+        from mathutils import Vector
+        from devil_designer import arrangement,garment,live_panels
+        from devil_designer.linked_editing import clone_twin
+        source=self.session.document.patterns[0]
+        self.session.selected=source.id
+        twin=clone_twin(self.session)
+        self.scene.dd_document=self.session.document.dumps()
+        live_panels.sync(bpy.context)
+        def placed():
+            document=garment.document(self.scene)
+            return [(pattern.arrangement['volume'],pattern.arrangement['point']) for pattern in (document.find(source.id),document.find(twin.id))]
+        live_panels.arrange_piece(bpy.context,source.id,'chest','front_side')
+        self.assertEqual(placed(),[('chest','front_side'),('chest','opposite_front_side')])
+        panels={panel['dd_pattern_id']:panel for panel in garment.generated(self.scene,'panel')}
+        first=[panels[source.id].matrix_world @ vertex.co for vertex in panels[source.id].data.vertices]
+        second=[panels[twin.id].matrix_world @ vertex.co for vertex in panels[twin.id].data.vertices]
+        self.assertLess(max(min((Vector((-point.x,point.y,point.z))-other).length for other in second) for point in first),1e-3)
+        live_panels.arrange_piece(bpy.context,twin.id,'left_upper_arm','side')
+        self.assertEqual(placed(),[('right_upper_arm','opposite_side'),('left_upper_arm','side')])
+        live_panels.arrange_piece(bpy.context,source.id,'chest','front')
+        self.assertEqual(placed(),[('chest','front'),('left_upper_arm','side')])
+        arrangement.edit_point(bpy.context,'chest','opposite_side',angle=4.0)
+        live_panels.arrange_piece(bpy.context,source.id,'chest','side')
+        self.assertEqual(placed(),[('chest','side'),('left_upper_arm','side')])
+        document=garment.document(self.scene)
+        document.linked_pairs[0]['enabled']=False
+        self.scene.dd_document=document.dumps()
+        live_panels.arrange_piece(bpy.context,source.id,'chest','front_side')
+        self.assertEqual(placed(),[('chest','front_side'),('left_upper_arm','side')])
+
     def test_closed_piece_edit_move_and_delete_update_live_panels(self):
         from devil_designer import garment,live_panels
         panel=self.panels()[0];identity=panel.as_pointer();first_mesh=panel.data.as_pointer()

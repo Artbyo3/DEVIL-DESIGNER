@@ -313,27 +313,36 @@ def sync(context,preserve_sewing=False):
 
 def arrange_piece(context,identity,volume,point,flat=False):
     from . import editor,garment
-    from .arrangement import resolve_point,upgrade_volumes
+    from .arrangement import ensure_volumes,mirror_point,resolve_point,upgrade_volumes
+    from .linked_editing import pair_for
     resolve_point(context,volume,point)
     upgrade_volumes(context)
+    mirrored=mirror_point(ensure_volumes(context),volume,point)
+    if mirrored is not None:resolve_point(context,*mirrored)
     def record_for(pattern):
         previous=pattern.arrangement if pattern.arrangement and pattern.arrangement['version']==3 else None
         options={key:previous[key] for key in ('clearance','direction','overwrap')} if previous else {}
         return arrangement_record(volume,point,flat,version=3,**options)
+    def place(document,pattern):
+        record=record_for(pattern)
+        pattern.arrangement=record;pattern.panel_origin=None
+        pair=pair_for(document,pattern.id)
+        if mirrored is None or pair is None or not pair['enabled']:return
+        twin=document.find(next(member for member in pair['members'] if member!=pattern.id))
+        twin.arrangement=dict(record,volume=mirrored[0],point=mirrored[1]);twin.panel_origin=None
     active=editor._active
     if active is not None and active._scene==context.scene:
         capture(context)
         pattern=active.session.document.find(identity)
         if pattern is None:raise ValueError('Select a piece before choosing an arrangement point.')
         def apply():
-            pattern.arrangement=record_for(pattern);pattern.panel_origin=None
+            place(active.session.document,pattern)
         active.run_edit(lambda:active.session.commit(apply),
                         pattern.name+' arranged at '+volume+' / '+point+'.')
     else:
         document=capture(context);pattern=document.find(identity)
         if pattern is None:raise ValueError('Select a piece before choosing an arrangement point.')
-        pattern.arrangement=record_for(pattern)
-        pattern.panel_origin=None
+        place(document,pattern)
         context.scene.dd_document=document.dumps();garment.build_panels(context)
 
 

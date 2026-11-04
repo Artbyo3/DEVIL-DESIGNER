@@ -99,6 +99,7 @@ ADAPTIVE_FAMILIES = (('neck', 'chest', 'waist', 'hip'), ('left_thigh', 'left_cal
 ADAPTIVE_LIMIT = 24
 ADAPTIVE_TOLERANCE = .001
 SLICE_SECONDS = .005
+MIRROR_TOLERANCE = 1e-4
 
 
 class FitPending(ValueError):
@@ -745,15 +746,45 @@ def upgrade_volumes(context):
         raise
 
 
+def _mirror_volume(identity):
+    for side, other in (('left_', 'right_'), ('right_', 'left_')):
+        if identity.startswith(side):
+            return other + identity[len(side):]
+    return identity
+
+
+def _mirrors(point, other):
+    return (abs(math.remainder(point['angle'] + other['angle'], math.tau)) < MIRROR_TOLERANCE
+            and abs(point['height'] - other['height']) < MIRROR_TOLERANCE)
+
+
+def mirror_point(setup, volume_id, point_id):
+    volume, point = _volume_find(setup, volume_id, point_id)
+    partner = next((item for item in setup['volumes'] if item['id'] == _mirror_volume(volume_id)), None)
+    if partner is None:
+        return None
+    if partner is volume and abs(math.remainder(2 * point['angle'], math.tau)) < MIRROR_TOLERANCE:
+        return None
+    other = next((item for item in partner['points'] if _mirrors(point, item)), None)
+    return (partner['id'], other['id']) if other is not None else None
+
+
+def mirrored_points(setup):
+    return {(volume['id'], point['id']) for volume in setup['volumes'] for point in volume['points']
+            if mirror_point(setup, volume['id'], point['id']) is not None}
+
+
 def world_points(context, setup=None, wait=True):
     setup = setup or ensure_volumes(context, wait=wait)
     low,extent,axes=_volume_frame(context)
+    mirrored=mirrored_points(setup)
     result=[]
     for volume in setup['volumes']:
         for point in volume['points']:
             resolved=_volume_resolve(setup,volume,point,low,extent,axes)
             result.append(dict(volume=volume['id'],point=point['id'],position=resolved['point'],
-                               geometry=resolved['volume'],normal=resolved['normal'],tangent=resolved['tangent']))
+                               geometry=resolved['volume'],normal=resolved['normal'],tangent=resolved['tangent'],
+                               mirrored=(volume['id'],point['id']) in mirrored))
     return result
 
 

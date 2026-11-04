@@ -962,6 +962,18 @@ def check_arrangement_controls(workspace,event,check):
               'explicit upgrade keeps the point and 3D offset')
         workspace.minimal_action('RESET_LAYOUT')
         check(workspace.session.document.find(identity).arrangement is None,'piece card Reset to 2D layout clears the arrangement')
+        from devil_designer.linked_editing import clone_twin
+        workspace.session.selected=identity
+        twin=clone_twin(workspace.session)
+        workspace.session.selected=identity
+        live_panels.arrange_piece(bpy.context,identity,'chest','front_side')
+        document=workspace.session.document
+        check(document.find(identity).arrangement['point']=='front_side' and document.find(twin.id).arrangement['point']=='opposite_front_side',
+              'placing a linked piece on a mirrored point places its twin on the mirror point')
+        workspace.perform_action('UNDO')
+        document=workspace.session.document
+        check(document.find(identity).arrangement is None and document.find(twin.id).arrangement is None,
+              'one Undo removes both the piece and its auto-placed twin')
     finally:
         workspace.full,workspace.window_rect,scene.dd_reference_visible=saved[:3]
         view.view_location,view.view_rotation,view.view_distance,view.view_perspective=saved[3:]
