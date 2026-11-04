@@ -68,7 +68,7 @@ def run():
             run_folds(workspace, event, click, button, check, cleanup_garments)
             workspace.session = Session(Document())
             workspace.persist()
-            workspace.perform_action('START_PANEL')
+            workspace.perform_action('DEMO_PANEL')
             check(len(workspace.session.document.patterns) == 1 and not workspace.session.document.seams,
                   'single pattern piece drafted with zero seams')
             button('KEEP')
@@ -131,7 +131,7 @@ def run():
             cleanup_garments()
             workspace.session = Session(Document())
             workspace.persist()
-            workspace.perform_action('START_PANEL')
+            workspace.perform_action('DEMO_PANEL')
             button('SIMULATE')
             button('SIMULATE')
             check(bool(garment.generated(scene, 'simulation')), 'simulation ready for regression fault injection')

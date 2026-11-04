@@ -38,7 +38,6 @@ IMAGE_OPACITY = {'Light': .2, 'Medium': .35, 'Strong': .6}
 def minimal_layout(layout, pending=False, confirmation=False, playing=False, kept=False):
     scale = layout.scale
     panel = layout.panel
-    layout.minimal = True
     layout.metrics = MinimalMetrics.resolve()
     tool_count = 9
     tool_pitch = min(35, max(22, (panel.h / scale - 156) / tool_count))
@@ -117,8 +116,6 @@ class MinimalCards:
         self.library_load_path = None
         self.library_load_signature = None
         self.library_error = ''
-        self.toast_message = ''
-        self.toast_until = 0
         self._scene.dd_reference_visible = False
         self._scene.dd_fabric = getattr(self.session.document, 'preset', 'COTTON')
         self.sync_fabric_settings(self._scene.dd_fabric)
@@ -522,12 +519,6 @@ class MinimalCards:
                         ('PAIR_ACTIONS', 'FOLD_ADD_KNIFE_4', 'FOLD_ADD_BOX_4', 'Knife 4 cm', 'Box 4 cm'),
                         ('INFO', 'Straight lines across fabric', 'Parallel folds per piece'),
                         ('INFO', '1 mm self-collision', 'Shared by every piece in this garment')]
-        elif kind == 'EDIT':
-            title = pattern.name if pattern else 'Edit piece'
-            rows = [('DUPLICATE', 'Duplicate', ''),
-                    ('MIRROR_SEW', 'Mirror and sew', ''),
-                    ('UNFOLD', 'Unfold', ''),
-                    ('DELETE_PIECE', 'Delete piece', '')]
         elif kind == 'ANCHOR':
             if anchor is None:
                 return None
@@ -652,7 +643,7 @@ class MinimalCards:
 
         scale = self.canvas_layout.scale
         is_menu = kind in {'CANVAS_MENU', 'DRAW_CHOOSER', 'INTERNAL_CHOOSER', 'PIN_CHOOSER',
-                           'PIECE_SIMULATION', 'PIECE_DENSITY', 'LIBRARY_TAGS', 'EDIT',
+                           'PIECE_SIMULATION', 'PIECE_DENSITY', 'LIBRARY_TAGS',
                            'SELECT_MENU', 'TRANSFORM_MENU', 'SEAM_WARNING'} or kind.endswith('_MENU')
         row_widths = []
         for r in rows:
@@ -823,7 +814,7 @@ class MinimalCards:
 
     def card_close_rect(self, rect):
         scale = self.canvas_layout.scale
-        is_menu = self.card_kind in {'CANVAS_MENU', 'DRAW_CHOOSER', 'INTERNAL_CHOOSER', 'PIN_CHOOSER', 'PIECE_SIMULATION', 'PIECE_DENSITY', 'LIBRARY_TAGS', 'EDIT'} or (bool(self.card_kind) and self.card_kind.endswith('_MENU'))
+        is_menu = self.card_kind in {'CANVAS_MENU', 'DRAW_CHOOSER', 'INTERNAL_CHOOSER', 'PIN_CHOOSER', 'PIECE_SIMULATION', 'PIECE_DENSITY', 'LIBRARY_TAGS'} or (bool(self.card_kind) and self.card_kind.endswith('_MENU'))
         if is_menu:
             return Rect(round(rect.x + rect.w - 24 * scale), round(rect.y + rect.h - 24 * scale), round(18 * scale), round(18 * scale))
         return Rect(round(rect.x + rect.w - 30 * scale), round(rect.y + rect.h - 30 * scale), round(22 * scale), round(22 * scale))
@@ -848,8 +839,6 @@ class MinimalCards:
         if self.draft:
             return 'Click to add points / Enter to finish / Esc to cancel'
         if self.tool == 'SEW':
-            if self.chain_stage:
-                return 'Click edges in order'
             return 'Pick the matching edge' if self.pending_edge else 'Click two edges to sew'
         if self.tool == 'SELECT':
             tgt = getattr(self.session, 'acquisition_target', 'PIECES').title()
@@ -883,8 +872,7 @@ class MinimalCards:
                 summary = ', '.join(parts)
                 return f"{summary} \u00b7 Drag to move \u00b7 Knob rotates \u00b7 Corners scale \u00b7 Shift snaps \u00b7 Arrows nudge"
             return f"Select: Target {tgt} \u00b7 Drag to box select \u00b7 Right-click for options"
-        return {'SELECT': 'Drag points or pieces / Right-click for options',
-                'RECTANGLE': 'Drag to draw a panel / Shift for a square',
+        return {'RECTANGLE': 'Drag to draw a panel / Shift for a square',
                 'ELLIPSE': 'Drag to draw an ellipse / Shift for a circle',
                 'POLYGON': 'Click to draw / Click the first point or Enter to finish',
                 'INTERNAL': 'Click to draw an internal path / Enter to finish',
@@ -1035,10 +1023,6 @@ class MinimalCards:
         elif key.startswith('INSP_OPACITY_'):
             choice = key.removeprefix('INSP_OPACITY_')
             scene.dd_reference_opacity = GUIDE_OPACITY[choice]
-        elif key == 'TOGGLE_MEASURE':
-            scene.dd_measure_visible = not scene.dd_measure_visible
-            if scene.dd_measure_visible:
-                scene.dd_reference_visible = True
         elif key in {'STARTER_TEE', 'STARTER_TANK', 'STARTER_SKIRT'}:
             self.perform_action(key)
             self.card_kind = None
@@ -1049,8 +1033,6 @@ class MinimalCards:
             self.show_card('LIBRARY', self.card_anchor)
         elif key == 'MENU_GARMENT':
             self.show_card('GARMENT', self.card_anchor)
-        elif key == 'BODY_CHANGE':
-            self.show_card('BODY', self.card_anchor)
         elif key == 'PIECE_FABRIC_MENU':
             pattern = self.session.document.find(self.session.selected)
             active = pattern.preset if pattern and getattr(pattern, 'fabric_override', False) else getattr(self.session.document, 'preset', 'COTTON')
@@ -1107,8 +1089,6 @@ class MinimalCards:
             choice = key.removeprefix('SET_DENSITY_')
             self.run_edit(lambda: self.session.set_mesh_density(choice), 'Piece mesh density updated.')
             self.card_kind = None
-        elif key == 'EDIT_ACTIONS':
-            self.show_card('EDIT', self.card_anchor)
         elif key.startswith('SET_DRAW_'):
             tool_name = key.removeprefix('SET_DRAW_')
             self.draw_shape = tool_name
@@ -1139,7 +1119,7 @@ class MinimalCards:
             scene.dd_thickness = THICKNESS[choice]
         elif key == 'WELD_AUTO':
             self.weld_manual = not getattr(self, 'weld_manual', False)
-        elif key in {'WORKSPACE_FIT', 'INSP_FIT'}:
+        elif key == 'INSP_FIT':
             self.fit()
         elif key == 'TRACE_LOAD':
             bpy.ops.devil.load_trace_image('INVOKE_DEFAULT')
@@ -1167,9 +1147,6 @@ class MinimalCards:
         elif key.startswith('POINT_TYPE_'):
             ptype = key.removeprefix('POINT_TYPE_').upper()
             self.run_edit(lambda: self.session.set_point_type(ptype), f'Point type set to {ptype.title()}.')
-            self.card_kind = None
-        elif key == 'CURVE':
-            self.perform_action('CURVE')
             self.card_kind = None
         elif key == 'SPLIT':
             self.perform_action('SPLIT')
@@ -1223,14 +1200,6 @@ class MinimalCards:
             if self.selected_anchor:
                 self.perform_action('DELETE')
             self.card_kind = None
-        elif key.startswith('BODY_PICK_'):
-            choice = key.removeprefix('BODY_PICK_')
-            if choice == 'None':
-                self.choose_body(None, bpy.context)
-            else:
-                obj = next((o for o in self.card_models if o.name == choice), None)
-                if obj:
-                    self.choose_body(obj, bpy.context)
         elif key.startswith('BODY_'):
             idx = int(key.removeprefix('BODY_'))
             if 0 <= idx < len(self.card_models):
@@ -1348,11 +1317,11 @@ class MinimalCards:
             btn_rect = layout.buttons[button][0]
             if button == 'SELECT':
                 self.choose_tool('SELECT')
-            elif button in {'TOGGLE_SNAP', 'SNAP'}:
+            elif button == 'TOGGLE_SNAP':
                 self.snap = not self.snap
-            elif button in {'TOGGLE_GUIDE', 'REFERENCE'}:
+            elif button == 'TOGGLE_GUIDE':
                 self._scene.dd_reference_visible = not self._scene.dd_reference_visible
-            elif button in {'TOGGLE_LENGTHS', 'LENGTHS'}:
+            elif button == 'TOGGLE_LENGTHS':
                 self._scene.dd_lengths_visible = not self._scene.dd_lengths_visible
             elif button == 'TOGGLE_FIT_MAP':
                 self.fit_overlay.toggle()
@@ -1436,7 +1405,7 @@ class MinimalCards:
                         action1, action2 = row[1], row[2]
                         chosen = action1 if point[0] < rect.x + rect.w / 2 else action2
                         self.minimal_action(chosen)
-                        if chosen not in {'REFERENCE_IMAGE', 'MENU_LIBRARY', 'BODY_CHANGE','LIBRARY_SAVE'} and not getattr(self, 'pending_transform', None):
+                        if chosen not in {'REFERENCE_IMAGE', 'MENU_LIBRARY', 'LIBRARY_SAVE'} and not getattr(self, 'pending_transform', None):
                             self.card_kind = None
                     elif key == 'SLIDER':
                         label = row[1]
@@ -1447,7 +1416,7 @@ class MinimalCards:
                     elif key != 'INFO':
                         action = row[1] if key == 'MENU' else key
                         self.minimal_action(action)
-                        if not action.startswith(('LOAD_','LIBRARY_','PAGE_LIBRARY')) and action not in {'BODY_CHANGE', 'GARMENT_FABRIC_MENU', 'PIECE_FABRIC_MENU', 'PIECE_DENSITY_MENU', 'PIECE_SIMULATION_MENU', 'EDIT_ACTIONS', 'SCROLL_WEAR_OVER', 'PAGE_BODY', 'NAME', 'REFERENCE_IMAGE', 'MENU_LIBRARY', 'MENU_GARMENT'} and not getattr(self, 'pending_transform', None):
+                        if not action.startswith(('LOAD_','LIBRARY_','PAGE_LIBRARY')) and action not in {'GARMENT_FABRIC_MENU', 'PIECE_FABRIC_MENU', 'PIECE_DENSITY_MENU', 'PIECE_SIMULATION_MENU', 'SCROLL_WEAR_OVER', 'PAGE_BODY', 'NAME', 'REFERENCE_IMAGE', 'MENU_LIBRARY', 'MENU_GARMENT'} and not getattr(self, 'pending_transform', None):
                             self.card_kind = None
                     break
             return {'RUNNING_MODAL'}

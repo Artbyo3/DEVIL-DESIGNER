@@ -19,7 +19,7 @@ if not os.path.exists(BLENDER_PATH):
             BLENDER_PATH = p
             break
 
-def capture(stage="DRAFT", output_name="screenshot_app.png", full_mode=False,
+def capture(output_name="screenshot_app.png", full_mode=False,
             empty=False, panel_size=None, demo=False, tool=None, section=None, query='', reveal_3d=False, cursor_controls=False, card_kind=None, trace_image=False):
     if Path(output_name).name != output_name or Path(output_name).suffix.lower() != ".png":
         raise ValueError("Screenshot output must be a PNG filename inside scratch.")
@@ -69,7 +69,6 @@ region = next(r for r in area.regions if r.type == 'WINDOW')
 with bpy.context.temp_override(area=area, region=region):
     bpy.ops.devil_designer.pattern_editor('INVOKE_DEFAULT')
     op = editor._active
-    op.set_stage('{stage}')
     if {trace_image}:
         image = bpy.data.images.new('Tracing verification', width=64, height=64)
         image.pixels = [value for row in range(64) for column in range(64)
@@ -94,7 +93,10 @@ with bpy.context.temp_override(area=area, region=region):
         op.set_window(Rect(panel.x, panel.y, requested_size[0], requested_size[1]))
 
     if {demo}:
-        op.workflow_action('DEMO')
+        bpy.ops.devil_designer.demo('EXEC_DEFAULT')
+        op.reconcile_generated_document()
+        op.update_reference(bpy.context, align=True)
+        op.fit()
         if op.session.document.patterns:
             op.session.selected = op.session.document.patterns[0].id
             op.sync_selection()
@@ -112,7 +114,7 @@ with bpy.context.temp_override(area=area, region=region):
         op.choose_tool({tool!r})
     if {section!r}:
         if op.minimal_ui:
-            op.show_card({{'DESIGN': 'EDIT', 'AVATAR': 'GARMENT', 'SEW': 'SEWING', 'CLOTH': 'SIMULATE', 'LIBRARY': 'LIBRARY'}}[{section!r}])
+            op.show_card({{'AVATAR': 'GARMENT', 'SEW': 'SEWING', 'CLOTH': 'SIMULATE', 'LIBRARY': 'LIBRARY'}}[{section!r}])
         else:
             op.open_section({section!r})
     if {query!r}:
@@ -177,7 +179,7 @@ with bpy.context.temp_override(area=area, region=region):
     tmp_script.write_text(script, encoding="utf-8")
     
     cmd = [BLENDER_PATH, "--factory-startup", "--python", str(tmp_script)]
-    print(f"Launching Blender to capture {stage} interface (splash disabled, clean viewport)...")
+    print("Launching Blender to capture the interface (splash disabled, clean viewport)...")
     res = subprocess.run(cmd, capture_output=True, text=True, env=dict(os.environ, PYTHONDONTWRITEBYTECODE='1'))
     
     if not full_path.exists():
@@ -216,8 +218,7 @@ with bpy.context.temp_override(area=area, region=region):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--stage", default="DRAFT", choices=["DRAFT", "SEW", "ARRANGE", "SIMULATE"])
     parser.add_argument("--output", default="screenshot_app.png")
     parser.add_argument("--full", action="store_true", help="Capture in expanded full mode")
     args = parser.parse_args()
-    capture(stage=args.stage, output_name=args.output, full_mode=args.full)
+    capture(output_name=args.output, full_mode=args.full)

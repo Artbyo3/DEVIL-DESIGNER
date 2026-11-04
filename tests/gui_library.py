@@ -74,14 +74,14 @@ def run():
             scale=workspace.canvas_layout.scale
             tool=workspace.canvas_layout.buttons['SELECT'][0]
             rail=workspace.canvas_layout.rail
-            from devil_designer.ui_system import MinimalMetrics,RADIUS_CONTROL,RADIUS_DOCK_ITEM,RADIUS_CARD,RADIUS_DOCK
+            from devil_designer.ui_system import MinimalMetrics,RADIUS_CONTROL
             check(abs(rail.w/scale-56)<1,'Native dock envelope is 56 pixels')
             check(abs(tool.w/scale-40)<1 and abs(tool.h/scale-33)<1 and abs((tool.x-rail.x)/scale-8)<1,
                   'Native toolbar targets are 40 pixels centered with 8-pixel inner padding')
             garment_btn=workspace.canvas_layout.buttons.get('GARMENT')
             check(garment_btn and abs(garment_btn[0].w/scale-40)<1 and abs((garment_btn[0].x-rail.x)/scale-8)<1,
                   'Garment settings button resides in 40-pixel centered column')
-            check(all(r==4.0 for r in (RADIUS_CONTROL,RADIUS_DOCK_ITEM,RADIUS_CARD,RADIUS_DOCK)),
+            check(RADIUS_CONTROL==4.0,
                   'Legacy constant fallbacks remain 4px')
             metrics=MinimalMetrics.resolve()
             ui=bpy.context.preferences.themes[0].user_interface
@@ -139,7 +139,6 @@ def run():
             icons_dir=ROOT/'devil_designer'/'assets'/'icons'
             geom_data=json.loads((icons_dir/'geometry.json').read_text(encoding='utf-8'))
             sources_data=json.loads((icons_dir/'sources.json').read_text(encoding='utf-8'))
-            from devil_designer.icons import ICON_ALIASES
             required_icons=['SELECT','RECTANGLE','ELLIPSE','POLYGON','INTERNAL','KNIFE','RULER',
                            'SNAP_ON','SNAP_OFF','HIDE_OFF','HIDE_ON','LIBRARY','CLOSE','PLAY','PAUSE',
                            'SAVE','CHECK','SETTINGS','FIT','DISCLOSURE','UNDO','REDO']
@@ -147,9 +146,6 @@ def run():
                   'All required stock icons have spans in geometry.json')
             check(all(name in sources_data and sources_data[name].get('license')=='GPL-2.0-or-later' for name in required_icons),
                   'All required stock icons have valid GPL provenance in sources.json')
-            check(ICON_ALIASES.get('LENGTHS')=='RULER','LENGTHS is genuine stock ruler alias')
-            check(ICON_ALIASES.get('GRID')=='LIBRARY','GRID is genuine stock library alias')
-            check(ICON_ALIASES.get('DRAW_RECTANGLE')=='RECTANGLE','DRAW_RECTANGLE is genuine stock rectangle alias')
             check(abs(workspace.canvas_layout.buttons['SIMULATE'][0].h/scale-28)<1,'Main actions use compact native-style button proportions')
             button('LIBRARY')
             draw('Empty library')

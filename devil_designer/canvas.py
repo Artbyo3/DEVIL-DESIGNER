@@ -25,10 +25,9 @@ def clamp_window(bounds, available, scale):
 
 class Layout:
     def __init__(self, width, height, scale=1.0, full=False, left=0, right=0, top=0, bottom=0,
-                 position=None, stage="DRAFT"):
+                 position=None):
         self.scale = s = scale
         self.full = full
-        self.stage = stage
         usable_h = max(1.0, height - top - bottom)
         usable_w = max(1.0, width - left - right)
         margin = min(12 * s, usable_w / 20, usable_h / 20)

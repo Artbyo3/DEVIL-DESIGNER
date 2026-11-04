@@ -4,15 +4,13 @@ import bpy
 from . import curves
 from .canvas import Rect
 from .ui_system import TRANSFORM_FRAME_PAD,TRANSFORM_KNOB_OFFSET,TRANSFORM_HIT_RADIUS,TRANSFORM_PIVOT_HIT_RADIUS
-from .core import EdgeRef, update_auto_handles
+from .core import update_auto_handles
 from .construction import chain_range,path_range,sew_reverse
-from .presets import PRESETS
 
 class DesignTools:
     def initialize_design(self):
         self.hit_path='OUTER';self.hit_segment=None;self.hit_handle=None
         self.handle_preview=None;self.selected_anchor=None
-        self.chain_a=[];self.chain_b=[];self.chain_stage=None
         self.free_clicks=[];self.dart_base=[];self.pending_place=None;self.pending_tack=None
         self.library_items=[]
         self.cut_preview=None
@@ -142,7 +140,7 @@ class DesignTools:
                 self.fit()
                 self.message = f"{label} starter created. Pre-sewn and placed on avatar."
                 return
-            elif action in {'ADD_PANEL', 'DEMO_PANEL'}:
+            elif action == 'DEMO_PANEL':
                 ref_bounds = getattr(self.reference, 'bounds', None) if hasattr(self, 'reference') else None
                 ref_h = (ref_bounds[1][1] - ref_bounds[0][1]) if ref_bounds else 0.0
                 ref_y = scene.dd_reference_y
@@ -153,21 +151,6 @@ class DesignTools:
                                   (base_x + .20, base_y + .45), (base_x - .20, base_y + .45)])
                 self.session.document.find(self.session.selected).name = 'Basic panel'
                 self.fit()
-            elif action == 'START_PANEL':
-                ref_bounds = getattr(self.reference, 'bounds', None) if hasattr(self, 'reference') else None
-                ref_h = (ref_bounds[1][1] - ref_bounds[0][1]) if ref_bounds else 0.0
-                ref_y = scene.dd_reference_y
-                ref_x = scene.dd_reference_x
-                base_y = (ref_y + max(0.20, ref_h * 0.50)) if ref_h > 0 else 0.0
-                base_x = ref_x if ref_h > 0 else 0.0
-                self.session.add([(base_x - .2, base_y), (base_x + .2, base_y),
-                                  (base_x + .2, base_y + .45), (base_x - .2, base_y + .45)])
-                self.session.document.find(self.session.selected).name = 'Front panel'
-            elif action in {'NUM_RECT','NUM_ELLIPSE'}:
-                a=(scene.dd_point_x,scene.dd_point_y);b=(a[0]+scene.dd_width,a[1]+scene.dd_height)
-                if action=='NUM_ELLIPSE':self.session.add_ellipse(a,b,scene.dd_internal_mode)
-                elif scene.dd_internal_mode:self.session.add_path([a,(b[0],a[1]),b,(a[0],b[1])],True)
-                else:self.session.add([a,(b[0],a[1]),b,(a[0],b[1])])
             elif action=='POINT_APPLY':
                 point=(scene.dd_point_x,scene.dd_point_y)
                 if self.draft or self.tool in {'POLYGON','INTERNAL'} and self.session.corner is None:
@@ -178,10 +161,6 @@ class DesignTools:
             elif action=='CURVE':
                 new_t=self.session.curve_point()
                 self.message=f"Point type: {new_t.title()}."
-            elif action.startswith('POINT_TYPE_'):
-                ptype=action.removeprefix('POINT_TYPE_').upper()
-                self.session.set_point_type(ptype)
-                self.message=f"Point type: {ptype.title()}."
             elif action=='SPLIT':
                 if not self.session.segment:raise ValueError('Select a segment to split.')
                 self.session.split_segment(self.session.segment);self.session.segment=None
@@ -189,7 +168,6 @@ class DesignTools:
                 if not self.session.segment:raise ValueError('Select a segment to set its length.')
                 self.session.set_length(self.session.segment,scene.dd_segment_length)
             elif action=='MERGE':self.session.merge_points(self.session.point_selection)
-            elif action=='OFFSET':self.session.offset(scene.dd_offset)
             elif action == 'DUPLICATE':
                 if not p and not self.session.selected_patterns:raise ValueError('Select a pattern to duplicate.')
                 self.session.duplicate()
@@ -202,10 +180,6 @@ class DesignTools:
                 if not p and not self.session.selected_patterns and not self.session.selected_points and self.session.corner is None:raise ValueError('Select a piece or points to flip.')
                 self.session.flip_vertical()
                 self.message = 'Pattern flipped vertically.'
-            elif action.startswith('SELECT_TARGET_'):
-                tgt = action.removeprefix('SELECT_TARGET_')
-                self.session.acquisition_target = tgt
-                self.message = f"Selection target: {tgt.title()}."
             elif action == 'SELECT_CONNECTED_PATH':
                 self.session.select_connected('PATH')
                 self.sync_selection()
@@ -267,11 +241,6 @@ class DesignTools:
             elif action == 'CONVERT_AUTO':
                 self.convert_pending_auto_points()
                 return
-            elif action.startswith('SET_PRESET_'):
-                p_val = action.replace('SET_PRESET_', '')
-                if not p:raise ValueError('Select a pattern to change fabric.')
-                self.session.commit(lambda: setattr(p, 'preset', p_val))
-                self.message = f"Fabric changed to {p_val.title()}."
             elif action in {'UNFOLD','MIRROR_SEW'}:
                 if not self.session.segment and p:
                     self.session.segment = self.session.document.edge(p.id, 0)
@@ -296,31 +265,12 @@ class DesignTools:
                 if p.placement_mode!='LEGACY':
                     self.reveal_3d();self.message='Click an arrangement point to place this piece. Right-click a point for Arrange flat.';return
                 self.pending_place=p.id;self.message='Click the avatar in the 3D view to place this pattern. Escape cancels.';return
-            elif action=='WRAP':
-                if not p:raise ValueError('Select a pattern to wrap.')
-                if p.placement_mode!='LEGACY':
-                    self.reveal_3d();self.message='Click an arrangement point to wrap this piece around its bounding volume.';return
-                self.session.commit(lambda:setattr(p,'wrap_radius',scene.dd_wrap_radius))
-                self.persist();bpy.ops.devil_designer.build_panels('EXEC_DEFAULT')
             elif action=='REMOVE_ANCHOR':
                 anchor=next((a for a in doc.anchors if a.id==self.selected_anchor),None)
                 if anchor is None:raise ValueError('Select a pin or tack using K or T.')
                 self.session.commit(lambda:doc.anchors.remove(anchor));self.selected_anchor=None
-            elif action=='PRESET':
-                if not p:raise ValueError('Select a pattern for its cloth preset.')
-                names=list(PRESETS);value=names[(names.index(p.preset)+1)%len(names)]
-                self.session.commit(lambda:setattr(p,'preset',value))
-            elif action in {'CHAIN_A','CHAIN_B'}:
-                self.choose_tool('SEW');self.chain_stage='A' if action=='CHAIN_A' else 'B'
-                self.message='Click connected edges in order for chain '+self.chain_stage+'. Enter switches sides.';return
-            elif action=='CHAIN_SEW':
-                if not self.chain_a or not self.chain_b:raise ValueError('Pick at least one edge on each side.')
-                a=chain_range(doc,self.chain_a,scene.dd_sew_a0,scene.dd_sew_a1)
-                b=chain_range(doc,self.chain_b,scene.dd_sew_b0,scene.dd_sew_b1)
-                self.session.sew_chains(a,b,sew_reverse(doc,a,b,scene.dd_sew_reverse));self.chain_stage=None;self.chain_a=[];self.chain_b=[]
-                self.seam_selected=doc.seams[-1].id
             elif action=='CHAIN_CLEAR':
-                self.chain_a=[];self.chain_b=[];self.free_clicks=[];self.pending_edge=None;self.chain_stage=None
+                self.free_clicks=[];self.pending_edge=None
             elif action.startswith('LIBRARY_'):
                 from . import library
                 self.refresh_library()
@@ -328,8 +278,6 @@ class DesignTools:
                     library.save(bpy.context,scene.dd_library_name,getattr(self,'library_tags','').split(','))
                     self.library_previews={}
                     self.refresh_library()
-                elif action in {'LIBRARY_PREV','LIBRARY_NEXT'} and self.library_items:
-                    scene.dd_library_selected=(scene.dd_library_selected+(1 if action=='LIBRARY_NEXT' else -1))%len(self.library_items)
                 elif action=='LIBRARY_LOAD':
                     chosen=getattr(self,'library_load_path',None)
                     if chosen is not None:
@@ -351,7 +299,7 @@ class DesignTools:
                     self._stored=scene.dd_document;self.update_reference(bpy.context,align=True);self.fit()
             else:return
             self.persist();self.sync_selection()
-            self.message=self.sewing_message(self.session.document.seams[-1]) if action=='CHAIN_SEW' else 'Done: '+action.replace('_',' ').lower()+'.'
+            self.message='Done: '+action.replace('_',' ').lower()+'.'
             if scene.get('dd_arrangement_message'):self.message+=' '+scene['dd_arrangement_message']
             if self.session.last_repairs:self.message+=f' {self.session.last_repairs} affected sewing pair(s) removed; re-pair edited edges.'
         try:
@@ -369,15 +317,6 @@ class DesignTools:
         edge=viewport_hit[0] if viewport_hit is not None else self.design_hit_edge()
         if edge is None:self.message='Click near an outer or internal segment.';return
         scene=self._scene;doc=self.session.document
-        if self.chain_stage:
-            chain=self.chain_a if self.chain_stage=='A' else self.chain_b
-            if edge in chain:chain.remove(edge)
-            else:
-                if chain:
-                    end=doc.edge_points(chain[-1])[1];a,b=doc.edge_points(edge)
-                    if math.dist(end,b)<math.dist(end,a):edge=EdgeRef(edge.pattern,edge.start,edge.end,1,0,edge.path)
-                chain.append(edge)
-            self.message=f'Chain {self.chain_stage}: {len(chain)} segments. Enter switches side / sews.';return
         if scene.dd_free_sewing:
             point=doc.edge_point(edge,viewport_hit[1]) if viewport_hit is not None else self.view.world(self.pointer,self.canvas_layout.canvas)
             t,_=curves.closest_fraction(doc.edge_curve(edge),point)
@@ -426,12 +365,8 @@ class DesignTools:
                 except ValueError as exc:self.message=str(exc)
                 return {'RUNNING_MODAL'}
         if not panel:return None
-        if press and event.type=='ESC' and (self.chain_stage or self.free_clicks or self.dart_base):
+        if press and event.type=='ESC' and (self.free_clicks or self.dart_base):
             self.perform_action('CANCEL_DRAFT');return {'RUNNING_MODAL'}
-        if press and event.type in {'RET','NUMPAD_ENTER'} and self.chain_stage:
-            if self.chain_stage=='A':self.chain_stage='B';self.message='Now pick chain B, then Enter to sew.'
-            else:self.design_action('CHAIN_SEW')
-            return {'RUNNING_MODAL'}
         if not self.numeric and press:
             if event.type == 'D' and event.shift and not event.ctrl and not event.alt:
                 self.perform_action('DUPLICATE');return {'RUNNING_MODAL'}
@@ -541,10 +476,7 @@ class DesignTools:
             for _,loop_nodes,closed,_ in result.loops():
                 update_auto_handles(loop_nodes,closed)
             if self.handle_preview:
-                if len(self.handle_preview)==7:
-                    h_idx,h_name,h_val,o_name,o_val,pid,path_id=self.handle_preview
-                else:
-                    h_idx,h_name,h_val=self.handle_preview;o_name,o_val,pid,path_id=None,None,self.session.selected,'OUTER'
+                h_idx,h_name,h_val,o_name,o_val,pid,path_id=self.handle_preview
                 if pattern.id==pid:
                     try:
                         target_nodes=result.path(path_id).vertices
@@ -556,10 +488,7 @@ class DesignTools:
                         pass
             return result
         if self.handle_preview:
-            if len(self.handle_preview)==7:
-                h_idx,h_name,h_val,o_name,o_val,pid,path_id=self.handle_preview
-            else:
-                h_idx,h_name,h_val=self.handle_preview;o_name,o_val,pid,path_id=None,None,self.session.selected,'OUTER'
+            h_idx,h_name,h_val,o_name,o_val,pid,path_id=self.handle_preview
             if pattern.id==pid:
                 result=copy.deepcopy(pattern)
                 try:
