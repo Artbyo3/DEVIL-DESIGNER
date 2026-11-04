@@ -11,6 +11,7 @@ from . import curves
 from .controls import CONTROL_SETTINGS as SETTINGS
 from .icons import icon_spans
 from .construction import sew_reverse
+from .minimal import SEAM_ACTIVE, SEAM_CONNECTED, SEAM_QUIET
 
 from .ui_system import (
     BG_BASE, BG_PANEL, BG_ELEVATED, BG_WELL, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, ACCENT, ACCENT_BG, ACCENT_BORDER, ACCENT_HOVER, BORDER, BORDER_SUBTLE, RADIUS_WINDOW, RADIUS_BADGE, Tooltip, ComponentRenderer, SURFACE_FLOATING, SURFACE_OUTLINE, SELECTION, TEXT_ON_ACCENT, MinimalMetrics,
@@ -41,11 +42,13 @@ SEAM_PAIR_TONES = [
     (0.68, 0.50, 0.56),
     (0.48, 0.62, 0.74),
 ]
+SEAM_LINK_STEPS = {SEAM_QUIET: (), SEAM_CONNECTED: (2,), SEAM_ACTIVE: (0, 1, 2, 3, 4)}
 
 
 class Renderer:
     def __init__(self):
         self.shader = None
+        self.seam_levels = {}
         self.line_shader = None
         self.s = 1
         self.offset = (0, 0)
@@ -911,10 +914,16 @@ class Renderer:
         for rect, identity, label in ed.seam_badges():
             s_idx = seam_order.get(identity, 0)
             tone = SEAM_PAIR_TONES[s_idx % len(SEAM_PAIR_TONES)]
-            active_badge = identity in (ed.seam_selected, getattr(ed, 'seam_hover', None))
-            bg_col = (*tone, 0.42) if active_badge else (*tone, 0.18)
-            border_col = (*tone, 0.92) if active_badge else (*tone, 0.48)
-            text_col = TEXT
+            level = self.seam_levels.get(identity, SEAM_QUIET)
+            active_badge = level == SEAM_ACTIVE
+            if level == SEAM_QUIET and not self.seam_mismatch(ed, ed.session.document.seams[s_idx]):
+                bg_col = (*BG_ELEVATED[:3], 0.50)
+                border_col = (*BORDER_SUBTLE[:3], 0.70)
+                text_col = TEXT_MUTED
+            else:
+                bg_col = (*tone, 0.42) if active_badge else (*tone, 0.18)
+                border_col = (*tone, 0.92) if active_badge else (*tone, 0.48)
+                text_col = TEXT
             self.round_rect(rect, bg_col, radius=metrics.box)
             self.round_rect_outline(rect, border_col, radius=metrics.box)
             self.text(rect.x + rect.w / 2, rect.y + 5 * scale, label, 10, text_col, True)
@@ -1194,21 +1203,29 @@ class Renderer:
         self.lines([(origin[0], c.y), (origin[0], c.y + c.h),
                     (c.x, origin[1]), (c.x + c.w, origin[1])], (0.29, 0.44, 0.42, 0.6))
 
+    def seam_mismatch(self, ed, seam):
+        preview = ed.viewport_sewing
+        record = preview.truth['records'].get(seam.id) if preview.truth else None
+        return ed.session.document.seam_stats(seam)[3] > 1 or bool(record and any(flag != 'B reversed' for flag in record['flags']))
+
     def seams(self, ed):
         doc = ed.session.document
         c = ed.canvas_layout.canvas
         preview = ed.viewport_sewing
         preview.request_truth(bpy.context)
+        self.seam_levels = ed.seam_focus_levels()
         badges = {identity: rect for rect, identity, _ in ed.seam_badges()}
         for index, seam in enumerate(doc.seams):
             mids = []
             tone = SEAM_PAIR_TONES[index % len(SEAM_PAIR_TONES)]
-            selected = seam.id in (ed.seam_selected, getattr(ed, 'seam_hover', None))
+            level = self.seam_levels.get(seam.id, SEAM_QUIET)
+            selected = level == SEAM_ACTIVE
+            connected = level == SEAM_CONNECTED
             record = preview.truth['records'].get(seam.id) if preview.truth else None
-            mismatch = doc.seam_stats(seam)[3] > 1 or bool(record and any(flag != 'B reversed' for flag in record['flags']))
-            color = SELECTION if mismatch else (*TEXT_SUB[:3], 0.55 if selected else 0.20)
+            mismatch = self.seam_mismatch(ed, seam)
+            color = SELECTION if mismatch else (*tone, 0.75) if connected else (*TEXT_SUB[:3], 0.55 if selected else 0.20)
             notch_col = SELECTION if mismatch else (*tone, 0.92 if selected else 0.65)
-            seam_width = 2.6 if (selected or mismatch) else 1.2
+            seam_width = 2.6 if (selected or mismatch) else 1.8 if connected else 1.2
             dot_rad = 4.6 if (selected or mismatch) else 3.0
             for side in (0, 1):
                 chain = seam.side(side)
@@ -1219,6 +1236,10 @@ class Renderer:
                     edge, fraction = doc.chain_position(chain, i / n)
                     points.append(ed.view.screen(doc.edge_point(edge, fraction), c))
                 self.lines(points, color, seam_width, True)
+                middle = points[len(points) // 2]
+                mids.append(middle)
+                if level == SEAM_QUIET and not mismatch:
+                    continue
                 is_rev_side = (side == 1 and seam.reverse)
                 first = points[-1] if is_rev_side else points[0]
                 second = points[-2] if is_rev_side and len(points) > 1 else (points[1] if len(points) > 1 else first)
@@ -1231,10 +1252,8 @@ class Renderer:
                                 (first[0] + nx * tick_len, first[1] + ny * tick_len)],
                                notch_col, 2.0 if selected else 1.5)
                 self.dot(first, dot_rad, notch_col)
-                middle = points[len(points) // 2]
-                mids.append(middle)
             chain_0, chain_1 = seam.side(0), seam.side(1)
-            for step_i in range(5):
+            for step_i in SEAM_LINK_STEPS[level]:
                 u = step_i / 4.0
                 v = (1.0 - u) if seam.reverse else u
                 edge_a, frac_a = doc.chain_position(chain_0, u)
@@ -1249,8 +1268,8 @@ class Renderer:
                     band_col = (*tone, 0.70 if is_mid else 0.52)
                     band_w = 1.6 if is_mid else 1.1
                 else:
-                    band_col = (*tone, 0.32 if is_mid else 0.20)
-                    band_w = 1.2 if is_mid else 0.9
+                    band_col = (*tone, 0.45)
+                    band_w = 1.2
                 self.lines([pa, pb], band_col, band_w)
             if selected and record:
                 for pair in record['flat']:

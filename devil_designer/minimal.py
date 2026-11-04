@@ -10,6 +10,9 @@ from .ui_system import MinimalMetrics
 from .controls import CONTROL_SETTINGS
 
 
+SEAM_QUIET, SEAM_CONNECTED, SEAM_ACTIVE = 'QUIET', 'CONNECTED', 'ACTIVE'
+
+
 def text_unscaled_width(text, size=11):
     if not text:
         return 0.0
@@ -138,6 +141,26 @@ class MinimalCards:
             scene.dd_weld_distance = .01
         if finalize:
             scene.dd_thickness = THICKNESS[self.named_choice(scene.dd_thickness, THICKNESS)]
+
+    def seam_focus_levels(self):
+        doc = self.session.document
+        if not doc.seams:
+            return {}
+        pieces = set(self.session.selected_patterns) or {self.session.selected}
+        if self.pending_edge:
+            pieces.add(self.pending_edge.pattern)
+        hovered = self.design_hit_edge()
+        hovered_key = (hovered.pattern, hovered.start, hovered.end) if hovered else None
+        levels = {}
+        for seam in doc.seams:
+            edges = [*seam.side(0), *seam.side(1)]
+            if seam.id in (self.seam_selected, self.seam_hover) or any((edge.pattern, edge.start, edge.end) == hovered_key for edge in edges):
+                levels[seam.id] = SEAM_ACTIVE
+            elif any(edge.pattern in pieces for edge in edges):
+                levels[seam.id] = SEAM_CONNECTED
+            else:
+                levels[seam.id] = SEAM_QUIET
+        return levels
 
     def seam_badges(self):
         if self.tool == 'SHAPE':

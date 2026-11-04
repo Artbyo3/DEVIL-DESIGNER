@@ -614,6 +614,7 @@ def check_interaction_regressions(workspace, event, point, check):
               'canvas draw with unselected twin renders without KeyError a and preserves pattern rendering')
         check(len(workspace.seam_badges()) > 0,
               'seam badges and paired pills render alongside pattern pieces')
+        check_seam_focus(workspace, check)
 
         edge1_other = workspace.session.document.edges(p1.id)[1]
         workspace.choose_tool('SEW')
@@ -778,6 +779,61 @@ def check_interaction_regressions(workspace, event, point, check):
         workspace.choose_tool(original_tool)
         workspace._scene.dd_free_sewing = original_free_sewing
         workspace.view.cx, workspace.view.cy, workspace.view.zoom = original_view
+
+
+def check_seam_focus(workspace, check):
+    from devil_designer.minimal import SEAM_ACTIVE, SEAM_CONNECTED, SEAM_QUIET
+    from devil_designer.ui_system import SELECTION
+    session = workspace.session
+    document = session.document
+    seam = document.seams[0]
+    canvas = workspace.canvas_layout.canvas
+    owner = seam.side(0)[0].pattern
+    saved = session.selected, set(session.selected_patterns), workspace.seam_selected, workspace.seam_hover, workspace.pending_edge
+    links = []
+    for step in range(5):
+        fraction = step / 4
+        ends = []
+        for side, position in ((0, fraction), (1, 1 - fraction if seam.reverse else fraction)):
+            edge, along = document.chain_position(seam.side(side), position)
+            ends.append(workspace.view.screen(document.edge_point(edge, along), canvas))
+        links.append(ends)
+
+    def drawn(hover=None, mismatch=False):
+        with patch.object(workspace, 'design_hit_edge', return_value=hover), \
+                patch.object(workspace.renderer, 'lines', wraps=workspace.renderer.lines) as lines, \
+                patch.object(workspace.renderer, 'seam_mismatch', wraps=workspace.renderer.seam_mismatch) as warning:
+            if mismatch:
+                warning.side_effect = lambda ed, item: item.id == seam.id
+            workspace.error_message = ''
+            workspace.renderer.draw(workspace)
+            check(not workspace.error_message, 'seam focus draw renders without error')
+            calls = [call.args for call in lines.call_args_list]
+        return workspace.renderer.seam_levels[seam.id], sum(1 for call in calls if list(call[0]) in links), calls
+
+    try:
+        session.clear_selection()
+        session.selected = None
+        workspace.seam_selected = workspace.seam_hover = workspace.pending_edge = None
+        level, count, _ = drawn()
+        check(level == SEAM_QUIET and count == 0, 'an idle seam draws no line across the canvas')
+        session.selected = owner
+        session.selected_patterns = {owner}
+        level, count, _ = drawn()
+        check(level == SEAM_CONNECTED and count == 1, 'selecting a piece shows one link for each of its seams')
+        session.clear_selection()
+        session.selected = None
+        level, count, _ = drawn(seam.side(0)[0])
+        check(level == SEAM_ACTIVE and count == 5, 'hovering a sewn edge reveals the full seam')
+        workspace.seam_selected = seam.id
+        level, count, _ = drawn()
+        check(level == SEAM_ACTIVE and count == 5, 'selecting a seam reveals the full seam')
+        workspace.seam_selected = None
+        level, count, calls = drawn(mismatch=True)
+        check(level == SEAM_QUIET and count == 0 and any(call[1] == SELECTION for call in calls),
+              'an idle mismatched seam keeps its warning color on the edges without crossing the canvas')
+    finally:
+        session.selected, session.selected_patterns, workspace.seam_selected, workspace.seam_hover, workspace.pending_edge = saved
 
 
 def check_arrangement_controls(workspace,event,check):
