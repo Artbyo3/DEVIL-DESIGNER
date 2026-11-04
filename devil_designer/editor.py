@@ -1585,6 +1585,7 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
             return
         self.end_shaping()
         self.avatar_field.close()
+        self.avatar_field.release_surface()
         self.save_window()
         self._closed = True
         self.fit_overlay.close()

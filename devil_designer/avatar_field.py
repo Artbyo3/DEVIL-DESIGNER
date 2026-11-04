@@ -2,6 +2,7 @@ import re
 import time
 import blf
 import bpy
+import gpu
 from bpy_extras import view3d_utils
 from .canvas import Rect
 
@@ -13,12 +14,12 @@ FIELD = 'FIELD'
 VISIBLE_ROWS = 10
 ROW_PITCH = 20
 ROW_HEIGHT = 18
-FIELD_HEIGHT = 18
+FIELD_HEIGHT = 20
 POPUP_TOP = 12
 POPUP_BOTTOM = 10
 POPUP_GAP = 2
 POPUP_MARGIN = 4
-TEXT_OFFSET = 25
+TEXT_OFFSET = 26
 TEXT_SIZE = 11
 EXTRA_WIDTH = 22
 LABEL_WIDTH = 62
@@ -63,6 +64,7 @@ class AvatarField:
         self.dragging=False
         self.text_cursor=False
         self.hover_start=None
+        self.offscreen=None
 
     @property
     def scale(self):
@@ -147,6 +149,17 @@ class AvatarField:
         if self.results:
             self.active=max(0,min(len(self.results)-1,self.active+delta))
             self.reveal(self.popup(box)[1])
+
+    def surface(self,width,height):
+        if self.offscreen is None or (self.offscreen.width,self.offscreen.height)!=(width,height):
+            self.release_surface()
+            self.offscreen=gpu.types.GPUOffScreen(width,height)
+        return self.offscreen
+
+    def release_surface(self):
+        if self.offscreen is not None:
+            self.offscreen.free()
+            self.offscreen=None
 
     def tooltip_ready(self):
         return self.mode is None and self.hover_start is not None and time.monotonic()-self.hover_start>=TOOLTIP_DELAY
