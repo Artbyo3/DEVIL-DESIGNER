@@ -8,6 +8,7 @@ from .canvas import Rect
 from . import layering
 from .ui_system import MinimalMetrics
 from .controls import CONTROL_SETTINGS
+from .avatar_field import AvatarField, LABEL
 
 
 SEAM_QUIET, SEAM_CONNECTED, SEAM_ACTIVE = 'QUIET', 'CONNECTED', 'ACTIVE'
@@ -100,6 +101,7 @@ def minimal_layout(layout, pending=False, confirmation=False, playing=False, kep
 class MinimalCards:
     def initialize_minimal(self):
         self.minimal_ui = True
+        self.avatar_field = AvatarField(self)
         self.weld_manual = False
         self.card_kind = None
         self.card_anchor = None
@@ -241,10 +243,6 @@ class MinimalCards:
             self.library_query=edit['text'];self.card_page=0
         return {'RUNNING_MODAL'}
 
-    def body_page_size(self):
-        has_regen = self._scene.dd_avatar is not None and not self.pending_simulation
-        return 2 if (len(self.card_models) > 3 and has_regen) else 3
-
     def minimal_card(self):
         kind = self.card_kind
         if not kind:
@@ -272,17 +270,7 @@ class MinimalCards:
                 rows.append(('PAIR_ACTIONS', 'LIBRARY_SAVE', 'REFERENCE_IMAGE', 'Save As...', 'Trace image'))
         elif kind == 'BODY':
             title = 'Body'
-            self.card_models = sorted((obj for obj in scene.objects if obj.type == 'MESH' and not obj.get('dd_kind')), key=lambda obj: obj.name.casefold())
-            b_size = self.body_page_size()
-            max_pages = max(1, math.ceil(len(self.card_models) / b_size))
-            self.card_page = max(0, min(self.card_page, max_pages - 1))
-            rows = [('BODY_' + str(index), obj.name, 'Selected' if scene.dd_avatar == obj else '')
-                    for index, obj in enumerate(self.card_models)
-                    if self.card_page * b_size <= index < (self.card_page + 1) * b_size]
-            if len(self.card_models) > b_size:
-                rows.append(('PAGE_BODY', f'Bodies ({self.card_page + 1}/{max_pages})', 'Next'))
-            if not rows:
-                rows = [('INFO', 'No body in scene', 'Add mesh in 3D')]
+            rows = [('AVATAR_FIELD', LABEL)]
             rows.append(('CHOICES', 'Body opacity', ('INSP_OPACITY', GUIDE_OPACITY, self.named_choice(scene.dd_reference_opacity, GUIDE_OPACITY))))
             measurements = getattr(getattr(self, 'reference', None), 'measurements', None)
             if measurements:
@@ -780,7 +768,7 @@ class MinimalCards:
                 row_heights.append(180 if self.canvas_layout.panel.h / scale >= 560 else 130)
             elif r_key in {'LIBRARY_NAME', 'LIBRARY_TAG_EDIT'}:
                 row_heights.append(46)
-            elif r_key == 'INFO':
+            elif r_key in {'INFO', 'AVATAR_FIELD'}:
                 row_heights.append(22)
             elif r_key == 'TRACE_PICK':
                 row_heights.append(40)
@@ -1200,11 +1188,6 @@ class MinimalCards:
             if self.selected_anchor:
                 self.perform_action('DELETE')
             self.card_kind = None
-        elif key.startswith('BODY_'):
-            idx = int(key.removeprefix('BODY_'))
-            if 0 <= idx < len(self.card_models):
-                self.choose_body(self.card_models[idx], bpy.context)
-            self.card_kind = None
         elif key.startswith('LOAD_'):
             idx = int(key.removeprefix('LOAD_'))
             if 0 <= idx < len(self.library_items):
@@ -1232,9 +1215,6 @@ class MinimalCards:
         elif key=='PAGE_LIBRARY_TAGS':
             count=len({tag for metadata in self.library_previews.values() for tag in metadata['tags']})
             self.card_page=(self.card_page+1)%max(1,math.ceil(count/6))
-        elif key == 'PAGE_BODY':
-            b_size = self.body_page_size()
-            self.card_page = (self.card_page + 1) % math.ceil(max(1, len(self.card_models)) / b_size)
         elif key == 'PAGE_LIBRARY':
             self.card_page = (self.card_page + 1) % max(1,math.ceil(len(self.library_matches()) / self.library_page_size()))
         elif key == 'LIBRARY_SAVE':
@@ -1297,11 +1277,9 @@ class MinimalCards:
             delta=-1 if event.type=='WHEELUPMOUSE' else 1
             self.wear_over_offset=max(0,min(max(0,len(self.card_models)-5),self.wear_over_offset+delta))
             return {'RUNNING_MODAL'}
-        if card and self.card_kind in {'BODY', 'LIBRARY'} and event.type in {'WHEELUPMOUSE', 'WHEELDOWNMOUSE'}:
+        if card and self.card_kind == 'LIBRARY' and event.type in {'WHEELUPMOUSE', 'WHEELDOWNMOUSE'}:
             delta = -1 if event.type == 'WHEELUPMOUSE' else 1
-            p_size = self.body_page_size() if self.card_kind == 'BODY' else self.library_page_size()
-            items = self.card_models if self.card_kind == 'BODY' else self.library_matches()
-            max_pages = math.ceil(len(items) / p_size)
+            max_pages = math.ceil(len(self.library_matches()) / self.library_page_size())
             if max_pages > 1:
                 self.card_page = max(0, min(max_pages - 1, self.card_page + delta))
             return {'RUNNING_MODAL'}
@@ -1413,10 +1391,10 @@ class MinimalCards:
                         if label == 'dd_weld_distance':
                             scale = layout.scale
                             self.setting_drag['absolute'] = Rect(rect.x + 6 * scale, rect.y, rect.w - 12 * scale, rect.h)
-                    elif key != 'INFO':
+                    elif key not in {'INFO', 'AVATAR_FIELD'}:
                         action = row[1] if key == 'MENU' else key
                         self.minimal_action(action)
-                        if not action.startswith(('LOAD_','LIBRARY_','PAGE_LIBRARY')) and action not in {'GARMENT_FABRIC_MENU', 'PIECE_FABRIC_MENU', 'PIECE_DENSITY_MENU', 'PIECE_SIMULATION_MENU', 'SCROLL_WEAR_OVER', 'PAGE_BODY', 'NAME', 'REFERENCE_IMAGE', 'MENU_LIBRARY', 'MENU_GARMENT'} and not getattr(self, 'pending_transform', None):
+                        if not action.startswith(('LOAD_','LIBRARY_','PAGE_LIBRARY')) and action not in {'GARMENT_FABRIC_MENU', 'PIECE_FABRIC_MENU', 'PIECE_DENSITY_MENU', 'PIECE_SIMULATION_MENU', 'SCROLL_WEAR_OVER', 'NAME', 'REFERENCE_IMAGE', 'MENU_LIBRARY', 'MENU_GARMENT'} and not getattr(self, 'pending_transform', None):
                             self.card_kind = None
                     break
             return {'RUNNING_MODAL'}

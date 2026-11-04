@@ -444,6 +444,10 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         self.pointer = (event.mouse_x - self._region.x, event.mouse_y - self._region.y)
         panel = self.canvas_layout.panel.contains(*self.pointer)
         canvas = self.canvas_layout.canvas.contains(*self.pointer)
+        field_result = self.avatar_field.event(context, event)
+        if field_result is not None:
+            self._area.tag_redraw()
+            return field_result
         arrow_keys = {'UP_ARROW', 'DOWN_ARROW', 'LEFT_ARROW', 'RIGHT_ARROW'}
         burst = getattr(self, '_nudge_burst', None)
         if burst and (event.type == 'WINDOW_DEACTIVATE' or not canvas or self.numeric or self.library_edit
@@ -1580,6 +1584,8 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         if self._closed:
             return
         self.end_shaping()
+        self.avatar_field.close()
+        self.avatar_field.release_surface()
         self.save_window()
         self._closed = True
         self.fit_overlay.close()

@@ -4,17 +4,20 @@ import time
 import blf
 import gpu
 from gpu_extras.batch import batch_for_shader
+from gpu_extras.presets import draw_texture_2d
 from mathutils import Matrix
 from .canvas import Rect, grid_step
 from .core import area, triangulate, contains, Vertex, sample_path
 from . import curves
 from .controls import CONTROL_SETTINGS as SETTINGS
-from .icons import icon_spans
+from .icons import ICON_LEVELS, icon_pixels, icon_spans
 from .construction import sew_reverse
 from .minimal import SEAM_ACTIVE, SEAM_CONNECTED, SEAM_QUIET
+from .avatar_field import EYEDROPPER, LABEL, SEARCH, TEXT_OFFSET, TEXT_SIZE
 
 from .ui_system import (
     BG_BASE, BG_ELEVATED, BG_WELL, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, ACCENT, ACCENT_BG, ACCENT_BORDER, ACCENT_HOVER, BORDER, BORDER_SUBTLE, RADIUS_WINDOW, RADIUS_BADGE, Tooltip, ComponentRenderer, SURFACE_FLOATING, SURFACE_OUTLINE, SELECTION, TEXT_ON_ACCENT, MinimalMetrics,
+    NativeField,
     TRANSFORM_FRAME, TRANSFORM_HANDLE, TRANSFORM_HANDLE_HOVER, TRANSFORM_PIVOT, TRANSFORM_PREVIEW_OK,
     TRANSFORM_PREVIEW_WARN, TRANSFORM_PREVIEW_BLOCK, TRANSFORM_HANDLE_SIZE, TRANSFORM_KNOB_RADIUS, TRANSFORM_HIT_RADIUS
 )
@@ -233,6 +236,127 @@ class Renderer:
             self.lines(pts, color, 1.4, strip=True)
             self.lines([(cx - 0.22 * s, cy), (cx + 0.22 * s, cy)], color, 1.2)
             self.lines([(cx, cy - 0.22 * s), (cx, cy + 0.22 * s)], color, 1.2)
+
+    def smooth_icon(self, name, cx, cy, size, color):
+        pixels = max(1, round(size * self.s))
+        key = (name, pixels)
+        if key not in self.icon_batches:
+            batches = []
+            for level, cells in icon_pixels(name, pixels).items():
+                vertices = []
+                for x, y in cells:
+                    vertices.extend([(x, y), (x + 1, y), (x + 1, y + 1), (x, y), (x + 1, y + 1), (x, y + 1)])
+                batches.append((level, batch_for_shader(self.shader, 'TRIS', {'pos': vertices})))
+            self.icon_batches[key] = batches
+        gpu.state.blend_set('ALPHA')
+        with gpu.matrix.push_pop():
+            gpu.matrix.translate((round(cx - pixels / 2), round(cy - pixels / 2), 0))
+            self.shader.bind()
+            for level, batch in self.icon_batches[key]:
+                self.shader.uniform_float('color', (*color[:3], color[3] * level / ICON_LEVELS))
+                batch.draw(self.shader)
+
+    def framed_rect(self, rect, fill, outline, radius):
+        edge = max(1, round(self.s))
+        self.round_rect(rect, outline, radius=radius)
+        self.round_rect(Rect(rect.x + edge, rect.y + edge, rect.w - 2 * edge, rect.h - 2 * edge), fill, radius=max(0, radius - 1))
+
+    def avatar_field(self, ed, control, colors, metrics):
+        field = ed.avatar_field
+        label = LABEL
+        scale = self.s
+        box = field.box(control)
+        editing = field.mode == SEARCH
+        hover = box.contains(*field.mouse)
+        text_y = box.y + (box.h - 8 * scale) / 2
+        blf.size(0, TEXT_SIZE * scale)
+        self.rect(Rect(control.x, box.y, box.x - control.x, box.h), (*SURFACE_FLOATING[:3], 1.0))
+        self.text(box.x - 10 * scale - blf.dimensions(0, label)[0], text_y, label, TEXT_SIZE, colors.label)
+        self.framed_rect(box, colors.fill_edit if editing else colors.fill_hover if hover else colors.fill,
+                         colors.outline_edit if editing else colors.outline_hover if hover else colors.outline, metrics.text)
+        ink = colors.ink_edit if editing else colors.ink
+        self.smooth_icon('OBJECT_DATA', box.x + 12 * scale, box.y + box.h / 2, 16, ink)
+        extra = field.extra_rect(box)
+        self.smooth_icon('PANEL_CLOSE' if field.avatar else 'EYEDROPPER', extra.x + extra.w / 2, extra.y + extra.h / 2, 11 if field.avatar else 16,
+                       ink if extra.contains(*field.mouse) else (*ink[:3], .75))
+        left = box.x + TEXT_OFFSET * scale
+        room = extra.x - left
+        value = field.text if editing else field.avatar.name if field.avatar else ''
+        shown = ink if value else (*ink[:3], .4)
+        if not editing:
+            self.text(left, text_y, value or label, TEXT_SIZE, shown, max_width=room)
+            return
+        blf.size(0, TEXT_SIZE * scale)
+        start, end = field.selection()
+        cursor_x = blf.dimensions(0, value[:field.cursor])[0]
+        shift = max(0, cursor_x - room + 2 * scale)
+        self.clip(Rect(left, box.y, room, box.h))
+        if start != end:
+            low = left - shift + blf.dimensions(0, value[:start])[0]
+            self.rect(Rect(low, box.y + 1 * scale, blf.dimensions(0, value[start:end])[0], box.h - 2 * scale), colors.selection)
+        self.text(left - shift, text_y, value or label, TEXT_SIZE, shown)
+        self.rect(Rect(left - shift + cursor_x, box.y + 1 * scale, max(1, 2 * scale), box.h - 2 * scale), colors.cursor)
+
+    def avatar_overlay(self, ed, metrics):
+        field = ed.avatar_field
+        control = field.control()
+        if control is None:
+            return
+        region = Rect(0, 0, ed._region.width, ed._region.height)
+        colors = NativeField.resolve()
+        surface = field.surface(ed._region.width, ed._region.height)
+        offset = self.offset
+        self.offset = (0, 0)
+        with surface.bind():
+            self.clip(region)
+            gpu.state.active_framebuffer_get().clear(color=(0, 0, 0, 0))
+            gpu.state.blend_set('ALPHA')
+            self.avatar_field(ed, control, colors, metrics)
+            self.clip(region)
+            if field.mode == SEARCH:
+                self.avatar_popup(ed, control, colors, metrics)
+            elif field.mode == EYEDROPPER and field.sample is not None:
+                self.avatar_sample(ed, colors, metrics)
+        self.offset = offset
+        self.clip(region)
+        blend = gpu.state.blend_get()
+        gpu.state.blend_set('ALPHA_PREMULT')
+        draw_texture_2d(surface.texture_color, (0, 0), region.w, region.h)
+        gpu.state.blend_set(blend)
+        self.clip(ed.canvas_layout.panel)
+
+    def avatar_sample(self, ed, colors, metrics):
+        field = ed.avatar_field
+        scale = self.s
+        blf.size(0, TEXT_SIZE * scale)
+        name = field.sample.name
+        tip = Rect(field.mouse[0] + 14 * scale, field.mouse[1] - 22 * scale, blf.dimensions(0, name)[0] + 12 * scale, 18 * scale)
+        self.round_rect(tip, colors.popup, radius=metrics.tooltip)
+        self.text(tip.x + 6 * scale, tip.y + 5 * scale, name, TEXT_SIZE, colors.row_ink)
+
+    def avatar_popup(self, ed, control, colors, metrics):
+        field = ed.avatar_field
+        scale = self.s
+        popup, rows = field.popup(field.box(control))
+        for step in range(colors.shadow_width, 0, -1):
+            spread = step * scale / 2
+            self.round_rect(Rect(popup.x - spread, popup.y - spread, popup.w + 2 * spread, popup.h + 2 * spread), (0, 0, 0, colors.shadow_alpha), radius=metrics.menu_back + step / 2)
+        self.framed_rect(popup, colors.popup, colors.popup_outline, metrics.menu_back)
+        for index, obj in enumerate(field.results[field.offset:field.offset + rows]):
+            row = field.row_rect(popup, index)
+            active = field.offset + index == field.active
+            if active:
+                self.round_rect(row, colors.row_active, radius=metrics.menu_item / 2)
+            ink = colors.row_ink_active if active else colors.row_ink
+            self.smooth_icon('OUTLINER_OB_MESH', row.x + 9 * scale, row.y + row.h / 2, 16, ink)
+            self.text(popup.x + 36 * scale, row.y + 5 * scale, obj.name, TEXT_SIZE, ink, max_width=popup.w - 42 * scale)
+        if not field.results:
+            self.text(popup.x + 7 * scale, field.row_rect(popup, 0).y + 5 * scale, 'No results found', TEXT_SIZE, colors.row_ink)
+        middle = popup.x + popup.w / 2
+        if field.offset > 0:
+            self.smooth_icon('CHEVRON', middle, popup.y + popup.h - 6 * scale, 10, colors.row_ink)
+        if field.offset + rows < len(field.results):
+            self.smooth_icon('DOWN', middle, popup.y + 6 * scale, 10, colors.row_ink)
 
     def fill_pattern(self, identity, world, screen, color, holes=(), view=None, canvas=None):
         key = (identity, tuple(world), tuple(tuple(loop) for loop in holes))
@@ -875,6 +999,9 @@ class Renderer:
                     else:
                         self.text(control.x + 8 * scale, control.y + control.h - 15 * scale, row[1], 9, TEXT_SUB)
                         self.text(control.x + 8 * scale, control.y + 8 * scale, value, 11, TEXT, max_width=control.w - 16 * scale)
+                elif key == 'AVATAR_FIELD':
+                    if ed.avatar_field.tooltip_ready():
+                        card_tooltip = Tooltip(text='Avatar body used for arrangement, points and fit', pos=(control.x, control.y - 18 * scale), visible=True)
                 elif key in {'CHOICES', 'CHOICES_FABRIC'}:
                     label, value = row[1], row[2]
                     prefix, choices, active = value
@@ -1066,6 +1193,7 @@ class Renderer:
         if panel.w > 850 * scale and not ed.confirm_action and hint_clear and ed.tool != 'SHAPE':
             self.text(panel.x + 90 * scale, panel.y + 65 * scale, ed.tool_hint(), 11, MUTED,
                       max_width=panel.w - 440 * scale)
+        self.avatar_overlay(ed, metrics)
         if tooltip and not any(card[0].contains(*ed.pointer) for card in cards):
             ComponentRenderer.draw_tooltip(self, Tooltip(text=tooltip[0], shortcut=tooltip[1], pos=tooltip[2], visible=True), scale, metrics)
         if card_tooltip:

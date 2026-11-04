@@ -3,7 +3,8 @@ import json
 from pathlib import Path
 from devil_designer.canvas import Layout, Rect, clamp_window
 from devil_designer.controls import SETTINGS
-from devil_designer.icons import icon_geometry, icon_spans
+from devil_designer.icons import icon_geometry, icon_pixels, icon_spans
+from devil_designer.ui_system import VIEWPORT_LEVELS, viewport_level
 
 
 class IconTests(unittest.TestCase):
@@ -20,6 +21,18 @@ class IconTests(unittest.TestCase):
         for name in ('SELECT', 'POLYGON', 'RECTANGLE', 'ELLIPSE', 'INTERNAL', 'SEW',
                      'PIN', 'DART', 'UNDO', 'REDO', 'LIBRARY', 'GARMENT', 'CLOSE'):
             self.assertIsNotNone(icon_spans(name), name)
+
+    def test_viewport_level_undoes_the_measured_dark_lift(self):
+        for sent, shown in VIEWPORT_LEVELS:
+            self.assertAlmostEqual(viewport_level(shown / 255), sent / 255)
+
+    def test_smooth_icons_keep_soft_edges_inside_the_pixel_grid(self):
+        for name, pixels in (('OUTLINER_OB_MESH', 16), ('EYEDROPPER', 16), ('OBJECT_DATA', 20)):
+            levels = icon_pixels(name, pixels)
+            cells = [cell for group in levels.values() for cell in group]
+            self.assertTrue(all(0 <= x < pixels and 0 <= y < pixels for x, y in cells))
+            self.assertGreater(len(levels), 3)
+            self.assertEqual(max(levels), 32)
 
     def test_icon_data_is_cached(self):
         self.assertIs(icon_geometry(), icon_geometry())

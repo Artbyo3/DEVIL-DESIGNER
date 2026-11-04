@@ -92,7 +92,9 @@ def prepare():
         'DISCLOSURE': 'disclosure_tri_right', 'EXPAND': 'fullscreen_enter',
         'DOWN': 'tria_down', 'SETTINGS': 'settings', 'CHECK': 'checkmark', 'PIN': 'pinned',
         'SNAP_ON': 'snap_on', 'SNAP_OFF': 'snap_off',
-        'HIDE_OFF': 'hide_off', 'HIDE_ON': 'hide_on'
+        'HIDE_OFF': 'hide_off', 'HIDE_ON': 'hide_on',
+        'OBJECT_DATA': 'object_data', 'OUTLINER_OB_MESH': 'outliner_ob_mesh', 'EYEDROPPER': 'eyedropper',
+        'PANEL_CLOSE': 'panel_close'
     }
     dat_mappings = {
         'SELECT': 'ops.generic.select.dat',

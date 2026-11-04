@@ -207,5 +207,33 @@
     "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880d3084d9d57c30031ed5df8b39dee/release/datafiles/icons/ops.view3d.ruler.dat",
     "sha256": "c3cc4544b73d8546460457fe157cb079a77af16bfbb27f84d2360772fcb99570",
     "license": "GPL-2.0-or-later"
+  },
+  "OBJECT_DATA": {
+    "collection": "Blender built-in icons",
+    "icon": "OBJECT_DATA",
+    "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880d3084d9d57c30031ed5df8b39dee/release/datafiles/icons_svg/object_data.svg",
+    "sha256": "cfe32e515b13d6b15d81fa676d1c0c32c3776c4279ca7feb8c4b748bd0ffb494",
+    "license": "GPL-2.0-or-later"
+  },
+  "OUTLINER_OB_MESH": {
+    "collection": "Blender built-in icons",
+    "icon": "OUTLINER_OB_MESH",
+    "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880d3084d9d57c30031ed5df8b39dee/release/datafiles/icons_svg/outliner_ob_mesh.svg",
+    "sha256": "ea5199353617e3d7e9762709f3719196afd122a463f341f3784f5575ac54146a",
+    "license": "GPL-2.0-or-later"
+  },
+  "EYEDROPPER": {
+    "collection": "Blender built-in icons",
+    "icon": "EYEDROPPER",
+    "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880d3084d9d57c30031ed5df8b39dee/release/datafiles/icons_svg/eyedropper.svg",
+    "sha256": "22cde207d4cabc93246bbbd7576a649b5e9e79100796ed56140be9bb061d12f3",
+    "license": "GPL-2.0-or-later"
+  },
+  "PANEL_CLOSE": {
+    "collection": "Blender built-in icons",
+    "icon": "PANEL_CLOSE",
+    "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880d3084d9d57c30031ed5df8b39dee/release/datafiles/icons_svg/panel_close.svg",
+    "sha256": "e2db88ba7e868c87d414cca75d17c6d7047b9d8797fa3594f5d2c6e0dd3012a1",
+    "license": "GPL-2.0-or-later"
   }
 }

@@ -74,6 +74,71 @@ class MinimalMetrics:
         return m
 
 
+VIEWPORT_LEVELS = ((0, 0), (4, 12), (8, 17), (12, 20), (16, 23), (19, 26), (23, 29), (28, 34), (32, 37), (36, 41),
+                   (40, 44), (46, 50), (53, 56), (61, 63), (70, 72), (80, 81), (100, 100), (255, 255))
+
+
+def viewport_level(value):
+    target = value * 255
+    for (sent_low, shown_low), (sent_high, shown_high) in zip(VIEWPORT_LEVELS, VIEWPORT_LEVELS[1:]):
+        if target <= shown_high:
+            return (sent_low + (target - shown_low) * (sent_high - sent_low) / (shown_high - shown_low)) / 255
+    return value
+
+
+def viewport_color(color):
+    return (*(viewport_level(channel) for channel in color[:3]), color[3])
+
+
+def theme_color(value):
+    color = tuple(value)
+    return color if len(color) == 4 else (*color, 1.0)
+
+
+def mixed(first, second, amount):
+    return tuple(a + (b - a) * amount for a, b in zip(first[:3], second[:3])) + (1.0,)
+
+
+@dataclass
+class NativeField:
+    fill: Tuple[float, ...]
+    fill_hover: Tuple[float, ...]
+    fill_edit: Tuple[float, ...]
+    outline: Tuple[float, ...]
+    outline_hover: Tuple[float, ...]
+    outline_edit: Tuple[float, ...]
+    ink: Tuple[float, ...]
+    ink_edit: Tuple[float, ...]
+    selection: Tuple[float, ...]
+    cursor: Tuple[float, ...]
+    label: Tuple[float, ...]
+    popup: Tuple[float, ...]
+    popup_outline: Tuple[float, ...]
+    row_ink: Tuple[float, ...]
+    row_ink_active: Tuple[float, ...]
+    row_active: Tuple[float, ...]
+    shadow_width: int
+    shadow_alpha: float
+
+    @classmethod
+    def resolve(cls):
+        theme = bpy.context.preferences.themes[0]
+        ui = theme.user_interface
+        field, back, item = ui.wcol_text, ui.wcol_menu_back, ui.wcol_menu_item
+        fill, outline, ink = theme_color(field.inner), theme_color(field.outline), theme_color(field.text)
+        outline_edit = theme_color(field.outline_sel)
+        row_ink = theme_color(item.text)
+        popup = theme_color(back.inner)
+        colors = dict(fill=fill, fill_hover=mixed(fill, ink, .03), fill_edit=theme_color(field.inner_sel),
+                      outline=outline, outline_hover=mixed(outline, outline_edit, .5), outline_edit=outline_edit,
+                      ink=ink, ink_edit=theme_color(field.text_sel), selection=theme_color(field.item),
+                      cursor=theme_color(ui.widget_text_cursor), label=theme_color(theme.properties.space.text),
+                      popup=mixed(SURFACE_FLOATING, popup, popup[3]), popup_outline=theme_color(back.outline), row_ink=row_ink,
+                      row_ink_active=theme_color(item.text_sel), row_active=mixed(theme_color(item.inner), row_ink, .2))
+        return cls(shadow_width=ui.menu_shadow_width, shadow_alpha=ui.menu_shadow_fac / 4,
+                   **{name: viewport_color(color) for name, color in colors.items()})
+
+
 @dataclass
 class Tooltip:
     text: str = ""

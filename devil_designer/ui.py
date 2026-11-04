@@ -4,10 +4,7 @@ from .editor import DD_OT_pattern_editor, close_active
 from .operators import CLASSES
 from .viewport_sewing import DD_OT_viewport_seam_action
 from .garment import cancel_playback
-
-
-def avatar_poll(self,obj):
-    return obj.type=='MESH' and obj.get('dd_kind') not in {'panel','simulation','final'}
+from .avatar_field import avatar_poll
 
 
 def launch_menu(self,context):
