@@ -10,7 +10,7 @@ from .canvas import Rect, grid_step
 from .core import area, triangulate, contains, Vertex, sample_path
 from . import curves
 from .controls import CONTROL_SETTINGS as SETTINGS
-from .icons import icon_spans
+from .icons import ICON_LEVELS, icon_pixels, icon_spans
 from .construction import sew_reverse
 from .minimal import SEAM_ACTIVE, SEAM_CONNECTED, SEAM_QUIET
 from .avatar_field import EYEDROPPER, LABEL, SEARCH, TEXT_OFFSET, TEXT_SIZE
@@ -237,6 +237,24 @@ class Renderer:
             self.lines([(cx - 0.22 * s, cy), (cx + 0.22 * s, cy)], color, 1.2)
             self.lines([(cx, cy - 0.22 * s), (cx, cy + 0.22 * s)], color, 1.2)
 
+    def smooth_icon(self, name, cx, cy, size, color):
+        pixels = max(1, round(size * self.s))
+        key = (name, pixels)
+        if key not in self.icon_batches:
+            batches = []
+            for level, cells in icon_pixels(name, pixels).items():
+                vertices = []
+                for x, y in cells:
+                    vertices.extend([(x, y), (x + 1, y), (x + 1, y + 1), (x, y), (x + 1, y + 1), (x, y + 1)])
+                batches.append((level, batch_for_shader(self.shader, 'TRIS', {'pos': vertices})))
+            self.icon_batches[key] = batches
+        with gpu.matrix.push_pop():
+            gpu.matrix.translate((round(cx - pixels / 2), round(cy - pixels / 2), 0))
+            self.shader.bind()
+            for level, batch in self.icon_batches[key]:
+                self.shader.uniform_float('color', (*color[:3], color[3] * level / ICON_LEVELS))
+                batch.draw(self.shader)
+
     def framed_rect(self, rect, fill, outline, radius):
         edge = max(1, round(self.s))
         self.round_rect(rect, outline, radius=radius)
@@ -256,9 +274,9 @@ class Renderer:
         self.framed_rect(box, colors.fill_edit if editing else colors.fill_hover if hover else colors.fill,
                          colors.outline_edit if editing else colors.outline_hover if hover else colors.outline, metrics.text)
         ink = colors.ink_edit if editing else colors.ink
-        self.draw_icon('OBJECT_DATA', box.x + 12 * scale, box.y + box.h / 2, 16, ink)
+        self.smooth_icon('OBJECT_DATA', box.x + 12 * scale, box.y + box.h / 2, 16, ink)
         extra = field.extra_rect(box)
-        self.draw_icon('PANEL_CLOSE' if field.avatar else 'EYEDROPPER', extra.x + extra.w / 2, extra.y + extra.h / 2, 11 if field.avatar else 16,
+        self.smooth_icon('PANEL_CLOSE' if field.avatar else 'EYEDROPPER', extra.x + extra.w / 2, extra.y + extra.h / 2, 11 if field.avatar else 16,
                        ink if extra.contains(*field.mouse) else (*ink[:3], .75))
         left = box.x + TEXT_OFFSET * scale
         room = extra.x - left
@@ -329,15 +347,15 @@ class Renderer:
             if active:
                 self.round_rect(row, colors.row_active, radius=metrics.menu_item / 2)
             ink = colors.row_ink_active if active else colors.row_ink
-            self.draw_icon('OUTLINER_OB_MESH', row.x + 9 * scale, row.y + row.h / 2, 16, ink)
+            self.smooth_icon('OUTLINER_OB_MESH', row.x + 9 * scale, row.y + row.h / 2, 16, ink)
             self.text(popup.x + 36 * scale, row.y + 5 * scale, obj.name, TEXT_SIZE, ink, max_width=popup.w - 42 * scale)
         if not field.results:
             self.text(popup.x + 7 * scale, field.row_rect(popup, 0).y + 5 * scale, 'No results found', TEXT_SIZE, colors.row_ink)
         middle = popup.x + popup.w / 2
         if field.offset > 0:
-            self.draw_icon('CHEVRON', middle, popup.y + popup.h - 6 * scale, 10, colors.row_ink)
+            self.smooth_icon('CHEVRON', middle, popup.y + popup.h - 6 * scale, 10, colors.row_ink)
         if field.offset + rows < len(field.results):
-            self.draw_icon('DOWN', middle, popup.y + 6 * scale, 10, colors.row_ink)
+            self.smooth_icon('DOWN', middle, popup.y + 6 * scale, 10, colors.row_ink)
 
     def fill_pattern(self, identity, world, screen, color, holes=(), view=None, canvas=None):
         key = (identity, tuple(world), tuple(tuple(loop) for loop in holes))
