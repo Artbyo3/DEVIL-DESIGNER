@@ -210,7 +210,7 @@ jobs:
               with open('release_notes.md', 'w', encoding='utf-8') as f:
                   f.write(final_notes)
           "
-          HTTP_CODE=$(curl -s -S -o blender_response.json -w "%{http_code}" -X POST "https://extensions.blender.org/api/v1/extensions/devil-designer/versions/upload/" \
+          HTTP_CODE=$(curl -s -S -o blender_response.json -w "%{http_code}" -X POST "https://extensions.blender.org/api/v1/extensions/devil_designer/versions/upload/" \
             -H "Authorization:bearer $BLENDER_EXTENSIONS_TOKEN" \
             -F "version_file=@$ZIP_PATH" \
             -F "release_notes=<release_notes.md")
