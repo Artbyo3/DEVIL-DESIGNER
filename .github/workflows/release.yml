@@ -159,7 +159,7 @@ jobs:
           HTTP_CODE=$(curl -s -S -o blender_response.json -w "%{http_code}" -X POST "https://extensions.blender.org/api/v1/extensions/devil-designer/versions/upload/" \
             -H "Authorization:bearer $BLENDER_EXTENSIONS_TOKEN" \
             -F "version_file=@$ZIP_PATH" \
-            -F "release_notes<release_notes.md")
+            -F "release_notes=<release_notes.md")
           if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
             echo "Blender Extensions upload failed with HTTP status $HTTP_CODE"
             cat blender_response.json
