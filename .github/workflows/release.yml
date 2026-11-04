@@ -1,0 +1,221 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      release-tag:
+        description: 'Release tag to process (e.g. v0.12.0)'
+        required: true
+        type: string
+        default: 'v0.12.0'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Prepare release parameters
+        run: |
+          RAW_TAG="${{ inputs['release-tag'] || github.ref_name }}"
+          if expr "$RAW_TAG" : 'v' >/dev/null; then
+            TAG="$RAW_TAG"
+            VERSION=$(echo "$RAW_TAG" | sed 's/^v//')
+          else
+            TAG="v$RAW_TAG"
+            VERSION="$RAW_TAG"
+          fi
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Install Blender-bundled numpy for headless build
+        if: github.event_name == 'push'
+        run: python -m pip install numpy
+
+      - name: Build extension archive
+        if: github.event_name == 'push'
+        run: |
+          python tools/build.py
+          cd dist
+          sha256sum "devil_designer-${VERSION}.zip" > SHA256SUMS
+          cd ..
+
+      - name: Create draft GitHub release
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$TAG" "dist/devil_designer-${VERSION}.zip" "dist/SHA256SUMS" --draft --title "Devil Designer ${VERSION}" --generate-notes
+
+      - name: Download existing release archive
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p dist
+          gh release download "$TAG" --pattern "*.zip" --dir dist
+
+      - name: Resolve archive and sha256
+        run: |
+          ZIP_FILE=$(find dist -maxdepth 1 -name "*.zip" | head -n 1)
+          if [ -z "$ZIP_FILE" ] || [ ! -f "$ZIP_FILE" ]; then
+            echo "Extension zip archive not found in dist/"
+            exit 1
+          fi
+          ZIP_SHA=$(sha256sum "$ZIP_FILE" | awk '{print $1}')
+          echo "ZIP_PATH=$ZIP_FILE" >> "$GITHUB_ENV"
+          echo "ZIP_SHA256=$ZIP_SHA" >> "$GITHUB_ENV"
+
+      - name: Scan archive on VirusTotal
+        env:
+          VIRUS_TOTAL_TOKEN: ${{ secrets.VIRUS_TOTAL_TOKEN }}
+        run: |
+          if [ -z "$VIRUS_TOTAL_TOKEN" ]; then
+            echo "Missing VIRUS_TOTAL_TOKEN secret"
+            exit 1
+          fi
+          UPLOAD_RESPONSE=$(curl -s -S --fail-with-body -X POST "https://www.virustotal.com/api/v3/files" \
+            -H "x-apikey: $VIRUS_TOTAL_TOKEN" \
+            -F "file=@$ZIP_PATH")
+          export UPLOAD_RESPONSE
+          python -c "
+          import json, os, sys, time, urllib.request
+
+          api_key = os.environ['VIRUS_TOTAL_TOKEN']
+          upload_text = os.environ['UPLOAD_RESPONSE']
+          try:
+              upload_data = json.loads(upload_text)
+          except Exception as err:
+              sys.exit(f'Failed to parse VirusTotal upload response: {err}\n{upload_text}')
+
+          analysis_id = upload_data.get('data', {}).get('id')
+          if not analysis_id:
+              sys.exit(f'Missing analysis id in VirusTotal upload response: {upload_text}')
+
+          analysis_url = f'https://www.virustotal.com/api/v3/analyses/{analysis_id}'
+          analysis_link = f'https://www.virustotal.com/gui/file-analysis/{analysis_id}'
+          file_link = f'https://www.virustotal.com/gui/file/{os.environ[\"ZIP_SHA256\"]}'
+
+          for attempt in range(40):
+              time.sleep(15)
+              req = urllib.request.Request(analysis_url, headers={'x-apikey': api_key})
+              try:
+                  with urllib.request.urlopen(req) as resp:
+                      poll_data = json.loads(resp.read().decode('utf-8'))
+              except Exception as err:
+                  print(f'Poll attempt {attempt + 1} request error: {err}')
+                  continue
+              attr = poll_data.get('data', {}).get('attributes', {})
+              status = attr.get('status')
+              if status == 'completed':
+                  stats = attr.get('stats', {})
+                  malicious = stats.get('malicious', 0)
+                  suspicious = stats.get('suspicious', 0)
+                  total = sum(stats.values())
+                  if malicious == 0 and suspicious == 0:
+                      print(f'VirusTotal verdict: CLEAN ({total}/{total} engines clean)')
+                      print(f'Analysis link: {analysis_link}')
+                      print(f'File report link: {file_link}')
+                      sys.exit(0)
+                  else:
+                      print(f'VirusTotal verdict: UNCLEAN ({malicious} malicious, {suspicious} suspicious out of {total} engines)')
+                      print(f'Analysis link: {analysis_link}')
+                      print(f'File report link: {file_link}')
+                      sys.exit(1)
+              print(f'VirusTotal analysis status: {status} (attempt {attempt + 1}/40)')
+
+          print('VirusTotal analysis did not complete within the timeout period')
+          print(f'Analysis link: {analysis_link}')
+          sys.exit(1)
+          "
+
+      - name: Upload to Blender Extensions
+        env:
+          BLENDER_EXTENSIONS_TOKEN: ${{ secrets.BLENDER_EXTENSIONS_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -z "$BLENDER_EXTENSIONS_TOKEN" ]; then
+            echo "Missing BLENDER_EXTENSIONS_TOKEN secret"
+            exit 1
+          fi
+          gh release view "$TAG" --json body -q .body > release_notes.md 2>/dev/null || true
+          if [ ! -s release_notes.md ]; then
+            echo "Release $VERSION" > release_notes.md
+          fi
+          HTTP_CODE=$(curl -s -S -o blender_response.json -w "%{http_code}" -X POST "https://extensions.blender.org/api/v1/extensions/devil-designer/versions/upload/" \
+            -H "Authorization:bearer $BLENDER_EXTENSIONS_TOKEN" \
+            -F "version_file=@$ZIP_PATH" \
+            -F "release_notes<release_notes.md")
+          if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
+            echo "Blender Extensions upload failed with HTTP status $HTTP_CODE"
+            cat blender_response.json
+            exit 1
+          fi
+          echo "Blender Extensions upload succeeded with HTTP status $HTTP_CODE"
+          cat blender_response.json
+
+      - name: Update docs site
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout master
+          git pull --ff-only origin master || true
+          python -c "
+          import os, re
+
+          sha = os.environ['ZIP_SHA256']
+          ver = os.environ['VERSION']
+          new_url = f'https://extensions.blender.org/download/sha256:{sha}/add-on-devil-designer-v{ver}.zip?repository=%2Fapi%2Fv1%2Fextensions%2F&blender_version_min=5.2.0'
+          new_url_html = f'https://extensions.blender.org/download/sha256:{sha}/add-on-devil-designer-v{ver}.zip?repository=%2Fapi%2Fv1%2Fextensions%2F&amp;blender_version_min=5.2.0'
+
+          with open('docs-site/docs/index.md', 'r', encoding='utf-8') as f:
+              content = f.read()
+
+          content = re.sub(
+              r'https://extensions\.blender\.org/download/sha256:[a-f0-9]+/add-on-devil-designer-v[0-9.]+\.zip\?repository=%2Fapi%2Fv1%2Fextensions%2F&amp;blender_version_min=5\.2\.0',
+              new_url_html,
+              content
+          )
+          content = re.sub(
+              r'https://extensions\.blender\.org/download/sha256:[a-f0-9]+/add-on-devil-designer-v[0-9.]+\.zip\?repository=%2Fapi%2Fv1%2Fextensions%2F&blender_version_min=5\.2\.0',
+              new_url,
+              content
+          )
+
+          with open('docs-site/docs/index.md', 'w', encoding='utf-8') as f:
+              f.write(content)
+
+          with open('docs-site/zensical.toml', 'r', encoding='utf-8') as f:
+              toml_content = f.read()
+
+          toml_content = re.sub(
+              r'version = \"v[0-9.]+\"',
+              f'version = \"v{ver}\"',
+              toml_content
+          )
+
+          with open('docs-site/zensical.toml', 'w', encoding='utf-8') as f:
+              f.write(toml_content)
+          "
+          git add docs-site/docs/index.md
+          git add docs-site/zensical.toml
+          if ! git diff --staged --quiet; then
+            git commit -m "docs: update install payload and version tag for v${VERSION}"
+            git push origin master
+          fi
