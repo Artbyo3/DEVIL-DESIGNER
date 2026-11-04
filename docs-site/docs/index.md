@@ -40,7 +40,7 @@ hide:
           <span>Drag and Drop into Blender</span>
         </div>
         <div class="dd-install-fallback">
-          ...or <a href="https://extensions.blender.org/download/sha256:96b820ec8a5ea15fc6ebf465c1a1c649ef68c075b122b79e1eac2b941b8fc37d/add-on-devil-designer-v0.11.0.zip?repository=%2Fapi%2Fv1%2Fextensions%2F&amp;blender_version_min=5.2.0" class="dd-install-fallback-link" download>download</a> and <a href="install/#alternative-install-from-github-release-zip" class="dd-install-fallback-link">Install from Disk</a>
+          ...or <a href="https://extensions.blender.org/download/sha256:8baed67506582a6ac40a68d13c181eb92cb181fc871c84e0f02c6be294672f9c/add-on-devil-designer-v0.12.0.zip?repository=%2Fapi%2Fv1%2Fextensions%2F&amp;blender_version_min=5.2.0" class="dd-install-fallback-link" download>download</a> and <a href="install/#alternative-install-from-github-release-zip" class="dd-install-fallback-link">Install from Disk</a>
         </div>
       </div>
     </div>
@@ -70,7 +70,7 @@ hide:
   const dragZone = document.getElementById('dd-install-drag');
   if (!card) return;
 
-  const installUrl = 'https://extensions.blender.org/download/sha256:96b820ec8a5ea15fc6ebf465c1a1c649ef68c075b122b79e1eac2b941b8fc37d/add-on-devil-designer-v0.11.0.zip?repository=%2Fapi%2Fv1%2Fextensions%2F&blender_version_min=5.2.0';
+  const installUrl = 'https://extensions.blender.org/download/sha256:8baed67506582a6ac40a68d13c181eb92cb181fc871c84e0f02c6be294672f9c/add-on-devil-designer-v0.12.0.zip?repository=%2Fapi%2Fv1%2Fextensions%2F&blender_version_min=5.2.0';
 
   function revealDrag() {
     card.classList.add('is-active');
