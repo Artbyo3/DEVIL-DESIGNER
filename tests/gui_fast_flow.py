@@ -1266,11 +1266,13 @@ def run():
             button('SIMULATE')
             check(workspace.card_kind == 'BODY' and workspace.pending_simulation,
                   'ambiguous bodies use a small body card, never a settings panel')
-            index = workspace.card_models.index(body) if body in workspace.card_models else None
-            if index is None:
-                workspace.minimal_card()
-                index = workspace.card_models.index(body)
-            card_click('BODY_' + str(index))
+            avatar_box = workspace.avatar_field.box(card_control('AVATAR_FIELD'))
+            click((avatar_box.x + 40, avatar_box.y + avatar_box.h / 2))
+            check(workspace.avatar_field.mode == 'SEARCH' and body in workspace.avatar_field.results,
+                  'clicking the Avatar field opens the candidate list')
+            popup, rows = workspace.avatar_field.popup(avatar_box)
+            body_row = workspace.avatar_field.row_rect(popup, workspace.avatar_field.results.index(body) - workspace.avatar_field.offset)
+            click((body_row.x + 20, body_row.y + body_row.h / 2))
             check(scene.dd_avatar == body and bpy.context.screen.is_animation_playing,
                   'choosing the body continues simulation without a second transport click')
             button('SIMULATE')

@@ -12,9 +12,11 @@ from .controls import CONTROL_SETTINGS as SETTINGS
 from .icons import icon_spans
 from .construction import sew_reverse
 from .minimal import SEAM_ACTIVE, SEAM_CONNECTED, SEAM_QUIET
+from .avatar_field import EYEDROPPER, SEARCH, TEXT_OFFSET, TEXT_SIZE
 
 from .ui_system import (
     BG_BASE, BG_ELEVATED, BG_WELL, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, ACCENT, ACCENT_BG, ACCENT_BORDER, ACCENT_HOVER, BORDER, BORDER_SUBTLE, RADIUS_WINDOW, RADIUS_BADGE, Tooltip, ComponentRenderer, SURFACE_FLOATING, SURFACE_OUTLINE, SELECTION, TEXT_ON_ACCENT, MinimalMetrics,
+    NATIVE_FIELD, NATIVE_FIELD_HOVER, NATIVE_FIELD_EDIT, NATIVE_POPUP, NATIVE_ROW_ACTIVE, NATIVE_TEXT, NATIVE_PLACEHOLDER, NATIVE_SELECTION, NATIVE_CURSOR,
     TRANSFORM_FRAME, TRANSFORM_HANDLE, TRANSFORM_HANDLE_HOVER, TRANSFORM_PIVOT, TRANSFORM_PREVIEW_OK,
     TRANSFORM_PREVIEW_WARN, TRANSFORM_PREVIEW_BLOCK, TRANSFORM_HANDLE_SIZE, TRANSFORM_KNOB_RADIUS, TRANSFORM_HIT_RADIUS
 )
@@ -233,6 +235,68 @@ class Renderer:
             self.lines(pts, color, 1.4, strip=True)
             self.lines([(cx - 0.22 * s, cy), (cx + 0.22 * s, cy)], color, 1.2)
             self.lines([(cx, cy - 0.22 * s), (cx, cy + 0.22 * s)], color, 1.2)
+
+    def avatar_field(self, ed, control, label, metrics):
+        field = ed.avatar_field
+        scale = self.s
+        box = field.box(control)
+        editing = field.mode == SEARCH
+        text_y = box.y + (box.h - 8 * scale) / 2
+        blf.size(0, TEXT_SIZE * scale)
+        self.text(box.x - 8 * scale - blf.dimensions(0, label)[0], text_y, label, TEXT_SIZE, NATIVE_TEXT)
+        hover = box.contains(*ed.pointer)
+        self.round_rect(box, NATIVE_FIELD_EDIT if editing else NATIVE_FIELD_HOVER if hover else NATIVE_FIELD, radius=metrics.text)
+        self.draw_icon('OBJECT_DATA', box.x + 11 * scale, box.y + box.h / 2, 14, NATIVE_TEXT)
+        extra = field.extra_rect(box)
+        self.draw_icon('CLOSE' if field.avatar else 'EYEDROPPER', extra.x + extra.w / 2, extra.y + extra.h / 2, 11 if field.avatar else 14, NATIVE_TEXT)
+        left = box.x + TEXT_OFFSET * scale
+        room = extra.x - left
+        value = field.text if editing else field.avatar.name if field.avatar else ''
+        ink = NATIVE_TEXT if value else NATIVE_PLACEHOLDER
+        if not editing:
+            self.text(left, text_y, value or label, TEXT_SIZE, ink, max_width=room)
+            return
+        blf.size(0, TEXT_SIZE * scale)
+        start, end = field.selection()
+        cursor_x = blf.dimensions(0, value[:field.cursor])[0]
+        shift = max(0, cursor_x - room + 2 * scale)
+        self.clip(Rect(left, box.y, room, box.h))
+        if start != end:
+            low = left - shift + blf.dimensions(0, value[:start])[0]
+            self.rect(Rect(low, box.y + 1 * scale, blf.dimensions(0, value[start:end])[0], box.h - 2 * scale), NATIVE_SELECTION)
+        self.text(left - shift, text_y, value or label, TEXT_SIZE, ink)
+        self.rect(Rect(left - shift + cursor_x, box.y + 1 * scale, max(1, 1.5 * scale), box.h - 2 * scale), NATIVE_CURSOR)
+        self.clip(ed.canvas_layout.panel)
+
+    def avatar_overlay(self, ed, metrics):
+        field = ed.avatar_field
+        scale = self.s
+        if field.mode == EYEDROPPER and field.sample is not None:
+            blf.size(0, TEXT_SIZE * scale)
+            name = field.sample.name
+            tip = Rect(ed.pointer[0] + 14 * scale, ed.pointer[1] - 22 * scale, blf.dimensions(0, name)[0] + 12 * scale, 18 * scale)
+            self.clip(Rect(0, 0, ed._region.width, ed._region.height))
+            self.round_rect(tip, NATIVE_POPUP, radius=metrics.tooltip)
+            self.text(tip.x + 6 * scale, tip.y + 5 * scale, name, TEXT_SIZE, NATIVE_TEXT)
+            self.clip(ed.canvas_layout.panel)
+        control = field.control() if field.mode == SEARCH else None
+        if control is None:
+            return
+        popup, rows = field.popup(field.box(control))
+        self.round_rect(popup, NATIVE_POPUP, radius=metrics.menu_back)
+        for index, obj in enumerate(field.results[field.offset:field.offset + rows]):
+            row = field.row_rect(popup, index)
+            if field.offset + index == field.active:
+                self.round_rect(row, NATIVE_ROW_ACTIVE, radius=metrics.menu_item)
+            self.draw_icon('OUTLINER_OB_MESH', row.x + 9 * scale, row.y + row.h / 2, 14, NATIVE_TEXT)
+            self.text(popup.x + 36 * scale, row.y + 5 * scale, obj.name, TEXT_SIZE, NATIVE_TEXT, max_width=popup.w - 42 * scale)
+        if not field.results:
+            self.text(popup.x + 7 * scale, field.row_rect(popup, 0).y + 5 * scale, 'No results found', TEXT_SIZE, NATIVE_TEXT)
+        middle = popup.x + popup.w / 2
+        if field.offset > 0:
+            self.draw_icon('CHEVRON', middle, popup.y + popup.h - 6 * scale, 10, NATIVE_TEXT)
+        if field.offset + rows < len(field.results):
+            self.draw_icon('DOWN', middle, popup.y + 6 * scale, 10, NATIVE_TEXT)
 
     def fill_pattern(self, identity, world, screen, color, holes=(), view=None, canvas=None):
         key = (identity, tuple(world), tuple(tuple(loop) for loop in holes))
@@ -875,6 +939,10 @@ class Renderer:
                     else:
                         self.text(control.x + 8 * scale, control.y + control.h - 15 * scale, row[1], 9, TEXT_SUB)
                         self.text(control.x + 8 * scale, control.y + 8 * scale, value, 11, TEXT, max_width=control.w - 16 * scale)
+                elif key == 'AVATAR_FIELD':
+                    self.avatar_field(ed, control, row[1], metrics)
+                    if hover and not ed.avatar_field.mode:
+                        card_tooltip = Tooltip(text='Avatar body used for arrangement, points and fit', pos=(control.x, control.y - 18 * scale), visible=True)
                 elif key in {'CHOICES', 'CHOICES_FABRIC'}:
                     label, value = row[1], row[2]
                     prefix, choices, active = value
@@ -1066,6 +1134,7 @@ class Renderer:
         if panel.w > 850 * scale and not ed.confirm_action and hint_clear and ed.tool != 'SHAPE':
             self.text(panel.x + 90 * scale, panel.y + 65 * scale, ed.tool_hint(), 11, MUTED,
                       max_width=panel.w - 440 * scale)
+        self.avatar_overlay(ed, metrics)
         if tooltip and not any(card[0].contains(*ed.pointer) for card in cards):
             ComponentRenderer.draw_tooltip(self, Tooltip(text=tooltip[0], shortcut=tooltip[1], pos=tooltip[2], visible=True), scale, metrics)
         if card_tooltip:
