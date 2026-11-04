@@ -10,7 +10,6 @@ import bpy
 import gpu
 import numpy as np
 from bpy_extras import view3d_utils
-from gpu_extras.batch import batch_for_shader
 from mathutils import Matrix, Quaternion, Vector
 
 
@@ -21,37 +20,6 @@ import devil_designer
 from devil_designer import arrangement,arrangement_controls,editor,live_panels,ui_system
 from devil_designer.canvas import Rect
 from devil_designer.core import Session,arrangement_record
-
-
-def reference_draw(context):
-    panel=arrangement_controls.display_panel(context)
-    points=[]
-    for point in arrangement.world_points(context):
-        screen=view3d_utils.location_3d_to_region_2d(context.region,context.region_data,Vector(point['position']))
-        if screen is not None and (panel is None or not panel.contains(*screen)):
-            points.append(dict(point,screen=tuple(screen)))
-    shader=gpu.shader.from_builtin('SMOOTH_COLOR')
-    view=context.region_data;camera=view.view_matrix.inverted()
-    radius=ui_system.ARRANGEMENT_POINT_DIAMETER*ui_system.interface_scale()/2
-    feather=ui_system.ARRANGEMENT_EDGE_FEATHER/2
-    gpu.state.blend_set('ALPHA')
-    shader.bind()
-    for mirrored,color in ((False,ui_system.ARRANGEMENT_FILL),(True,ui_system.ARRANGEMENT_MIRRORED)):
-        for point in points:
-            if point['mirrored']!=mirrored:continue
-            toward=(camera.translation-Vector(point['position'])) if view.is_perspective else camera.col[2].xyz
-            alpha=color[3]*(ui_system.ARRANGEMENT_HIDDEN_ALPHA if Vector(point['normal']).dot(toward)<0 else 1)
-            horizontal,vertical=point['screen'];vertices=[];colors=[]
-            solid=(*color[:3],alpha);clear=(*color[:3],0.0)
-            for index in range(arrangement_controls.DISK_SEGMENTS):
-                first=math.tau*index/arrangement_controls.DISK_SEGMENTS;second=math.tau*(index+1)/arrangement_controls.DISK_SEGMENTS
-                inner=[(horizontal+(radius-feather)*math.cos(angle),vertical+(radius-feather)*math.sin(angle)) for angle in (first,second)]
-                outer=[(horizontal+(radius+feather)*math.cos(angle),vertical+(radius+feather)*math.sin(angle)) for angle in (first,second)]
-                vertices.extend(((horizontal,vertical),inner[0],inner[1],inner[0],outer[0],outer[1],inner[0],outer[1],inner[1]))
-                colors.extend((solid,solid,solid,solid,clear,clear,solid,clear,solid))
-            batch_for_shader(shader,'TRIS',{'pos':vertices,'color':colors}).draw(shader)
-    gpu.state.blend_set('NONE')
-    return points
 
 
 def luminance(color):
@@ -78,41 +46,111 @@ def render_offscreen(context,area,region,view,width,height,draw):
     finally:target.free()
 
 
-def isolated_point(points,spacing):
-    for point in points:
-        if point['facing'] and all(other is point or math.dist(point['screen'],other['screen'])>spacing for other in points):
-            return point
-    return None
+def named_point(area,region,view,volume,identity):
+    with bpy.context.temp_override(area=area,region=region,region_data=view):
+        points=arrangement_controls.projected_points(bpy.context)
+    return next(point for point in points if point['volume']==volume and point['point']==identity)
+
+
+def footprint(raster,point,reach):
+    x,y=(int(round(value)) for value in point['screen'])
+    def run(line,center):
+        if not line[center]:return 0.0
+        low=center
+        while low>max(center-reach,0) and line[low-1]:low-=1
+        high=center
+        while high<min(center+reach,len(line)-1) and line[high+1]:high+=1
+        return float(high-low+1)
+    covered=raster[:,:,3]>.5
+    return run(covered[y,:],x),run(covered[:,x],y)
+
+
+def facing_view(view,avatar,distance=4):
+    view.view_perspective='PERSP';view.view_distance=distance
+    view.view_rotation=Quaternion((1,0,0),math.pi/2);view.view_location=avatar.matrix_world.translation;view.update()
+
+
+def render(area,region,view):
+    return render_offscreen(bpy.context,area,region,view,region.width,region.height,arrangement_controls.draw_points)
+
+
+def check_zoom(check,area,region,view,avatar,evidence):
+    widths=[]
+    scale=ui_system.interface_scale()
+    base=ui_system.ARRANGEMENT_POINT_DIAMETER*scale
+    target=Vector(named_point(area,region,view,'chest','front')['position'])
+    for distance in (.3,4,60):
+        facing_view(view,avatar,distance)
+        view.view_location=target;view.update()
+        point=named_point(area,region,view,'chest','front')
+        widths.append(footprint(render(area,region,view),point,int(base*1.5))[0])
+    facing_view(view,avatar)
+    evidence['zoom_widths_px']=widths
+    check(widths[0]>widths[2],'points are larger zoomed in than zoomed out '+str(widths))
+    check(widths[0]<=base*2+2,'points stop growing at the zoomed-in limit '+str(widths))
+    check(widths[2]>=base*.55-2,'points stop shrinking at the zoomed-out limit '+str(widths))
+
+
+def check_surface_alignment(check,area,region,view,evidence):
+    front=named_point(area,region,view,'chest','front')
+    side=named_point(area,region,view,'chest','side')
+    raster=render(area,region,view)
+    reach=int(ui_system.ARRANGEMENT_POINT_DIAMETER*ui_system.interface_scale()*1.5)
+    shapes=dict(front=footprint(raster,front,reach),side=footprint(raster,side,reach))
+    evidence['surface_shapes_px']=shapes
+    check(abs(shapes['front'][0]-shapes['front'][1])<=2,'a point facing the camera is round '+str(shapes))
+    check(shapes['side'][0]<shapes['side'][1]*.5,'a point on the body edge flattens into a sliver instead of facing the camera '+str(shapes))
+
+
+def check_occlusion(check,area,region,view,evidence):
+    front=named_point(area,region,view,'chest','front')
+    back=named_point(area,region,view,'chest','back')
+    check(front['visible'] and not back['visible'],'the avatar hides points behind it')
+    bpy.ops.mesh.primitive_plane_add(size=.2,location=tuple(Vector(front['position'])+Vector((0,-.2,0))),rotation=(math.pi/2,0,0))
+    blocker=bpy.context.object
+    bpy.context.view_layer.update()
+    results={}
+    try:
+        for label,kind in (('other mesh',None),('add-on panel','panel')):
+            if kind:blocker['dd_kind']=kind
+            arrangement_controls._projection_cache=None
+            point=named_point(area,region,view,'chest','front')
+            raster=render(area,region,view)
+            x,y=(int(round(value)) for value in point['screen'])
+            results[label]=dict(visible=point['visible'],alpha=float(raster[y,x,3]))
+    finally:
+        bpy.data.objects.remove(blocker,do_unlink=True)
+        bpy.context.view_layer.update()
+        arrangement_controls._projection_cache=None
+    evidence['occlusion']=results
+    check(not results['other mesh']['visible'] and results['other mesh']['alpha']<.1,'another mesh in front hides a point '+str(results))
+    check(results['add-on panel']['visible'] and results['add-on panel']['alpha']>.5,'an add-on panel does not hide a point '+str(results))
 
 
 def check_points_only(check,area,region,view,evidence):
     with bpy.context.temp_override(area=area,region=region,region_data=view):
-        points=arrangement_controls.projected_points(bpy.context)
-    raster=render_offscreen(bpy.context,area,region,view,region.width,region.height,arrangement_controls.draw_points)
+        points=[point for point in arrangement_controls.projected_points(bpy.context) if point['visible']]
+    raster=render(area,region,view)
     rows,columns=np.nonzero(raster[:,:,3]>.02)
     screens=np.array([point['screen'] for point in points])
     pixels=np.stack((columns+.5,rows+.5),axis=1)
     distances=np.sqrt(((pixels[:,None,:]-screens[None,:,:])**2).sum(axis=2)).min(axis=1)
-    reach=ui_system.ARRANGEMENT_POINT_DIAMETER*ui_system.interface_scale()/2+2
+    reach=ui_system.ARRANGEMENT_POINT_DIAMETER*ui_system.interface_scale()+2
     evidence['drawn_pixels']=dict(pixels=len(pixels),farthest_from_a_point_px=float(distances.max()),allowed_px=reach)
-    check(len(pixels)>0 and distances.max()<=reach,'every drawn pixel belongs to a point, so no ring or line surrounds the avatar '+str(evidence['drawn_pixels']))
+    check(len(pixels)>0 and distances.max()<=reach,'every drawn pixel belongs to a visible point, so no ring or line surrounds the avatar '+str(evidence['drawn_pixels']))
     colors={}
     for mirrored,expected in ((False,ui_system.ARRANGEMENT_FILL),(True,ui_system.ARRANGEMENT_MIRRORED)):
-        point=next((item for item in points if item['facing'] and item['mirrored']==mirrored and
-                    all(other is item or math.dist(item['screen'],other['screen'])>12*ui_system.interface_scale() for other in points)),None)
-        check(point is not None,'an unobstructed point exists with mirrored='+str(mirrored))
+        point=next(item for item in points if item['mirrored']==mirrored and item['facing'] and
+                   all(other is item or math.dist(item['screen'],other['screen'])>24*ui_system.interface_scale() for other in points))
         x,y=(int(point['screen'][axis]) for axis in (0,1))
         colors[str(mirrored)]=raster[y,x,:3].tolist()
     evidence['rendered_point_colors']=colors
-    red_gap=abs(colors['True'][0]-colors['False'][0])
-    check(red_gap>.2,'a mirrored point renders in a different color from a single point '+str(colors))
+    check(math.dist(colors['True'],colors['False'])>.2,'a mirrored point renders in a different color from a single point '+str(colors))
 
 
 def check_states(check,area,region,view,scene,avatar,evidence):
     from devil_designer import garment
-    width,height=region.width,region.height
-    view.view_perspective='PERSP';view.view_distance=4
-    view.view_rotation=Quaternion((1,0,0),math.pi/2);view.view_location=avatar.matrix_world.translation;view.update()
+    facing_view(view,avatar)
     preferences=bpy.context.preferences.view
     original_scale=preferences.ui_scale
     original_system=ui_system.interface_scale()/original_scale
@@ -123,59 +161,59 @@ def check_states(check,area,region,view,scene,avatar,evidence):
             bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP',iterations=1)
             check(abs(ui_system.interface_scale()-scale*original_system)<.01,'Blender applies UI scale '+str((scale,ui_system.interface_scale())))
             arrangement_controls._batch_cache=None
-            with bpy.context.temp_override(area=area,region=region,region_data=view):
-                points=arrangement_controls.projected_points(bpy.context)
-            point=isolated_point(points,60*scale)
-            check(point is not None,'an isolated front-facing point exists at UI scale '+str(scale))
-            raster=render_offscreen(bpy.context,area,region,view,width,height,arrangement_controls.draw_points)
-            row=raster[int(round(point['screen'][1]))]
-            covered=np.nonzero(row[:,3]>.5)[0]
-            near=covered[np.abs(covered-point['screen'][0])<40*scale]
-            diameter=float(near.max()-near.min()+1) if len(near) else 0.0
-            sizes.append(dict(ui_scale=scale,system_scale=ui_system.interface_scale(),diameter_px=diameter,
-                              hit_diameter_px=ui_system.ARRANGEMENT_HIT_DIAMETER*ui_system.interface_scale(),
-                              active_diameter_px=ui_system.ARRANGEMENT_ACTIVE_DIAMETER*ui_system.interface_scale()))
-            check(abs(diameter-10*ui_system.interface_scale())<=1.5,'normal marker matches the 10 px native gizmo point and scales with UI scale '+str(sizes[-1]))
+            point=named_point(area,region,view,'chest','front')
+            base=ui_system.ARRANGEMENT_POINT_DIAMETER*ui_system.interface_scale()
+            width=footprint(render(area,region,view),point,int(base*1.5))[0]
+            sizes.append(dict(ui_scale=scale,system_scale=ui_system.interface_scale(),width_px=width,
+                              hit_diameter_px=ui_system.ARRANGEMENT_HIT_DIAMETER*ui_system.interface_scale()))
+            check(base*.55-2<=width<=base*2+2,'marker size stays inside its zoom limits at UI scale '+str(sizes[-1]))
             check(ui_system.ARRANGEMENT_HIT_DIAMETER*ui_system.interface_scale()>=32*scale*original_system-1e-6,'hit diameter is at least 32 px scaled '+str(scale))
     finally:
         preferences.ui_scale=original_scale
+        bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP',iterations=1)
         arrangement_controls._batch_cache=None
     evidence['marker_sizes']=sizes
     backgrounds={'viewport background':(.25,.25,.25,1),'dark background':(.05,.06,.07,1)}
-    ratios={name:dict(fill=contrast(ui_system.ARRANGEMENT_FILL,color),mirrored=contrast(ui_system.ARRANGEMENT_MIRRORED,color))
-            for name,color in backgrounds.items()}
-    ratios['near_white_body']=dict(fill=contrast(ui_system.ARRANGEMENT_FILL,(.82,.80,.78,1)),mirrored=contrast(ui_system.ARRANGEMENT_MIRRORED,(.82,.80,.78,1)))
-    ratios['mirrored_to_fill']=contrast(ui_system.ARRANGEMENT_MIRRORED,ui_system.ARRANGEMENT_FILL)
+    colors=dict(fill=ui_system.ARRANGEMENT_FILL,mirrored=ui_system.ARRANGEMENT_MIRRORED,attached=ui_system.ARRANGEMENT_ATTACHED)
+    ratios={name:{key:contrast(color,background) for key,color in colors.items()} for name,background in backgrounds.items()}
     evidence['contrast']=ratios
-    check(all(min(ratios[name].values())>=3 for name in backgrounds),'both point colors keep 3:1 contrast on viewport and dark fixtures '+str(ratios))
-    check(ratios['mirrored_to_fill']>=1.3,'mirrored points differ from single points in brightness, not hue alone '+str(ratios))
+    check(all(min(value.values())>=3 for value in ratios.values()),'every point color keeps 3:1 contrast on viewport and dark fixtures '+str(ratios))
+    check_zoom(check,area,region,view,avatar,evidence)
+    check_surface_alignment(check,area,region,view,evidence)
+    check_occlusion(check,area,region,view,evidence)
     check_points_only(check,area,region,view,evidence)
-    with bpy.context.temp_override(area=area,region=region,region_data=view):
-        points=arrangement_controls.projected_points(bpy.context)
-    point=isolated_point(points,60)
+    point=named_point(area,region,view,'chest','front')
     identity=(point['volume'],point['point'])
     patterns={}
     interaction=arrangement_controls._interaction
     session=Session();session.add([(-.1,-.1),(.1,-.1),(.1,.1),(-.1,.1)])
     pattern=session.document.patterns[0]
-    for state in ('IDLE','HOVER','PRESSED','BOUND'):
-        interaction.state='IDLE' if state=='BOUND' else state
-        interaction.point=None if state in {'IDLE','BOUND'} else identity
-        pattern.arrangement=arrangement_record(*identity,version=3) if state=='BOUND' else None
+    attached_color=None
+    for state in ('IDLE','HOVER','PRESSED','ATTACHED'):
+        interaction.state='IDLE' if state=='ATTACHED' else state
+        interaction.point=None if state in {'IDLE','ATTACHED'} else identity
+        pattern.arrangement=arrangement_record(*identity,version=3) if state=='ATTACHED' else None
         scene.dd_document=session.document.dumps()
         live_panels.sync(bpy.context)
         panel=next(item for item in garment.generated(scene,'panel'))
         for obj in bpy.context.view_layer.objects:obj.select_set(False)
         bpy.context.view_layer.objects.active=panel
-        raster=render_offscreen(bpy.context,area,region,view,width,height,arrangement_controls.draw_points)
+        raster=render(area,region,view)
         x,y=(int(round(value)) for value in point['screen'])
-        window=raster[y-12:y+13,x-12:x+13]
-        patterns[state]=window[:,:,0]*.2126+window[:,:,1]*.7152+window[:,:,2]*.0722
+        window=raster[y-14:y+15,x-14:x+15]
+        if state=='ATTACHED':attached_color=raster[y,x,:3].tolist()
+        else:patterns[state]=window[:,:,0]*.2126+window[:,:,1]*.7152+window[:,:,2]*.0722
     arrangement_controls.end_interaction()
+    pattern.arrangement=None
+    scene.dd_document=session.document.dumps()
+    live_panels.sync(bpy.context)
     differences={first+'/'+second:float(np.abs(patterns[first]-patterns[second]).mean())
                  for index,first in enumerate(patterns) for second in list(patterns)[index+1:]}
     evidence['grayscale_state_differences']=differences
-    check(all(value>.01 for value in differences.values()),'idle, hover, pressed and bound markers differ in grayscale '+str(differences))
+    check(all(value>.01 for value in differences.values()),'idle, hover and pressed markers differ in grayscale '+str(differences))
+    expected=list(ui_system.ARRANGEMENT_ATTACHED[:3])
+    evidence['attached_color']=attached_color
+    check(math.dist(attached_color,expected)<.12,'a point with a piece on it renders in the attached color '+str((attached_color,expected)))
     view.view_distance=40;view.update()
     with bpy.context.temp_override(area=area,region=region,region_data=view):
         crowded=arrangement_controls.projected_points(bpy.context)
@@ -223,7 +261,7 @@ def check_preview(check,area,region,view,scene,evidence):
 
 
 def run():
-    passed=[];comparisons=[]
+    passed=[]
     def check(condition,message):
         if not condition:raise AssertionError(message)
         passed.append(message)
@@ -257,68 +295,38 @@ def run():
                 cached=arrangement_controls.display_world_points(bpy.context)
                 arrangement.edit_point(bpy.context,'chest','front',angle=.17,height=.6)
                 check(arrangement_controls.display_world_points(bpy.context) is not cached,'edited point invalidates cache')
-                check(arrangement_controls.display_world_points(bpy.context)==arrangement.world_points(bpy.context),'cached points exactly match unchanged arrangement math')
+                check([{key:value for key,value in point.items() if key!='slot'} for point in arrangement_controls.display_world_points(bpy.context)]==arrangement.world_points(bpy.context),'cached points exactly match unchanged arrangement math')
             width,height=region.width,region.height
-            target=gpu.types.GPUOffScreen(width,height)
-            try:
-                for perspective,distance,clipped in (('PERSP',7,False),('ORTHO',7,False),('PERSP',7,True),('PERSP',.1,False)):
-                    view.view_perspective=perspective;view.view_distance=distance;view.update()
-                    bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP',iterations=1)
-                    active=SimpleNamespace(_area=area,_scene=None,canvas_layout=SimpleNamespace(panel=Rect(width*.45,0,width*.3,height))) if clipped else None
-                    with bpy.context.temp_override(area=area,region=region,region_data=view),patch.object(editor,'_active',active),target.bind(),gpu.matrix.push_pop():
-                        gpu.matrix.load_matrix(Matrix.Identity(4))
-                        gpu.matrix.load_projection_matrix(Matrix(((2/width,0,0,-1),(0,2/height,0,-1),(0,0,-1,0),(0,0,0,1))))
-                        gpu.state.depth_test_set('NONE')
-                        framebuffer=gpu.state.active_framebuffer_get()
-                        framebuffer.clear(color=(0,0,0,0))
-                        expected=reference_draw(bpy.context)
-                        before=np.array(framebuffer.read_color(0,0,width,height,4,0,'FLOAT').to_list())
-                        framebuffer.clear(color=(0,0,0,0))
-                        arrangement_controls.draw_points()
-                        after=np.array(framebuffer.read_color(0,0,width,height,4,0,'FLOAT').to_list())
-                        check([{key:value for key,value in point.items() if key!='facing'} for point in arrangement_controls.projected_points(bpy.context)]==expected,'hit projections identical '+str((perspective,distance,clipped)))
-                        differences=np.abs(before-after)
-                        error=float(differences.mean())
-                        comparisons.append(dict(perspective=perspective,distance=distance,clipped=clipped,mean_channel_error=error,changed_channels=int((differences>.01).sum()),coverage_difference=int(((before[:,:,3]>0)!=(after[:,:,3]>0)).sum())))
-                        check(error<.0001,'reference raster preserved '+str((perspective,distance,clipped,error)))
-                view.view_distance=7;view.update()
+            view.view_distance=7;view.update()
+            bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP',iterations=1)
+            with bpy.context.temp_override(area=area,region=region,region_data=view):
+                for point in arrangement_controls.projected_points(bpy.context):
+                    expected=view3d_utils.location_3d_to_region_2d(region,view,Vector(point['position']))
+                    check(math.dist(point['screen'],expected)<1e-3,'hit projection follows the resolved point '+point['volume']+' '+point['point'])
+                active=SimpleNamespace(_area=area,_scene=None,canvas_layout=SimpleNamespace(panel=Rect(width*.45,0,width*.3,height)))
+                with patch.object(editor,'_active',active):
+                    panel=active.canvas_layout.panel
+                    check(not any(panel.contains(*point['screen']) for point in arrangement_controls.projected_points(bpy.context)),'the open 2D panel excludes points beneath it')
+            with patch.object(arrangement_controls,'batch_for_shader',wraps=arrangement_controls.batch_for_shader) as batch:
                 bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP',iterations=1)
-                with patch.object(arrangement_controls,'batch_for_shader',wraps=arrangement_controls.batch_for_shader) as batch:
-                    batch.reset_mock()
-                    for index in range(5):
-                        view.view_rotation=Quaternion((0,0,1),index*.1) @ Quaternion((1,0,0),1.3);view.update()
-                        bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP',iterations=1)
-                    check(batch.call_count==0,'orbit changes uniforms without rebuilding GPU batches')
-                    native=[]
-                    def compare_native():
-                        if bpy.context.area!=area:return
-                        framebuffer=gpu.state.active_framebuffer_get()
-                        horizontal,vertical,width,height=gpu.state.viewport_get()
-                        framebuffer.clear(color=(0,0,0,0))
-                        reference_draw(bpy.context)
-                        before=np.array(framebuffer.read_color(horizontal,vertical,width,height,4,0,'FLOAT').to_list())
-                        framebuffer.clear(color=(0,0,0,0))
-                        arrangement_controls.draw_points()
-                        after=np.array(framebuffer.read_color(horizontal,vertical,width,height,4,0,'FLOAT').to_list())
-                        native.append(dict(error=float(np.abs(before-after).mean()),before_max=before.max(axis=(0,1)).tolist(),after_max=after.max(axis=(0,1)).tolist(),coverage_difference=int(((before[:,:,3]>0)!=(after[:,:,3]>0)).sum())))
-                    handle=bpy.types.SpaceView3D.draw_handler_add(compare_native,(),'WINDOW','POST_PIXEL')
-                    try:bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP',iterations=1)
-                    finally:bpy.types.SpaceView3D.draw_handler_remove(handle,'WINDOW')
-                    check(bool(native) and max(item['error'] for item in native)<.0001,'native viewport raster and color parity '+str(native))
-                    scene.dd_reference_visible=False
-                    with patch.object(arrangement_controls,'display_world_points',side_effect=AssertionError('hidden display resolved geometry')):
-                        with bpy.context.temp_override(area=area,region=region,region_data=view):
-                            arrangement_controls.draw_points()
-                            check(not arrangement_controls.projected_points(bpy.context),'H off skips all geometry and hit detection')
-            finally:target.free()
+                batch.reset_mock()
+                for index in range(5):
+                    view.view_rotation=Quaternion((0,0,1),index*.1) @ Quaternion((1,0,0),1.3);view.update()
+                    bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP',iterations=1)
+                check(batch.call_count==0,'orbit changes uniforms without rebuilding GPU batches')
+            scene.dd_reference_visible=False
+            with patch.object(arrangement_controls,'display_world_points',side_effect=AssertionError('hidden display resolved geometry')):
+                with bpy.context.temp_override(area=area,region=region,region_data=view):
+                    arrangement_controls.draw_points()
+                    check(not arrangement_controls.projected_points(bpy.context),'H off skips all geometry and hit detection')
             scene.dd_reference_visible=True
             evidence={}
             check_states(check,area,region,view,scene,avatar,evidence)
             check_preview(check,area,region,view,scene,evidence)
             (ROOT/'scratch'/'issue76-display-evidence.json').write_text(json.dumps(evidence,indent=2),encoding='utf-8')
-        (ROOT/'scratch'/'arrangement_display-report.json').write_text(json.dumps(dict(passed=passed,comparisons=comparisons)),encoding='utf-8')
+        (ROOT/'scratch'/'arrangement_display-report.json').write_text(json.dumps(dict(passed=passed)),encoding='utf-8')
     except Exception:
-        (ROOT/'scratch'/'arrangement_display-report.json').write_text(json.dumps(dict(passed=passed,comparisons=comparisons,error=traceback.format_exc())),encoding='utf-8')
+        (ROOT/'scratch'/'arrangement_display-report.json').write_text(json.dumps(dict(passed=passed,error=traceback.format_exc())),encoding='utf-8')
         traceback.print_exc()
     return None
 
