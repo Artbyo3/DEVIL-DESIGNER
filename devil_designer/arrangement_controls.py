@@ -253,7 +253,7 @@ def projected_points(context):
 def hit_point(context,mouse):
     eye=context.region_data.view_matrix.inverted().translation if context.region_data else Vector((0,0,0))
     reach=marker_size(ui_system.ARRANGEMENT_HIT_DIAMETER)/2
-    candidates=[point for point in projected_points(context) if math.dist(mouse,point['screen'])<=reach]
+    candidates=[point for point in projected_points(context) if point['visible'] and math.dist(mouse,point['screen'])<=reach]
     return min(candidates,key=lambda point:(not point['facing'],math.dist(mouse,point['screen']),(Vector(point['position'])-eye).length)) if candidates else None
 
 

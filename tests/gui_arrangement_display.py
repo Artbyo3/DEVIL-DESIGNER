@@ -106,6 +106,9 @@ def check_occlusion(check,area,region,view,evidence):
     front=named_point(area,region,view,'chest','front')
     back=named_point(area,region,view,'chest','back')
     check(front['visible'] and not back['visible'],'the avatar hides points behind it')
+    with bpy.context.temp_override(area=area,region=region,region_data=view):
+        behind=arrangement_controls.hit_point(bpy.context,back['screen'])
+    check(behind is None or (behind['volume'],behind['point'])!=('chest','back'),'a point behind the avatar cannot be clicked')
     bpy.ops.mesh.primitive_plane_add(size=.2,location=tuple(Vector(front['position'])+Vector((0,-.2,0))),rotation=(math.pi/2,0,0))
     blocker=bpy.context.object
     bpy.context.view_layer.update()
@@ -117,14 +120,18 @@ def check_occlusion(check,area,region,view,evidence):
             point=named_point(area,region,view,'chest','front')
             raster=render(area,region,view)
             x,y=(int(round(value)) for value in point['screen'])
-            results[label]=dict(visible=point['visible'],alpha=float(raster[y,x,3]))
+            with bpy.context.temp_override(area=area,region=region,region_data=view):
+                hit=arrangement_controls.hit_point(bpy.context,point['screen'])
+            results[label]=dict(visible=point['visible'],alpha=float(raster[y,x,3]),picked=bool(hit) and (hit['volume'],hit['point'])==('chest','front'))
     finally:
         bpy.data.objects.remove(blocker,do_unlink=True)
         bpy.context.view_layer.update()
         arrangement_controls._projection_cache=None
     evidence['occlusion']=results
     check(not results['other mesh']['visible'] and results['other mesh']['alpha']<.1,'another mesh in front hides a point '+str(results))
+    check(not results['other mesh']['picked'],'a hidden point cannot be clicked '+str(results))
     check(results['add-on panel']['visible'] and results['add-on panel']['alpha']>.5,'an add-on panel does not hide a point '+str(results))
+    check(results['add-on panel']['picked'],'a point under an add-on panel stays clickable '+str(results))
 
 
 def check_points_only(check,area,region,view,evidence):
@@ -217,10 +224,11 @@ def check_states(check,area,region,view,scene,avatar,evidence):
     view.view_distance=40;view.update()
     with bpy.context.temp_override(area=area,region=region,region_data=view):
         crowded=arrangement_controls.projected_points(bpy.context)
-        unique=[point for point in crowded if point['facing'] and all(other is point or math.dist(point['screen'],other['screen'])>.5 or not other['facing'] for other in crowded)]
+        targets=[point for point in crowded if point['visible'] and point['facing']]
+        unique=[point for point in targets if all(other is point or math.dist(point['screen'],other['screen'])>.5 for other in targets)]
         correct=sum(1 for point in unique if (lambda hit:(hit['volume'],hit['point'])==(point['volume'],point['point']))(arrangement_controls.hit_point(bpy.context,point['screen'])))
     evidence['picking']=dict(crowded_points=len(crowded),unique_targets=len(unique),correct=correct)
-    check(unique and correct==len(unique),'crowded picking returns the exact identity for every front-facing target')
+    check(unique and correct==len(unique),'crowded picking returns the exact identity for every visible front-facing target')
     view.view_distance=4;view.update()
 
 

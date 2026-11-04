@@ -114,7 +114,7 @@ preserve valid pair membership. Designs without pair records remain unchanged.
 - Points are flat discs lying on the body, so they read round facing the camera and
   narrow to slivers at the body's edge. They scale with zoom between fixed limits.
   The avatar and other meshes hide them; pieces, simulation and final meshes made
-  by the add-on do not. Click targets are unchanged and ignore hiding.
+  by the add-on do not. Hidden points cannot be hovered or clicked.
 - A point with a left/right mirror partner uses the mirrored color. A dragged point
   loses it, as does its partner, until the two mirror each other again. A point
   holding a piece uses the attached color.
