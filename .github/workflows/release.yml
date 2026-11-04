@@ -88,15 +88,43 @@ jobs:
             echo "Missing VIRUS_TOTAL_TOKEN secret"
             exit 1
           fi
-          UPLOAD_RESPONSE=$(curl -s -S --fail-with-body -X POST "https://www.virustotal.com/api/v3/files" \
+          HTTP_CODE=$(curl -s -S -o vt_upload.json -w "%{http_code}" -X POST "https://www.virustotal.com/api/v3/files" \
             -H "x-apikey: $VIRUS_TOTAL_TOKEN" \
             -F "file=@$ZIP_PATH")
-          export UPLOAD_RESPONSE
+          export VT_HTTP_CODE="$HTTP_CODE"
           python -c "
-          import json, os, sys, time, urllib.request
+          import json, os, sys, time, urllib.error, urllib.request
 
           api_key = os.environ['VIRUS_TOTAL_TOKEN']
-          upload_text = os.environ['UPLOAD_RESPONSE']
+          http_code = int(os.environ.get('VT_HTTP_CODE', '0'))
+          sha256 = os.environ['ZIP_SHA256']
+          file_link = f'https://www.virustotal.com/gui/file/{sha256}'
+
+          with open('vt_upload.json', 'r', encoding='utf-8') as f:
+              upload_text = f.read()
+
+          if http_code == 409:
+              print(f'File {sha256} already present on VirusTotal, fetching file report...')
+              file_url = f'https://www.virustotal.com/api/v3/files/{sha256}'
+              req = urllib.request.Request(file_url, headers={'x-apikey': api_key})
+              with urllib.request.urlopen(req) as resp:
+                  file_data = json.loads(resp.read().decode('utf-8'))
+              stats = file_data.get('data', {}).get('attributes', {}).get('last_analysis_stats', {})
+              malicious = stats.get('malicious', 0)
+              suspicious = stats.get('suspicious', 0)
+              total = sum(stats.values())
+              if malicious == 0 and suspicious == 0:
+                  print(f'VirusTotal verdict: CLEAN ({total}/{total} engines clean)')
+                  print(f'File report link: {file_link}')
+                  sys.exit(0)
+              else:
+                  print(f'VirusTotal verdict: UNCLEAN ({malicious} malicious, {suspicious} suspicious out of {total} engines)')
+                  print(f'File report link: {file_link}')
+                  sys.exit(1)
+
+          if http_code < 200 or http_code >= 300:
+              sys.exit(f'VirusTotal upload failed with HTTP status {http_code}:\n{upload_text}')
+
           try:
               upload_data = json.loads(upload_text)
           except Exception as err:
@@ -108,7 +136,6 @@ jobs:
 
           analysis_url = f'https://www.virustotal.com/api/v3/analyses/{analysis_id}'
           analysis_link = f'https://www.virustotal.com/gui/file-analysis/{analysis_id}'
-          file_link = f'https://www.virustotal.com/gui/file/{os.environ[\"ZIP_SHA256\"]}'
 
           for attempt in range(40):
               time.sleep(15)
