@@ -85,6 +85,11 @@ preserve valid pair membership. Designs without pair records remain unchanged.
   resolve only after source/geometry changes, not on orbit redraws.
 - Partial ranges along segments/curves, plus M:N pairing across edge chains.
 - Reverse, remove, and edit existing pairings.
+- Seams draw by attention so patterns read first. An idle seam is a thin edge tint
+  and a quiet numbered badge, with nothing crossing the canvas. Seams of a selected
+  piece show one link line. A selected seam, a hovered badge, or a hovered sewn edge
+  shows full detail. A mismatched seam keeps its warning color on its edges at all
+  times. These levels are display only.
 - Proportional resampling by arc length, independent of how many control points
   or mesh vertices are present on either side.
 - Live lengths for both sides, difference in cm, and mismatch percentage.

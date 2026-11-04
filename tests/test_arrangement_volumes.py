@@ -8,6 +8,15 @@ import devil_designer
 from devil_designer import arrangement
 
 
+def generate_volumes(vertices, triangles, clearance=0.03):
+    steps = arrangement._fit_steps(vertices, triangles, clearance)
+    while True:
+        try:
+            next(steps)
+        except StopIteration as finished:
+            return finished.value
+
+
 def box_mesh(low=(-.3, -.2, 0), high=(.3, .2, 2)):
     vertices = [(horizontal, depth, height) for height in (low[2], high[2])
                 for depth in (low[1], high[1]) for horizontal in (low[0], high[0])]
@@ -114,7 +123,7 @@ class ArrangementVolumeTests(unittest.TestCase):
             self.assertAlmostEqual(first, second, places=7)
 
     def legacy_setup(self):
-        setup = arrangement.generate_volumes(self.vertices, self.triangles, self.context.scene.dd_clearance / self.context.scene.unit_settings.scale_length)
+        setup = generate_volumes(self.vertices, self.triangles, self.context.scene.dd_clearance / self.context.scene.unit_settings.scale_length)
         setup['version'] = 1
         for volume in setup['volumes']:
             for sample in volume['samples']:
@@ -123,7 +132,7 @@ class ArrangementVolumeTests(unittest.TestCase):
         return setup
 
     def test_sparse_box_cross_sections_measure_edges_not_nearby_vertices(self):
-        setup = arrangement.generate_volumes(self.vertices, self.triangles)
+        setup = generate_volumes(self.vertices, self.triangles)
         self.assertEqual(setup['version'], 2)
         self.assertEqual({volume['id'] for volume in setup['volumes']},
                          {'neck', 'chest', 'waist', 'hip', 'left_upper_arm', 'right_upper_arm',
@@ -142,7 +151,7 @@ class ArrangementVolumeTests(unittest.TestCase):
         vertices, triangles = ring_mesh([((0, 0, height), radius) for height, radius in
                                         ((0, 0), (.1, math.sqrt(.03)), (.2, .2),
                                          (1.8, .2), (1.9, math.sqrt(.03)), (2, 0))])
-        setup = arrangement.generate_volumes(vertices, triangles, clearance=0)
+        setup = generate_volumes(vertices, triangles, clearance=0)
         for sample in self.volume(setup)['samples']:
             self.assertAlmostEqual(sample['radius'] * 2, .2)
         calf = self.volume(setup, 'left_calf')
@@ -155,7 +164,7 @@ class ArrangementVolumeTests(unittest.TestCase):
             box_mesh((-.13, -.12, 1.7), (.13, .12, 2)),
             box_mesh((.04, -.1, 0), (.24, .1, .9)),
             box_mesh((-.24, -.1, 0), (-.04, .1, .9))])
-        setup = arrangement.generate_volumes(vertices, triangles, 0)
+        setup = generate_volumes(vertices, triangles, 0)
         for side, expected in (('left', .14), ('right', -.14)):
             for sample in self.volume(setup, side + '_calf')['samples']:
                 self.assertAlmostEqual(sample['center'][0] * .5 - .25, expected)
@@ -331,7 +340,7 @@ class ArrangementVolumeTests(unittest.TestCase):
                                                 (self.vertices, self.triangles, -1),
                                                 (self.vertices, self.triangles, math.inf)):
             with self.subTest(vertices=vertices, triangles=triangles, clearance=clearance), self.assertRaises(ValueError):
-                arrangement.generate_volumes(vertices, triangles, clearance)
+                generate_volumes(vertices, triangles, clearance)
 
     def test_bad_edits_do_not_modify_avatar_json(self):
         arrangement.ensure_volumes(self.context)
@@ -402,7 +411,7 @@ class ArrangementVolumeTests(unittest.TestCase):
 
     def test_fallback_ellipse_uses_body_extents_without_changing_bands(self):
         with patch.object(arrangement, '_volume_sections', return_value=[]):
-            setup = arrangement.generate_volumes(self.vertices, self.triangles)
+            setup = generate_volumes(self.vertices, self.triangles)
         arrangement._volume_validate(setup)
         for volume in setup['volumes']:
             for sample in volume['samples']:

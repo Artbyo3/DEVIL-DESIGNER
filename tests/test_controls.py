@@ -18,7 +18,7 @@ class IconTests(unittest.TestCase):
                 self.assertTrue(0 <= column < column + width <= 64, name)
                 self.assertTrue(0 <= row < 64 and 1 <= level <= 8, name)
         for name in ('SELECT', 'POLYGON', 'RECTANGLE', 'ELLIPSE', 'INTERNAL', 'SEW',
-                     'PIN', 'DART', 'UNDO', 'REDO', 'LIBRARY', 'GARMENT', 'FULL', 'CLOSE'):
+                     'PIN', 'DART', 'UNDO', 'REDO', 'LIBRARY', 'GARMENT', 'CLOSE'):
             self.assertIsNotNone(icon_spans(name), name)
 
     def test_icon_data_is_cached(self):
@@ -66,23 +66,21 @@ class SettingTests(unittest.TestCase):
         for key,spec in SETTINGS.items():
             if not hasattr(spec,'low'):continue
             value=(spec.low+spec.high)/2
-            if spec.integer: value=round(value)
             self.assertAlmostEqual(spec.parse(spec.format(value)),value,places=5)
 
-    def test_integer_and_range_validation(self):
-        for key,value in [('dd_quality','12.5'),('dd_quality','0'),('dd_spacing','0.1'),
-                          ('dd_thickness','infinity'),('dd_frames','NaN'),('dd_frames','bad')]:
+    def test_range_validation(self):
+        for key,value in [('dd_point_x','20000'),('dd_segment_length','0'),('dd_weld_distance','infinity'),
+                          ('dd_segment_length','NaN'),('dd_point_y','bad')]:
             with self.subTest(key=key,value=value),self.assertRaises(ValueError):
                 SETTINGS[key].parse(value)
 
     def test_cm_and_mm_conversions(self):
-        self.assertAlmostEqual(SETTINGS['dd_spacing'].parse('2.5'),.025)
-        self.assertAlmostEqual(SETTINGS['dd_clearance'].parse('3,5'),.035)
+        self.assertAlmostEqual(SETTINGS['dd_segment_length'].parse('2.5'),.025)
+        self.assertAlmostEqual(SETTINGS['dd_point_x'].parse('3,5'),.035)
         self.assertAlmostEqual(SETTINGS['dd_weld_distance'].parse('5'),.005)
-        self.assertEqual(SETTINGS['dd_thickness'].parse('0'),0)
 
     def test_readable_display_keeps_precise_edit_value(self):
-        setting = SETTINGS['dd_width']
+        setting = SETTINGS['dd_segment_length']
         value = .30000001192092896
         self.assertEqual(setting.display(value), '30')
         self.assertAlmostEqual(setting.parse(setting.format(value)), value, places=14)

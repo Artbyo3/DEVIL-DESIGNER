@@ -24,16 +24,13 @@ def check_interaction_regressions(workspace, event, point, check):
     original_free_sewing = workspace._scene.dd_free_sewing
     original_view = (workspace.view.cx, workspace.view.cy, workspace.view.zoom)
     reference_names = ('gesture', 'preview', 'pending_edge', 'handle_preview', 'seam_selected',
-                       'selected_anchor', 'chain_a', 'chain_b', 'chain_stage', 'free_clicks',
+                       'selected_anchor', 'free_clicks',
                        'dart_base', 'pending_place', 'pending_tack', 'pending_simulation')
 
     def seed_references(edge):
         workspace.pending_edge = edge
         workspace.seam_selected = 'pending-seam'
         workspace.selected_anchor = 'pending-anchor'
-        workspace.chain_a = [edge]
-        workspace.chain_b = [edge]
-        workspace.chain_stage = 'A'
         workspace.free_clicks = [(edge, .25)]
         workspace.dart_base = [(edge, .5)]
         workspace.pending_place = edge.pattern
@@ -46,13 +43,11 @@ def check_interaction_regressions(workspace, event, point, check):
         workspace.card_kind = None
         check(workspace.minimal_card() is None,
               'the empty garment offers clean canvas with no overlay')
-        workspace.perform_action('START_PANEL')
+        workspace.perform_action('DEMO_PANEL')
         created = workspace.session.document.patterns[0]
-        check(created.name == 'Front panel' and abs(created.points[1][0] - created.points[0][0] - .4) < 1e-6 and
+        check(created.name == 'Basic panel' and abs(created.points[1][0] - created.points[0][0] - .4) < 1e-6 and
               abs(created.points[2][1] - created.points[1][1] - .45) < 1e-6,
-              'START_PANEL creates an editable 40 by 45 cm panel')
-        check(workspace.perform_action('START_PANEL') is False and len(workspace.session.document.patterns) == 1,
-              'starter creation cannot silently add another template to an existing garment')
+              'DEMO_PANEL creates an editable 40 by 45 cm panel')
         workspace.perform_action('UNDO')
         check(not workspace.session.document.patterns, 'one Undo removes the complete starter panel')
         workspace.perform_action('REDO')
@@ -111,7 +106,7 @@ def check_interaction_regressions(workspace, event, point, check):
         workspace.draft = []
         workspace.session.undo_stack.clear()
         workspace.perform_action('UNDO')
-        check(workspace.pending_edge == edge and workspace.chain_stage == 'A',
+        check(workspace.pending_edge == edge,
               'an unavailable document undo does not discard pending interaction work')
         workspace.clear_interaction_references()
 
@@ -150,9 +145,8 @@ def check_interaction_regressions(workspace, event, point, check):
         seed_references(edge)
         workspace.pending_place = workspace.pending_tack = None
         workspace.handle_event(bpy.context, event('ESC', point))
-        check(not workspace.chain_a and not workspace.chain_b and not workspace.chain_stage and
-              not workspace.free_clicks and not workspace.dart_base and workspace.pending_edge is None,
-              'Escape cancels all pending chain range dart and paired-edge picks together')
+        check(not workspace.free_clicks and not workspace.dart_base and workspace.pending_edge is None,
+              'Escape cancels all pending range dart and paired-edge picks together')
         workspace.gesture = dict(mode='HANDLE')
         workspace.handle_preview = (0, 'outgoing', (.1, .1))
         workspace.handle_event(bpy.context, event('ESC', point))
@@ -377,7 +371,7 @@ def check_interaction_regressions(workspace, event, point, check):
         with patch.object(library, 'entries', return_value=[Path('regression.garment.json')]), \
                 patch.object(library, 'load', side_effect=ValueError('Invalid garment')):
             workspace.design_action('LIBRARY_LOAD')
-        check(workspace.pending_edge == edge and workspace.chain_stage == 'A',
+        check(workspace.pending_edge == edge,
               'a failed library load preserves the current pending interaction')
         workspace.session.point_selection = [0, 1]
         with patch.object(library, 'entries', return_value=[Path('regression.garment.json')]), \
@@ -429,13 +423,13 @@ def check_interaction_regressions(workspace, event, point, check):
         check(len(workspace.session.document.patterns) == 2,
               'closed internal edge context retains the path needed to trace an actual piece')
 
-        workspace.show_card('EDIT', point)
+        workspace.show_card('CANVAS_MENU', point)
         close = workspace.card_close_rect(workspace.minimal_card()[0])
         document_before_close = workspace.session.document.dumps()
         workspace.handle_event(bpy.context, event('LEFTMOUSE', (close.x + close.w / 2, close.y + close.h / 2)))
         check(workspace.card_kind is None and workspace.session.document.dumps() == document_before_close,
               'popover card close dismisses the popover without editing garment data')
-        workspace.show_card('EDIT', point)
+        workspace.show_card('CANVAS_MENU', point)
         dock = workspace.canvas_layout.buttons['DRAW'][0]
         workspace.handle_event(bpy.context, event('RIGHTMOUSE', (dock.x + dock.w / 2, dock.y + dock.h / 2)))
         check(workspace.card_kind is None and workspace.tool == 'SELECT',
@@ -502,8 +496,8 @@ def check_interaction_regressions(workspace, event, point, check):
             workspace.session.path = path
             workspace.session.corner = corner
             workspace.session.point_selection = [0, 1]
-            workspace.show_card('EDIT', point)
-            check(any(row[0] == 'DELETE_PIECE' and row[1] == 'Delete piece' for rect, row in workspace.minimal_card()[2]),
+            workspace.show_card('PIECE', point)
+            check(any(row[0] == 'PAIR_ACTIONS' and 'DELETE_PIECE' in row[1:3] for rect, row in workspace.minimal_card()[2]),
                   'the piece card exposes an explicit whole-piece deletion action')
             before_delete = workspace.session.document.dumps()
             workspace.minimal_action('DELETE_PIECE')
@@ -614,10 +608,10 @@ def check_interaction_regressions(workspace, event, point, check):
               'canvas draw with unselected twin renders without KeyError a and preserves pattern rendering')
         check(len(workspace.seam_badges()) > 0,
               'seam badges and paired pills render alongside pattern pieces')
+        check_seam_focus(workspace, check)
 
         edge1_other = workspace.session.document.edges(p1.id)[1]
         workspace.choose_tool('SEW')
-        workspace.stage = 'SEW'
         workspace.pending_edge = edge1
         for hovered in (edge1_other, edge2):
             with patch.object(workspace, 'design_hit_edge', return_value=hovered):
@@ -627,13 +621,6 @@ def check_interaction_regressions(workspace, event, point, check):
                       'sew mode with pending edge and hovered edge renders without EdgeRef attribute error')
         workspace.pending_edge = None
 
-        for stage in ('DRAFT', 'SEW', 'ARRANGE', 'SIMULATE', 'LIBRARY'):
-            workspace.stage = stage
-            workspace.error_message = ''
-            workspace.renderer.draw(workspace)
-            check(not workspace.error_message, f'{stage} stage draw path renders without error')
-
-        workspace.stage = 'DRAFT'
         for tool in ('SELECT', 'RECTANGLE', 'POLYGON', 'ELLIPSE', 'INTERNAL', 'DART', 'KNIFE', 'PIN'):
             workspace.choose_tool(tool)
             workspace.error_message = ''
@@ -778,6 +765,61 @@ def check_interaction_regressions(workspace, event, point, check):
         workspace.choose_tool(original_tool)
         workspace._scene.dd_free_sewing = original_free_sewing
         workspace.view.cx, workspace.view.cy, workspace.view.zoom = original_view
+
+
+def check_seam_focus(workspace, check):
+    from devil_designer.minimal import SEAM_ACTIVE, SEAM_CONNECTED, SEAM_QUIET
+    from devil_designer.ui_system import SELECTION
+    session = workspace.session
+    document = session.document
+    seam = document.seams[0]
+    canvas = workspace.canvas_layout.canvas
+    owner = seam.side(0)[0].pattern
+    saved = session.selected, set(session.selected_patterns), workspace.seam_selected, workspace.seam_hover, workspace.pending_edge
+    links = []
+    for step in range(5):
+        fraction = step / 4
+        ends = []
+        for side, position in ((0, fraction), (1, 1 - fraction if seam.reverse else fraction)):
+            edge, along = document.chain_position(seam.side(side), position)
+            ends.append(workspace.view.screen(document.edge_point(edge, along), canvas))
+        links.append(ends)
+
+    def drawn(hover=None, mismatch=False):
+        with patch.object(workspace, 'design_hit_edge', return_value=hover), \
+                patch.object(workspace.renderer, 'lines', wraps=workspace.renderer.lines) as lines, \
+                patch.object(workspace.renderer, 'seam_mismatch', wraps=workspace.renderer.seam_mismatch) as warning:
+            if mismatch:
+                warning.side_effect = lambda ed, item: item.id == seam.id
+            workspace.error_message = ''
+            workspace.renderer.draw(workspace)
+            check(not workspace.error_message, 'seam focus draw renders without error')
+            calls = [call.args for call in lines.call_args_list]
+        return workspace.renderer.seam_levels[seam.id], sum(1 for call in calls if list(call[0]) in links), calls
+
+    try:
+        session.clear_selection()
+        session.selected = None
+        workspace.seam_selected = workspace.seam_hover = workspace.pending_edge = None
+        level, count, _ = drawn()
+        check(level == SEAM_QUIET and count == 0, 'an idle seam draws no line across the canvas')
+        session.selected = owner
+        session.selected_patterns = {owner}
+        level, count, _ = drawn()
+        check(level == SEAM_CONNECTED and count == 1, 'selecting a piece shows one link for each of its seams')
+        session.clear_selection()
+        session.selected = None
+        level, count, _ = drawn(seam.side(0)[0])
+        check(level == SEAM_ACTIVE and count == 5, 'hovering a sewn edge reveals the full seam')
+        workspace.seam_selected = seam.id
+        level, count, _ = drawn()
+        check(level == SEAM_ACTIVE and count == 5, 'selecting a seam reveals the full seam')
+        workspace.seam_selected = None
+        level, count, calls = drawn(mismatch=True)
+        check(level == SEAM_QUIET and count == 0 and any(call[1] == SELECTION for call in calls),
+              'an idle mismatched seam keeps its warning color on the edges without crossing the canvas')
+    finally:
+        session.selected, session.selected_patterns, workspace.seam_selected, workspace.seam_hover, workspace.pending_edge = saved
 
 
 def check_arrangement_controls(workspace,event,check):
@@ -1084,7 +1126,7 @@ def run():
             click((thickness_rect.x + thickness_rect.w / 6, thickness_rect.y + 16))
             check(scene.dd_thickness == THICKNESS['None'], 'None thickness is a named finalize choice')
 
-            for kind in ('KEEP', 'GARMENT', 'BODY', 'LIBRARY', 'POINT', 'EDGE', 'EDIT', 'CUT_RECOVERY'):
+            for kind in ('KEEP', 'GARMENT', 'BODY', 'LIBRARY', 'POINT', 'EDGE', 'CUT_RECOVERY'):
                 workspace.show_card(kind)
                 card = workspace.minimal_card()
                 check(card is None or sum(row[0] != 'INFO' for rect, row in card[2]) <= (8 if kind=='LIBRARY' else 5),

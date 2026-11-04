@@ -339,15 +339,6 @@ def _fit_steps(vertices, triangles, clearance=0.03):
             'aspect': [extent[0] / extent[2], extent[1] / extent[2]], 'volumes': volumes}
 
 
-def generate_volumes(vertices, triangles, clearance=0.03):
-    steps = _fit_steps(vertices, triangles, clearance)
-    while True:
-        try:
-            next(steps)
-        except StopIteration as finished:
-            return finished.value
-
-
 def _volume_validate(setup):
     try:
         if type(setup['version']) is not int or setup['version'] not in (1, 2) or not math.isfinite(setup['clearance']) or setup['clearance'] < 0:

@@ -122,16 +122,6 @@ def do_action_performance(label):
     print(f"Measured {len(result['records'])} action conditions: {report}")
     return True
 
-def do_stage_screenshot(stage):
-    print(f"\n=== CAPTURING SCREENSHOT FOR STAGE: {stage} ===")
-    from tools.screenshot import capture
-    out = f"screenshot_{stage.lower()}_clean.png"
-    result = capture(stage=stage.upper(), output_name=out, full_mode=False)
-    if result:
-        print(f"Captured: {result}\n")
-        return True
-    return False
-
 def do_screenshots():
     print("\n=== CAPTURING CLEAN IN-ENGINE SCREENSHOTS ===")
     from tools.screenshot import capture
@@ -202,7 +192,6 @@ def main(argv=None):
     parser.add_argument("--test", action="store_true", help="Run all unit, background, and GUI tests")
     parser.add_argument("--build", action="store_true", help="Build, validate, and sync")
     parser.add_argument("--shots", action="store_true", help="Capture all screenshots")
-    parser.add_argument("--stage", type=str, help="Capture screenshot for a single stage (e.g. DRAFT, SEW, ARRANGE, SIMULATE)")
     parser.add_argument("--inspect", action="store_true", help="Slice and inspect UI regions")
     parser.add_argument("--all", action="store_true", help="Test, build, sync, screenshot, and inspect")
     parser.add_argument("--clean", action="store_true", help="Delete disposable scratch artifacts without touching dist or source")
@@ -211,7 +200,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.clean and args.keep_scratch:
         parser.error('--clean and --keep-scratch cannot be combined')
-    if not any([args.quick, args.test, args.build, args.shots, args.stage, args.inspect, args.all, args.clean, args.arrangement_performance, args.action_performance]):
+    if not any([args.quick, args.test, args.build, args.shots, args.inspect, args.all, args.clean, args.arrangement_performance, args.action_performance]):
         parser.print_help()
         return 0
         
@@ -221,7 +210,6 @@ def main(argv=None):
         (args.quick, do_quick_tests),
         (args.test or args.all, do_tests),
         (args.build or args.all, do_build),
-        (args.stage, lambda: do_stage_screenshot(args.stage)),
         (args.shots or args.all, do_screenshots),
         (args.inspect or args.all, do_inspect),
     ]

@@ -147,7 +147,7 @@ class SeamTests(unittest.TestCase):
         self.assertTrue(seam_opp.reverse)
         self.assertEqual(seam_opp.reverse, sew_reverse(doc, edge_a, edge_b_opp, scene.dd_sew_reverse))
 
-    def test_newly_created_free_and_chain_seam_direction(self):
+    def test_newly_created_free_seam_direction(self):
         doc = self.s.document
         a, b = doc.patterns
         edge_a = doc.edge(a.id, 1)
@@ -169,15 +169,6 @@ class SeamTests(unittest.TestCase):
         free_seam = self.s.document.seams[-1]
         self.assertFalse(free_seam.reverse)
         self.assertEqual(free_seam.reverse, sew_reverse(doc, free_seam.side(0), free_seam.side(1), scene.dd_sew_reverse))
-        self.s.document.seams.clear()
-        scene.dd_free_sewing = False
-        editor.chain_a = [edge_a]
-        editor.chain_b = [edge_b]
-        editor.design_action('CHAIN_SEW')
-        self.assertEqual(len(self.s.document.seams), 1)
-        chain_seam = self.s.document.seams[-1]
-        self.assertFalse(chain_seam.reverse)
-        self.assertEqual(chain_seam.reverse, sew_reverse(doc, chain_seam.side(0), chain_seam.side(1), scene.dd_sew_reverse))
 
     def test_seam_warning_30_to_35_fixture(self):
         s = Session()
