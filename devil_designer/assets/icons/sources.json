@@ -228,5 +228,12 @@
     "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880d3084d9d57c30031ed5df8b39dee/release/datafiles/icons_svg/eyedropper.svg",
     "sha256": "22cde207d4cabc93246bbbd7576a649b5e9e79100796ed56140be9bb061d12f3",
     "license": "GPL-2.0-or-later"
+  },
+  "PANEL_CLOSE": {
+    "collection": "Blender built-in icons",
+    "icon": "PANEL_CLOSE",
+    "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880d3084d9d57c30031ed5df8b39dee/release/datafiles/icons_svg/panel_close.svg",
+    "sha256": "e2db88ba7e868c87d414cca75d17c6d7047b9d8797fa3594f5d2c6e0dd3012a1",
+    "license": "GPL-2.0-or-later"
   }
 }

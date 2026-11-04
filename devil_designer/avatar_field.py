@@ -1,4 +1,5 @@
 import re
+import time
 import blf
 import bpy
 from bpy_extras import view3d_utils
@@ -21,6 +22,8 @@ TEXT_OFFSET = 25
 TEXT_SIZE = 11
 EXTRA_WIDTH = 22
 LABEL_WIDTH = 62
+TOOLTIP_DELAY = .8
+OFFSCREEN = (-100000,-100000)
 STATUS = 'Esc  Cancel        Left Mouse  Start Sampling'
 HANDLED = {'RUNNING_MODAL'}
 
@@ -56,6 +59,10 @@ class AvatarField:
         self.offset=0
         self.sampling=False
         self.sample=None
+        self.mouse=OFFSCREEN
+        self.dragging=False
+        self.text_cursor=False
+        self.hover_start=None
 
     @property
     def scale(self):
@@ -101,15 +108,14 @@ class AvatarField:
         return Rect(round(popup.x+3*scale),round(top-(ROW_PITCH-1)*scale),round(popup.w-6*scale),round(ROW_HEIGHT*scale))
 
     def part(self,box):
-        pointer=self.editor.pointer
-        if not box.contains(*pointer):return None
-        if self.extra_rect(box).contains(*pointer):
+        if not box.contains(*self.mouse):return None
+        if self.extra_rect(box).contains(*self.mouse):
             return CLEAR if self.avatar is not None else EYEDROPPER
         return FIELD
 
     def row_at(self,popup,rows):
         for index in range(min(rows,len(self.results)-self.offset)):
-            if self.row_rect(popup,index).contains(*self.editor.pointer):return self.offset+index
+            if self.row_rect(popup,index).contains(*self.mouse):return self.offset+index
         return None
 
     def refresh(self):
@@ -142,12 +148,25 @@ class AvatarField:
             self.active=max(0,min(len(self.results)-1,self.active+delta))
             self.reveal(self.popup(box)[1])
 
+    def tooltip_ready(self):
+        return self.mode is None and self.hover_start is not None and time.monotonic()-self.hover_start>=TOOLTIP_DELAY
+
+    def sync_cursor(self,part):
+        wanted=part==FIELD
+        if wanted==self.text_cursor:return
+        self.text_cursor=wanted
+        if wanted:self.editor._window.cursor_modal_set('TEXT')
+        else:self.editor._window.cursor_modal_restore()
+
     def close(self):
+        self.sync_cursor(None)
         if self.mode==EYEDROPPER:
             self.editor._window.cursor_modal_restore()
             bpy.context.workspace.status_text_set(None)
         self.mode=None
         self.armed=None
+        self.dragging=False
+        self.hover_start=None
         self.sampling=False
         self.sample=None
 
@@ -170,25 +189,37 @@ class AvatarField:
         else:self.open(box)
 
     def event(self,context,event):
-        if self.mode and event.type=='WINDOW_DEACTIVATE':
+        self.mouse=self.editor.pointer
+        if event.type=='WINDOW_DEACTIVATE':
             self.close()
             return None
         control=self.control()
         if control is None:
-            if self.mode:self.close()
+            self.close()
             return None
-        if event.type.startswith('TIMER'):return None
-        if self.mode==EYEDROPPER:return self.eyedropper_event(context,event)
-        box=self.box(control)
-        if self.mode==SEARCH:return self.search_event(context,event,box)
-        return self.idle_event(event,box)
+        if event.type.startswith('TIMER'):
+            if self.tooltip_ready():self.editor._area.tag_redraw()
+            return None
+        result=self.route(context,event,self.box(control))
+        if self.mode:self.editor.pointer=OFFSCREEN
+        return result
 
-    def idle_event(self,event,box):
-        press=event.value in {'PRESS','DOUBLE_CLICK'}
+    def route(self,context,event,box):
+        if self.mode==EYEDROPPER:return self.eyedropper_event(context,event)
         part=self.part(box)
+        self.sync_cursor(part)
+        if self.mode==SEARCH:return self.search_event(context,event,box)
+        return self.idle_event(event,box,part)
+
+    def idle_event(self,event,box,part):
+        press=event.value in {'PRESS','DOUBLE_CLICK'}
+        if event.type=='MOUSEMOVE':
+            self.hover_start=time.monotonic() if part else None
         if event.type=='LEFTMOUSE':
             if press:
-                self.armed=part
+                self.hover_start=None
+                self.armed=None if part==FIELD else part
+                if part==FIELD:self.open(box)
                 return HANDLED if part else None
             if event.value=='RELEASE' and self.armed:
                 armed,self.armed=self.armed,None
@@ -208,7 +239,8 @@ class AvatarField:
         popup,rows=self.popup(box)
         row=self.row_at(popup,rows)
         if event.type=='MOUSEMOVE':
-            if row is not None:self.active=row
+            if self.dragging:self.cursor=self.text_index(box)
+            elif row is not None:self.active=row
         elif event.type in {'WHEELUPMOUSE','WHEELDOWNMOUSE'}:
             self.step(-1 if event.type=='WHEELUPMOUSE' else 1,box)
         elif event.type=='LEFTMOUSE':
@@ -225,11 +257,16 @@ class AvatarField:
 
     def search_click(self,event,press,box,popup,row):
         part=self.part(box)
-        if press:
-            self.armed=SEARCH if popup.contains(*self.editor.pointer) else part
-            if part==FIELD:self.place_cursor(box)
+        if event.value=='DOUBLE_CLICK' and part==FIELD:
+            self.select_word(self.text_index(box))
+        elif press:
+            self.armed=SEARCH if popup.contains(*self.mouse) else part
+            if part==FIELD:
+                self.cursor=self.anchor=self.text_index(box)
+                self.dragging=True
             elif self.armed is None:self.close()
         elif event.value=='RELEASE':
+            self.dragging=False
             armed,self.armed=self.armed,None
             if armed==SEARCH and row is not None:self.choose(self.results[row])
             elif armed==part and part in {CLEAR,EYEDROPPER}:self.activate(part,box)
@@ -240,10 +277,16 @@ class AvatarField:
         elif not name:self.choose(None)
         else:self.choose(next((obj for obj in self.candidates() if obj.name==name),self.avatar))
 
-    def place_cursor(self,box):
-        target=self.editor.pointer[0]-box.x-TEXT_OFFSET*self.scale
+    def text_index(self,box):
+        target=self.mouse[0]-box.x-TEXT_OFFSET*self.scale
         blf.size(0,TEXT_SIZE*self.scale)
-        self.cursor=self.anchor=min(range(len(self.text)+1),key=lambda index:abs(blf.dimensions(0,self.text[:index])[0]-target))
+        return min(range(len(self.text)+1),key=lambda index:abs(blf.dimensions(0,self.text[:index])[0]-target))
+
+    def select_word(self,index):
+        start=end=index
+        while start>0 and self.text[start-1].isalnum():start-=1
+        while end<len(self.text) and self.text[end].isalnum():end+=1
+        self.anchor,self.cursor=start,end
 
     def selection(self):
         return min(self.anchor,self.cursor),max(self.anchor,self.cursor)
@@ -313,7 +356,7 @@ class AvatarField:
         for area in editor._window.screen.areas:
             inside=area.x<=event.mouse_x<area.x+area.width and area.y<=event.mouse_y<area.y+area.height
             if area.type!='VIEW_3D' or not inside:continue
-            if area==editor._area and editor.canvas_layout.panel.contains(*editor.pointer):return None
+            if area==editor._area and editor.canvas_layout.panel.contains(*self.mouse):return None
             region=next(item for item in area.regions if item.type=='WINDOW')
             view=area.spaces.active.region_3d
             mouse=(event.mouse_x-region.x,event.mouse_y-region.y)

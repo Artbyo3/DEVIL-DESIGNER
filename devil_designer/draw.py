@@ -17,6 +17,7 @@ from .avatar_field import EYEDROPPER, SEARCH, TEXT_OFFSET, TEXT_SIZE
 from .ui_system import (
     BG_BASE, BG_ELEVATED, BG_WELL, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, ACCENT, ACCENT_BG, ACCENT_BORDER, ACCENT_HOVER, BORDER, BORDER_SUBTLE, RADIUS_WINDOW, RADIUS_BADGE, Tooltip, ComponentRenderer, SURFACE_FLOATING, SURFACE_OUTLINE, SELECTION, TEXT_ON_ACCENT, MinimalMetrics,
     NATIVE_FIELD, NATIVE_FIELD_HOVER, NATIVE_FIELD_EDIT, NATIVE_POPUP, NATIVE_ROW_ACTIVE, NATIVE_TEXT, NATIVE_PLACEHOLDER, NATIVE_SELECTION, NATIVE_CURSOR,
+    NATIVE_EXTRA_ICON, NATIVE_POPUP_OUTLINE, NATIVE_SHADOW,
     TRANSFORM_FRAME, TRANSFORM_HANDLE, TRANSFORM_HANDLE_HOVER, TRANSFORM_PIVOT, TRANSFORM_PREVIEW_OK,
     TRANSFORM_PREVIEW_WARN, TRANSFORM_PREVIEW_BLOCK, TRANSFORM_HANDLE_SIZE, TRANSFORM_KNOB_RADIUS, TRANSFORM_HIT_RADIUS
 )
@@ -243,12 +244,13 @@ class Renderer:
         editing = field.mode == SEARCH
         text_y = box.y + (box.h - 8 * scale) / 2
         blf.size(0, TEXT_SIZE * scale)
-        self.text(box.x - 8 * scale - blf.dimensions(0, label)[0], text_y, label, TEXT_SIZE, NATIVE_TEXT)
-        hover = box.contains(*ed.pointer)
+        self.text(box.x - 10 * scale - blf.dimensions(0, label)[0], text_y, label, TEXT_SIZE, NATIVE_TEXT)
+        hover = box.contains(*field.mouse)
         self.round_rect(box, NATIVE_FIELD_EDIT if editing else NATIVE_FIELD_HOVER if hover else NATIVE_FIELD, radius=metrics.text)
-        self.draw_icon('OBJECT_DATA', box.x + 11 * scale, box.y + box.h / 2, 14, NATIVE_TEXT)
+        self.draw_icon('OBJECT_DATA', box.x + 11 * scale, box.y + box.h / 2, 16, NATIVE_TEXT)
         extra = field.extra_rect(box)
-        self.draw_icon('CLOSE' if field.avatar else 'EYEDROPPER', extra.x + extra.w / 2, extra.y + extra.h / 2, 11 if field.avatar else 14, NATIVE_TEXT)
+        self.draw_icon('PANEL_CLOSE' if field.avatar else 'EYEDROPPER', extra.x + extra.w / 2, extra.y + extra.h / 2, 11 if field.avatar else 16,
+                       NATIVE_TEXT if extra.contains(*field.mouse) else NATIVE_EXTRA_ICON)
         left = box.x + TEXT_OFFSET * scale
         room = extra.x - left
         value = field.text if editing else field.avatar.name if field.avatar else ''
@@ -274,7 +276,7 @@ class Renderer:
         if field.mode == EYEDROPPER and field.sample is not None:
             blf.size(0, TEXT_SIZE * scale)
             name = field.sample.name
-            tip = Rect(ed.pointer[0] + 14 * scale, ed.pointer[1] - 22 * scale, blf.dimensions(0, name)[0] + 12 * scale, 18 * scale)
+            tip = Rect(field.mouse[0] + 14 * scale, field.mouse[1] - 22 * scale, blf.dimensions(0, name)[0] + 12 * scale, 18 * scale)
             self.clip(Rect(0, 0, ed._region.width, ed._region.height))
             self.round_rect(tip, NATIVE_POPUP, radius=metrics.tooltip)
             self.text(tip.x + 6 * scale, tip.y + 5 * scale, name, TEXT_SIZE, NATIVE_TEXT)
@@ -283,12 +285,17 @@ class Renderer:
         if control is None:
             return
         popup, rows = field.popup(field.box(control))
+        for step in range(6, 0, -1):
+            spread = step * scale / 2 + scale
+            self.round_rect(Rect(popup.x - spread, popup.y - spread, popup.w + 2 * spread, popup.h + 2 * spread), NATIVE_SHADOW, radius=metrics.menu_back + step / 2)
+        ring = Rect(popup.x - scale, popup.y - scale, popup.w + 2 * scale, popup.h + 2 * scale)
+        self.round_rect(ring, NATIVE_POPUP_OUTLINE, radius=metrics.menu_back + 1)
         self.round_rect(popup, NATIVE_POPUP, radius=metrics.menu_back)
         for index, obj in enumerate(field.results[field.offset:field.offset + rows]):
             row = field.row_rect(popup, index)
             if field.offset + index == field.active:
-                self.round_rect(row, NATIVE_ROW_ACTIVE, radius=metrics.menu_item)
-            self.draw_icon('OUTLINER_OB_MESH', row.x + 9 * scale, row.y + row.h / 2, 14, NATIVE_TEXT)
+                self.round_rect(row, NATIVE_ROW_ACTIVE, radius=metrics.menu_item / 2)
+            self.draw_icon('OUTLINER_OB_MESH', row.x + 9 * scale, row.y + row.h / 2, 16, NATIVE_TEXT)
             self.text(popup.x + 36 * scale, row.y + 5 * scale, obj.name, TEXT_SIZE, NATIVE_TEXT, max_width=popup.w - 42 * scale)
         if not field.results:
             self.text(popup.x + 7 * scale, field.row_rect(popup, 0).y + 5 * scale, 'No results found', TEXT_SIZE, NATIVE_TEXT)
@@ -941,7 +948,7 @@ class Renderer:
                         self.text(control.x + 8 * scale, control.y + 8 * scale, value, 11, TEXT, max_width=control.w - 16 * scale)
                 elif key == 'AVATAR_FIELD':
                     self.avatar_field(ed, control, row[1], metrics)
-                    if hover and not ed.avatar_field.mode:
+                    if ed.avatar_field.tooltip_ready():
                         card_tooltip = Tooltip(text='Avatar body used for arrangement, points and fit', pos=(control.x, control.y - 18 * scale), visible=True)
                 elif key in {'CHOICES', 'CHOICES_FABRIC'}:
                     label, value = row[1], row[2]
