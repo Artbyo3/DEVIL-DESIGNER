@@ -4,6 +4,7 @@ import traceback
 from pathlib import Path
 from types import SimpleNamespace
 import bpy
+import gpu
 from bpy_extras import view3d_utils
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -122,6 +123,9 @@ def run():
             check(body in field.results and target in field.results and blocked not in field.results, 'the list is filtered by the avatar poll')
             check(field.results[field.active] == body, 'the current avatar is the active row')
             draws('open list', 'avatar-open')
+            gpu.state.blend_set('NONE')
+            workspace.renderer.smooth_icon('OUTLINER_OB_MESH', 100, 100, 16, (1, 1, 1, 1))
+            check(gpu.state.blend_get() == 'ALPHA', 'icons keep soft edges after text turns blending off')
 
             key('ESC')
             check(field.mode is None and scene.dd_avatar == body and workspace.card_kind == 'BODY', 'Esc closes only the list and keeps the avatar')

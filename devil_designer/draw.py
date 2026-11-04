@@ -248,6 +248,7 @@ class Renderer:
                     vertices.extend([(x, y), (x + 1, y), (x + 1, y + 1), (x, y), (x + 1, y + 1), (x, y + 1)])
                 batches.append((level, batch_for_shader(self.shader, 'TRIS', {'pos': vertices})))
             self.icon_batches[key] = batches
+        gpu.state.blend_set('ALPHA')
         with gpu.matrix.push_pop():
             gpu.matrix.translate((round(cx - pixels / 2), round(cy - pixels / 2), 0))
             self.shader.bind()
