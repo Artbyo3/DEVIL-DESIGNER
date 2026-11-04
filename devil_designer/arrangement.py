@@ -767,18 +767,20 @@ def _mirrors(point, other):
             and abs(point['height'] - other['height']) < MIRROR_TOLERANCE)
 
 
+def mirror_point(setup, volume_id, point_id):
+    volume, point = _volume_find(setup, volume_id, point_id)
+    partner = next((item for item in setup['volumes'] if item['id'] == _mirror_volume(volume_id)), None)
+    if partner is None:
+        return None
+    if partner is volume and abs(math.remainder(2 * point['angle'], math.tau)) < MIRROR_TOLERANCE:
+        return None
+    other = next((item for item in partner['points'] if _mirrors(point, item)), None)
+    return (partner['id'], other['id']) if other is not None else None
+
+
 def mirrored_points(setup):
-    volumes = {volume['id']: volume for volume in setup['volumes']}
-    result = set()
-    for volume in setup['volumes']:
-        partner = volumes.get(_mirror_volume(volume['id']))
-        if partner is None:
-            continue
-        for point in volume['points']:
-            on_centerline = partner is volume and abs(math.remainder(2 * point['angle'], math.tau)) < MIRROR_TOLERANCE
-            if not on_centerline and any(_mirrors(point, other) for other in partner['points']):
-                result.add((volume['id'], point['id']))
-    return result
+    return {(volume['id'], point['id']) for volume in setup['volumes'] for point in volume['points']
+            if mirror_point(setup, volume['id'], point['id']) is not None}
 
 
 def world_points(context, setup=None, wait=True):

@@ -17,8 +17,11 @@ _keymaps=[]
 _world_cache=None
 _projection_cache=None
 _batch_cache=None
+_visibility_cache=None
 _shader=None
 DISK_SEGMENTS=24
+OCCLUSION_MARGIN=1e-4
+OCCLUSION_PASSES=16
 
 
 @dataclass
@@ -50,7 +53,8 @@ def display_world_points(context):
     key=(context.scene.as_pointer(),context.view_layer.as_pointer(),live_panels.avatar_signature(context),
          (_interaction.point,_interaction.angle,_interaction.height) if setup else None)
     if _world_cache is None or _world_cache[0]!=key:
-        _world_cache=(key,arrangement.world_points(context,setup,wait=False))
+        points=[dict(point,slot=slot) for slot,point in enumerate(arrangement.world_points(context,setup,wait=False))]
+        _world_cache=(key,points,arrangement._volume_frame(context)[1][2])
     return _world_cache[1]
 
 
@@ -66,15 +70,16 @@ def display_shader():
     interface.vertex_in(1,'VEC2','offset')
     interface.vertex_in(2,'VEC3','normal')
     interface.vertex_in(3,'FLOAT','coverage')
+    interface.vertex_in(4,'FLOAT','slot')
     interface.push_constant('MAT4','viewProjection')
     interface.push_constant('VEC2','viewport')
     interface.push_constant('VEC4','panel')
     interface.push_constant('VEC4','color')
     interface.push_constant('VEC4','eye')
-    interface.push_constant('FLOAT','hidden')
+    interface.push_constant('FLOAT','markerWorld')
+    interface.sampler(0,'FLOAT_2D','visibilityMap')
     interface.push_constant('BOOL','srgbTarget')
     stage=gpu.types.GPUStageInterfaceInfo('dd_arrangement_interface')
-    stage.smooth('FLOAT','visibility')
     stage.smooth('FLOAT','edgeCoverage')
     interface.vertex_out(stage)
     interface.fragment_out(0,'VEC4','fragColor')
@@ -85,19 +90,29 @@ bool covered(vec4 clip) {
 }
 void main() {
     vec3 toward = eye.w > 0.5 ? eye.xyz - position : eye.xyz;
-    visibility = dot(normal, toward) < 0.0 ? hidden : 1.0;
+    vec3 view = normalize(toward);
+    vec3 surface = normalize(normal);
+    float facing = dot(surface, view);
     edgeCoverage = coverage;
+    vec3 disc = normalize(surface + view * (facing < 0.0 ? -0.18 : 0.18));
+    vec3 side = normalize(cross(disc, abs(disc.z) < 0.9 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0)));
+    vec3 across = side * offset.x + cross(disc, side) * offset.y;
+    vec3 screenRight = vec3(viewProjection[0][0], viewProjection[1][0], viewProjection[2][0]);
+    screenRight = normalize(screenRight - view * dot(screenRight, view));
+    vec2 flattened = vec2(dot(across, screenRight), dot(across, cross(view, screenRight)));
     vec4 clip = viewProjection * vec4(position, 1.0);
-    if (clip.w <= 0.0 || covered(clip)) {
+    if (clip.w <= 0.0 || covered(clip) || texelFetch(visibilityMap, ivec2(int(slot + 0.5), 0), 0).r < 0.5) {
         gl_Position = vec4(2.0, 2.0, 0.0, 1.0);
     } else {
-        gl_Position = vec4(clip.xy / clip.w + 2.0 * offset / viewport, 0.0, 1.0);
+        float pixelsPerUnit = length(vec3(viewProjection[0][1], viewProjection[1][1], viewProjection[2][1])) * viewport.y * 0.5 / clip.w;
+        float zoom = clamp(markerWorld * pixelsPerUnit, 0.55, 2.0);
+        gl_Position = vec4(clip.xy / clip.w + 2.0 * flattened * zoom / viewport, 0.0, 1.0);
     }
 }
 ''')
     interface.fragment_source('''
 void main() {
-    fragColor = vec4(color.rgb, color.a * visibility * edgeCoverage);
+    fragColor = vec4(color.rgb, color.a * edgeCoverage);
     if (srgbTarget) {
         vec3 channels = max(color.rgb, vec3(0.0));
         fragColor.rgb = mix(pow((channels + 0.055) / 1.055, vec3(2.4)), channels / 12.92,
@@ -129,33 +144,47 @@ def disk_vertices(radius,inner):
 
 
 def shape_batch(shader,shapes):
-    positions=[];offsets=[];normals=[];coverages=[]
+    positions=[];offsets=[];normals=[];coverages=[];slots=[]
     for point,radius,inner in shapes:
         shape_offsets,shape_coverages=disk_vertices(radius,inner)
         positions.extend((point['position'],)*len(shape_offsets));normals.extend((point['normal'],)*len(shape_offsets))
-        offsets.extend(shape_offsets);coverages.extend(shape_coverages)
-    return batch_for_shader(shader,'TRIS',{'position':positions,'offset':offsets,'normal':normals,'coverage':coverages}) if positions else None
+        offsets.extend(shape_offsets);coverages.extend(shape_coverages);slots.extend((float(point['slot']),)*len(shape_offsets))
+    return batch_for_shader(shader,'TRIS',{'position':positions,'offset':offsets,'normal':normals,'coverage':coverages,'slot':slots}) if positions else None
 
 
-def display_batches(shader):
+def display_batches(shader,occupied):
     global _batch_cache
-    key=(_world_cache[0],ui_system.interface_scale())
+    key=(_world_cache[0],ui_system.interface_scale(),occupied)
     if _batch_cache is None or _batch_cache[0]!=key:
-        radius=marker_size(ui_system.ARRANGEMENT_POINT_DIAMETER)/2
+        radius=marker_size(ui_system.ARRANGEMENT_POINT_DIAMETER)/2;width=marker_size(ui_system.ARRANGEMENT_EDGE_WIDTH)
         points=_world_cache[1]
-        layers=((shape_batch(shader,[(point,radius,0) for point in points if not point['mirrored']]),ui_system.ARRANGEMENT_FILL),
-                (shape_batch(shader,[(point,radius,0) for point in points if point['mirrored']]),ui_system.ARRANGEMENT_MIRRORED))
+        free=[point for point in points if (point['volume'],point['point']) not in occupied]
+        groups=(([point for point in free if not point['mirrored']],ui_system.ARRANGEMENT_FILL),
+                ([point for point in free if point['mirrored']],ui_system.ARRANGEMENT_MIRRORED),
+                ([point for point in points if (point['volume'],point['point']) in occupied],ui_system.ARRANGEMENT_ATTACHED))
+        layers=(*((shape_batch(shader,[(point,radius,0) for point in group]),color) for group,color in groups),
+                (shape_batch(shader,[(point,radius,radius-width) for point in points]),(*ui_system.TEXT_PRIMARY[:3],.55)))
         _batch_cache=(key,layers,{})
     return _batch_cache[1]
+
+
+def visibility_texture(points):
+    global _visibility_cache
+    flags=[0.0]*len(_world_cache[1])
+    for point in points:
+        if point['visible']:flags[point['slot']]=1.0
+    if _visibility_cache is None or _visibility_cache[0]!=flags:
+        _visibility_cache=(flags,gpu.types.GPUTexture((len(flags),1),format='R32F',data=gpu.types.Buffer('FLOAT',len(flags),flags)))
+    return _visibility_cache[1]
 
 
 def overlay_batch(shader,kind,point):
     overlays=_batch_cache[2]
     key=(kind,point['volume'],point['point'])
     if key not in overlays:
-        edge=marker_size(ui_system.ARRANGEMENT_POINT_DIAMETER)/2;halo=marker_size(ui_system.ARRANGEMENT_ACTIVE_DIAMETER)/2
+        halo=marker_size(ui_system.ARRANGEMENT_ACTIVE_DIAMETER)/2;edge=marker_size(ui_system.ARRANGEMENT_POINT_DIAMETER)/2
         width=marker_size(ui_system.ARRANGEMENT_EDGE_WIDTH)
-        radius,inner={'BOUND':(edge*.45,0),'HALO':(halo,halo-width),'PRESSED':(edge,0)}[kind]
+        radius,inner={'HALO':(halo,halo-width),'PRESSED':(edge-width,0)}[kind]
         overlays[key]=shape_batch(shader,[(point,radius,inner)])
     return overlays[key]
 
@@ -176,15 +205,29 @@ def selected_piece(context):
     return obj.get('dd_pattern_id') if obj is not None else None
 
 
-def bound_point(context):
-    from . import garment
-    identity=selected_piece(context)
-    if identity is None:return None
-    from . import editor
+def occupied_points(context):
+    from . import editor,garment
     active=editor._active
     document=active.session.document if active is not None and active._scene==context.scene else garment.document(context.scene)
-    pattern=document.find(identity)
-    return (pattern.arrangement['volume'],pattern.arrangement['point']) if pattern is not None and pattern.arrangement else None
+    return frozenset((pattern.arrangement['volume'],pattern.arrangement['point']) for pattern in document.patterns if pattern.arrangement)
+
+
+def point_visible(context,position):
+    region_view=context.region_data
+    target=Vector(position)
+    origin=view3d_utils.region_2d_to_origin_3d(context.region,region_view,view3d_utils.location_3d_to_region_2d(context.region,region_view,target))
+    direction=target-origin
+    remaining=direction.length-OCCLUSION_MARGIN
+    direction.normalize()
+    depsgraph=context.view_layer.depsgraph
+    for attempt in range(OCCLUSION_PASSES):
+        hit,location,unused_normal,unused_index,obj,unused_matrix=context.scene.ray_cast(depsgraph,origin,direction,distance=remaining)
+        if not hit:return True
+        if not obj.original.get('dd_kind'):return False
+        step=(location-origin).length+OCCLUSION_MARGIN
+        origin=location+direction*OCCLUSION_MARGIN;remaining-=step
+        if remaining<=0:return True
+    return True
 
 
 def projected_points(context):
@@ -202,7 +245,7 @@ def projected_points(context):
         if screen is None:continue
         if panel is not None and panel.contains(*screen):continue
         view=view3d_utils.region_2d_to_vector_3d(context.region,context.region_data,screen)
-        points.append(dict(point,screen=tuple(screen),facing=Vector(point['normal']).dot(view)<0))
+        points.append(dict(point,screen=tuple(screen),facing=Vector(point['normal']).dot(view)<0,visible=point_visible(context,point['position'])))
     _projection_cache=(key,points)
     return points
 
@@ -233,9 +276,8 @@ def draw_points():
     shader=_shader
     gpu.state.blend_set('ALPHA')
     try:
-        bound=bound_point(context)
         active=_interaction.point if _interaction.state!='IDLE' else None
-        layers=display_batches(shader)
+        layers=display_batches(shader,occupied_points(context))
         panel=display_panel(context)
         view=context.region_data
         camera=view.view_matrix.inverted()
@@ -244,13 +286,12 @@ def draw_points():
         shader.uniform_float('viewport',(context.region.width,context.region.height))
         shader.uniform_float('panel',(panel.x,panel.y,panel.x+panel.w,panel.y+panel.h) if panel is not None else (0,0,-1,-1))
         shader.uniform_float('eye',(*camera.translation,1.0) if view.is_perspective else (*camera.col[2][:3],0.0))
-        shader.uniform_float('hidden',ui_system.ARRANGEMENT_HIDDEN_ALPHA)
+        shader.uniform_float('markerWorld',ui_system.ARRANGEMENT_POINT_BODY_FRACTION*_world_cache[2]/marker_size(ui_system.ARRANGEMENT_POINT_DIAMETER))
+        shader.uniform_sampler('visibilityMap',visibility_texture(points))
         for batch,color in layers:
             if batch is None:continue
             shader.uniform_float('color',color);batch.draw(shader)
         by_identity={(point['volume'],point['point']):point for point in points}
-        if bound in by_identity:
-            shader.uniform_float('color',ui_system.ARRANGEMENT_EDGE);overlay_batch(shader,'BOUND',by_identity[bound]).draw(shader)
         if active in by_identity:
             shader.uniform_float('color',ui_system.ARRANGEMENT_HALO);overlay_batch(shader,'HALO',by_identity[active]).draw(shader)
             if _interaction.state in {'PRESSED','DRAGGING'}:overlay_batch(shader,'PRESSED',by_identity[active]).draw(shader)
@@ -577,7 +618,7 @@ def register():
 
 
 def unregister():
-    global _draw_handle,_preview_handle,_world_cache,_projection_cache,_batch_cache,_shader
+    global _draw_handle,_preview_handle,_world_cache,_projection_cache,_batch_cache,_visibility_cache,_shader
     if _draw_handle is not None:
         bpy.types.SpaceView3D.draw_handler_remove(_draw_handle,'WINDOW');_draw_handle=None
     if _preview_handle is not None:
@@ -585,5 +626,5 @@ def unregister():
     for keymap,item in _keymaps:keymap.keymap_items.remove(item)
     _keymaps.clear()
     end_interaction()
-    _world_cache=None;_projection_cache=None;_batch_cache=None;_shader=None
+    _world_cache=None;_projection_cache=None;_batch_cache=None;_visibility_cache=None;_shader=None
     for operator in (DD_OT_arrangement_edit,DD_OT_arrangement_guide,DD_OT_arrangement_pick):bpy.utils.unregister_class(operator)
