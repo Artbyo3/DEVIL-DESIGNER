@@ -1,12 +1,13 @@
-# Sourced CC0 interface icons
+# Interface icons
 
 These are existing third-party icons, not AI-generated or hand-drawn replacements.
 
 - Kenney Game Icons and Game Icons Expansion: https://kenney.nl/assets/game-icons and https://kenney.nl/assets/game-icons-expansion
 - Maki: https://github.com/mapbox/maki
 - Temaki: https://github.com/rapideditor/temaki
+- Blender built-in icons: https://projects.blender.org/blender/blender
 
-All three collections dedicate their icon artwork under CC0 1.0. The original license documents are included alongside these assets. `sources.json` records the individual upstream files, checksums, pinned SVG revisions, and the reflected Redo variant.
+The Kenney, Maki and Temaki collections dedicate their icon artwork under CC0 1.0. The Blender built-in icons are recorded as GPL-2.0-or-later and credited to Blender Authors. They are planned to be replaced by a custom CC0 set. The original license documents are included alongside these assets. `sources.json` records the individual upstream files, checksums, pinned SVG revisions, and the reflected Redo variant.
 
 `tools/prepare_icons.py` normalizes the supplied artwork into transparent 64-pixel images and quantized alpha spans in `geometry.json`. The spans are cached as native Blender UNIFORM_COLOR GPU batches. No SVG parser, image renderer, network request, Pillow, or resvg dependency is needed at runtime. Original SVG files are retained where applicable. Kenney raster originals are identified by their archive paths and SHA-256 hashes.
 
