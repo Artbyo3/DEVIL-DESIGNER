@@ -58,6 +58,7 @@ def layering_checks():
         pattern.frozen = True
     scene.dd_document = document.dumps()
     frozen = garment.compile_garment(bpy.context)
+    check(not any(obj.visible_get() for obj in garment.generated(bpy.context.scene, 'collider')), 'collision helpers stay hidden in a frozen run')
     check(coordinates(frozen, 1) == [tuple(point) for point in pose], 'whole frozen base receives the exact current pose')
     maximum = 0
     for frame in range(1, 122):

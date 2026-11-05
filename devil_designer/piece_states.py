@@ -196,6 +196,7 @@ def compile_run(context, document):
         for obj in [simulation] + anchors:
             destination.objects.link(obj)
             owned_collection.objects.unlink(obj)
+            obj.hide_set(obj.get('dd_kind') == 'collider')
         transferred = True
         scene.frame_end = max(scene.frame_end, temporary.frame_end)
         update_display(context, document)

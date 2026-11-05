@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(ROOT))
 import devil_designer
-from devil_designer import body_guard, garment, starters, tack_binding, xpbd, xpbd_live, xpbd_nodes
+from devil_designer import body_guard, garment, panel_cache, starters, tack_binding, xpbd, xpbd_live, xpbd_nodes
 from devil_designer.core import Anchor, Session
 
 
@@ -213,8 +213,11 @@ def test_keep_with_faceless_seam_vertices(scene):
     mesh.update()
     simulation.update_tag()
     run_frames(scene, 45)
+    quality = scene.dd_quality
+    scene.dd_quality = quality + 12
     result, _ = garment.keep_drape(bpy.context)
-    check(len(result.data.polygons) > 0, 'Keep finishes when a sewn pair has no cloth faces')
+    scene.dd_quality = quality
+    check(len(result.data.polygons) > 0, 'Keep finishes when a sewn pair has no cloth faces, with Quality changed after draping')
 
 
 def test_stiff_fabric_links():
@@ -247,15 +250,31 @@ def test_paired_panels_stay_on_their_side(scene, body):
     back_side = [(back.matrix_world @ vertex.co - center).y for vertex in back.data.vertices]
     print('PANEL SIDES', round(max(front_side), 3), round(min(back_side), 3), flush=True)
     check(max(front_side) < .03 and min(back_side) > -.03, 'wide paired panels stop at the body side instead of crossing')
+    document = garment.document(scene)
+    paired = panel_cache.panel_pose(bpy.context, document.patterns[0])
+    document.patterns[1].arrangement = None
+    scene.dd_document = document.dumps()
+    check(panel_cache.panel_pose(bpy.context, document.patterns[0]) != paired, 'a panel rebuilds when its opposite piece changes')
 
 
 def test_reset_restores_timeline(scene):
     end = scene.frame_end
     garment.reset(bpy.context)
+    sync = scene.sync_mode
+    scene.sync_mode = 'FRAME_DROP'
     bpy.ops.devil_designer.simulate()
     check(scene.frame_end > end, 'Simulate opens an endless timeline')
     garment.reset(bpy.context)
-    check(scene.frame_end == end, 'Reset restores the artist timeline')
+    check(scene.frame_end == end and scene.sync_mode == 'FRAME_DROP', 'Reset restores the artist timeline and playback sync')
+    avatar = scene.dd_avatar
+    scene.dd_avatar = None
+    try:
+        bpy.ops.devil_designer.simulate()
+    except RuntimeError:
+        pass
+    scene.dd_avatar = avatar
+    check(scene.frame_end == end and scene.sync_mode == 'FRAME_DROP', 'a refused Simulate leaves the artist timeline alone')
+    scene.sync_mode = sync
     check(not garment.generated(scene, 'collider') and not garment.generated(scene, 'simulation'), 'Reset clears generated simulation objects')
 
 

@@ -1298,6 +1298,8 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                 self.message = f'Grab radius {grab.radius * 1000:.0f} mm'
                 self.overlay_cache_time = 0.0
             return {'RUNNING_MODAL'}
+        if self.card_kind and not grab.held:
+            return self.minimal_event(context, event) or {'RUNNING_MODAL'}
         if press and event.type == 'ESC':
             if grab.held:
                 grab.release()

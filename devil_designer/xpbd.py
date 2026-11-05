@@ -68,12 +68,12 @@ def flat_positions(panels, doc, unit):
         mesh.uv_layers.active.data.foreach_get('uv', uv)
         flat = np.zeros((len(mesh.vertices), 3), dtype=np.float64)
         flat[loops, :2] = uv.reshape(-1, 2) * extent / unit
-        flat[:, 0] += index * PIECE_SPACING
+        flat[:, 0] += index * PIECE_SPACING / unit
         rows.append(flat)
     return np.concatenate(rows)
 
 
-def bend_rest_positions(panels, doc, flat):
+def bend_rest_positions(panels, doc, flat, unit):
     shapes = flat.copy()
     offset = 0
     for index, panel in enumerate(panels):
@@ -83,7 +83,7 @@ def bend_rest_positions(panels, doc, flat):
             shape = np.empty(count * 3, dtype=np.float32)
             panel.data.vertices.foreach_get('co', shape)
             shapes[offset:offset + count] = shape.reshape(-1, 3)
-            shapes[offset:offset + count, 0] += index * PIECE_SPACING
+            shapes[offset:offset + count, 0] += index * PIECE_SPACING / unit
         offset += count
     return shapes
 
@@ -312,7 +312,7 @@ def attach(context, obj, doc, panels, pieces, maps, plan, pinned, tacks):
     write(mesh, 'dd_seam', 'BOOLEAN', 'EDGE', loose)
     write(mesh, 'dd_edge_compliance', 'FLOAT', 'EDGE', compliance)
     write(mesh, 'dd_rest_position', 'FLOAT_VECTOR', 'POINT', rest)
-    write(mesh, 'dd_bend_rest', 'FLOAT_VECTOR', 'POINT', bend_rest_positions(panels, doc, rest))
+    write(mesh, 'dd_bend_rest', 'FLOAT_VECTOR', 'POINT', bend_rest_positions(panels, doc, rest, unit))
     write(mesh, 'dd_bend_compliance', 'FLOAT', 'POINT', BEND_COMPLIANCE * (2.2 / bending) ** 2)
     write(mesh, 'mass', 'FLOAT', 'POINT', np.maximum(face_masses(mesh, rest, density) * MASS_SCALE, 1e-5))
     write(mesh, 'radius', 'FLOAT', 'POINT', np.full(count, CONTACT_RADIUS / unit))

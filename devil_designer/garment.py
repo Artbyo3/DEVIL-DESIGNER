@@ -21,6 +21,7 @@ LIVE_FRAMES = 1000000
 def lock_timeline(scene):
     if 'dd_timeline' not in scene:
         scene['dd_timeline'] = [scene.frame_end,scene.render.fps,scene.render.fps_base]
+        scene['dd_timeline_sync'] = scene.sync_mode
     settings = ((scene,'frame_end',max(scene.frame_end,scene.frame_start+LIVE_FRAMES)),(scene.render,'fps',xpbd.SIM_FPS),
                 (scene.render,'fps_base',1),(scene,'sync_mode','NONE'))
     for owner,name,value in settings:
@@ -32,6 +33,7 @@ def restore_timeline(scene):
     if 'dd_timeline' in scene:
         end,fps,base = scene.pop('dd_timeline')
         scene.frame_end,scene.render.fps,scene.render.fps_base = int(end),int(fps),base
+        scene.sync_mode = scene.pop('dd_timeline_sync',scene.sync_mode)
 
 
 def start_playback(context):
@@ -293,7 +295,7 @@ def arrange(context):
 
 
 def signature(scene,panels):
-    data = [scene.dd_document,scene.dd_spacing,scene.dd_quality,
+    data = [scene.dd_document,scene.dd_spacing,
             scene.dd_self_collision,scene.dd_pin_top,metres_per_unit(scene),
             [[p.get('dd_pattern_id'),[v for row in p.matrix_world for v in row]] for p in panels]]
     avatar = scene.dd_avatar
@@ -317,8 +319,18 @@ def require_body(scene):
 
 def compile_garment(context):
     scene = context.scene
-    doc = document(scene)
     lock_timeline(scene)
+    try:
+        return build_simulation(context)
+    except Exception:
+        if not generated(scene,'simulation'):
+            restore_timeline(scene)
+        raise
+
+
+def build_simulation(context):
+    scene = context.scene
+    doc = document(scene)
     from . import piece_states
     piece_states.update_display(context,doc)
     if piece_states.required(doc):
