@@ -1,6 +1,5 @@
 import json
 from .core import Document
-from .presets import resolve_preset
 
 
 FLAGS = ('frozen', 'deactivated', 'strengthened')
@@ -113,42 +112,20 @@ def transfer(rest, positions, faces, target):
 
 
 def apply_states(document, simulation):
-    import bpy
+    from . import xpbd
     indices = piece_indices(simulation)
-    cloth = next(modifier for modifier in simulation.modifiers if modifier.type == 'CLOTH')
     frozen = {index for pattern in document.patterns if pattern.frozen and not pattern.deactivated for index in indices[pattern.id]}
     if frozen:
-        cloth.collision_settings.use_self_collision = True
         held = frozen | {index for pair in json.loads(simulation['dd_sewing_pairs']) if any(index in frozen for index in pair) for index in pair}
-        group = simulation.vertex_groups.get('DD Pins') or simulation.vertex_groups.new(name='DD Pins')
-        group.add(sorted(held), 1, 'REPLACE')
-        cloth.settings.vertex_group_mass = group.name
-        exact_hold(simulation, held)
-        for modifier in list(simulation.modifiers):
-            if modifier.type != 'HOOK' or not held.intersection(modifier.vertex_indices):
-                continue
-            target = modifier.object
-            simulation.modifiers.remove(modifier)
-            if target and target.get('dd_kind') == 'anchor':
-                bpy.data.objects.remove(target, do_unlink=True)
-    active = [pattern for pattern in document.patterns if not pattern.deactivated]
-    if not any(pattern.strengthened for pattern in active):
-        return
-    for key, group_name, properties in [('structural', 'DD Structural', ('tension', 'compression')),
-                                        ('shear', 'DD Shear', ('shear',)), ('bending', 'DD Bending', ('bending',))]:
-        values = [resolve_preset(pattern.preset, getattr(document, 'custom_presets', None))[key] * (MULTIPLIER if pattern.strengthened else 1) for pattern in active]
-        low, high = min(values), max(values)
-        for name in properties:
-            setattr(cloth.settings, name + '_stiffness', low)
-            setattr(cloth.settings, name + '_stiffness_max', high)
-        group = simulation.vertex_groups[group_name]
-        for pattern, value in zip(active, values):
-            group.add(indices[pattern.id], (value - low) / (high - low) if high > low else 1, 'REPLACE')
+        xpbd.hold(simulation, held)
+    for pattern in document.patterns:
+        if pattern.strengthened and not pattern.deactivated:
+            xpbd.strengthen(simulation, indices[pattern.id], MULTIPLIER)
 
 
 def compile_run(context, document):
     import bpy
-    from . import garment, layering, ui
+    from . import garment, ui, xpbd
     scene = context.scene
     active = active_document(document)
     if not active.patterns:
@@ -164,8 +141,7 @@ def compile_run(context, document):
     old = garment.generated(scene, 'simulation')
     if old and old[0].get('dd_signature') == marker:
         return old[0]
-    garment.ensure_collision(scene)
-    layering.prepare_colliders(context)
+    garment.require_body(scene)
     temporary = bpy.data.scenes.new('DD State Compile')
     owned_collection = None
     simulation = None
@@ -180,7 +156,7 @@ def compile_run(context, document):
                 setattr(temporary, key, getattr(scene, key))
         temporary.dd_document = active.dumps()
         for obj in scene.objects:
-            if obj.get('dd_kind') not in {'panel', 'simulation', 'anchor'} or obj.get('dd_owner') != garment.OWNER:
+            if obj.get('dd_kind') not in {'panel', 'simulation', 'anchor', 'collider'} or obj.get('dd_owner') != garment.OWNER:
                 temporary.collection.objects.link(obj)
         with context.temp_override(scene=temporary, view_layer=temporary.view_layers[0]):
             run_panels = garment.build_panels(context)
@@ -205,14 +181,15 @@ def compile_run(context, document):
                         for index, point in zip(indices, coordinates):
                             simulation.data.vertices[index].co = point
                 simulation.data.update()
+                xpbd.restart_from_pose(simulation)
             apply_states(document, simulation)
             simulation['dd_run_rest'] = json.dumps(rest, separators=(',', ':'))
             simulation['dd_state_run'] = True
             simulation['dd_signature'] = marker
-            anchors = garment.generated(temporary, 'anchor')
+            anchors = garment.generated(temporary, 'anchor') + garment.generated(temporary, 'collider')
             garment.remove_objects(run_panels)
         garment.stop(context)
-        garment.remove_objects(garment.generated(scene, 'anchor'))
+        garment.remove_objects(garment.generated(scene, 'anchor') + garment.generated(scene, 'collider'))
         garment.remove_objects(old)
         scene.frame_set(scene.frame_start)
         destination = garment.collection(scene)
@@ -230,71 +207,18 @@ def compile_run(context, document):
             obj.select_set(False)
         simulation.select_set(True)
         context.view_layer.objects.active = simulation
-        configure_collisions(context, document, simulation)
+        simulation.data.update()
+        simulation.update_tag()
         context.view_layer.update()
+        scene.frame_set(scene.frame_start + 1)
+        scene.frame_set(scene.frame_start)
         return simulation
     finally:
         if not transferred:
-            garment.remove_objects(garment.generated(temporary, 'panel') + garment.generated(temporary, 'simulation') + garment.generated(temporary, 'anchor'))
+            garment.remove_objects(garment.generated(temporary, 'panel') + garment.generated(temporary, 'simulation') + garment.generated(temporary, 'anchor') + garment.generated(temporary, 'collider'))
         bpy.data.scenes.remove(temporary)
         if owned_collection is not None and owned_collection.users == 0:
             bpy.data.collections.remove(owned_collection)
-
-
-def configure_collisions(context, document, simulation):
-    import bpy
-    from . import garment
-    inactive = {pattern.id for pattern in document.patterns if pattern.deactivated}
-    target = bpy.data.collections.new('DD State Colliders')
-    target['dd_layering_owner'] = garment.OWNER
-    target.use_fake_user = True
-    for obj in context.scene.objects:
-        if obj.get('dd_pattern_id') in inactive or obj.get('dd_kind') == 'final' and not obj.get('dd_wear_over', True):
-            continue
-        if obj == context.scene.dd_avatar or any(modifier.type == 'COLLISION' for modifier in obj.modifiers):
-            target.objects.link(obj)
-    cloth = next(modifier for modifier in simulation.modifiers if modifier.type == 'CLOTH')
-    cloth.collision_settings.collection = target
-    referenced = {modifier.collision_settings.collection for obj in bpy.data.objects for modifier in obj.modifiers if modifier.type == 'CLOTH'}
-    for collection in list(bpy.data.collections):
-        if collection != target and collection.get('dd_layering_owner') == garment.OWNER and collection not in referenced and collection.users == int(collection.use_fake_user):
-            bpy.data.collections.remove(collection)
-
-
-def exact_hold(simulation, held):
-    import bpy
-    positions = simulation.data.attributes.get('dd_frozen_position') or simulation.data.attributes.new(name='dd_frozen_position', type='FLOAT_VECTOR', domain='POINT')
-    selection = simulation.data.attributes.get('dd_frozen_held') or simulation.data.attributes.new(name='dd_frozen_held', type='BOOLEAN', domain='POINT')
-    for vertex, position, selected in zip(simulation.data.vertices, positions.data, selection.data):
-        position.vector = vertex.co
-        selected.value = vertex.index in held
-    group = next((group for group in bpy.data.node_groups if group.get('dd_state_freeze')), None)
-    if group is None:
-        group = bpy.data.node_groups.new('DD Exact Frozen Hold', 'GeometryNodeTree')
-        group['dd_state_freeze'] = True
-        group.interface.new_socket(name='Geometry', in_out='INPUT', socket_type='NodeSocketGeometry')
-        group.interface.new_socket(name='Geometry', in_out='OUTPUT', socket_type='NodeSocketGeometry')
-        source = group.nodes.new('NodeGroupInput')
-        output = group.nodes.new('NodeGroupOutput')
-        position = group.nodes.new('GeometryNodeInputNamedAttribute')
-        position.data_type = 'FLOAT_VECTOR'
-        position.inputs['Name'].default_value = 'dd_frozen_position'
-        mask = group.nodes.new('GeometryNodeInputNamedAttribute')
-        mask.data_type = 'BOOLEAN'
-        mask.inputs['Name'].default_value = 'dd_frozen_held'
-        fixed = group.nodes.new('GeometryNodeSetPosition')
-        group.links.new(source.outputs['Geometry'], fixed.inputs['Geometry'])
-        group.links.new(position.outputs['Attribute'], fixed.inputs['Position'])
-        group.links.new(mask.outputs['Attribute'], fixed.inputs['Selection'])
-        previous = fixed
-        for name in ('dd_frozen_position', 'dd_frozen_held'):
-            remove = group.nodes.new('GeometryNodeRemoveAttribute')
-            remove.inputs['Name'].default_value = name
-            group.links.new(previous.outputs['Geometry'], remove.inputs['Geometry'])
-            previous = remove
-        group.links.new(previous.outputs['Geometry'], output.inputs['Geometry'])
-    modifier = simulation.modifiers.get('DD Exact Frozen Hold') or simulation.modifiers.new('DD Exact Frozen Hold', 'NODES')
-    modifier.node_group = group
 
 
 def update_display(context, document):

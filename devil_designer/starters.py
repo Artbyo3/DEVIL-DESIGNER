@@ -1,6 +1,9 @@
 from .core import Session, EdgeRef,arrangement_record
 
 
+ADULT_HEIGHT = 150.0
+
+
 def make_edge(doc, pattern_id, index, rev=False):
     e = doc.edge(pattern_id, index)
     if rev:
@@ -21,9 +24,11 @@ def create_tee_starter(measurements, fabric='COTTON'):
     half_waist = (m['waist'] / 2 + 6.0) / 200
     torso_h = max(0.40, (m['torso_length'] + 15.0) / 100)
     half_sh = max(half_chest * 0.95, (m['shoulder_width'] + 6.0) / 400)
-    neck_w = 0.09
-    armhole_drop = 0.22
-    sleeve_ext = 0.14
+    size = min(1.0, m.get('height', ADULT_HEIGHT) / ADULT_HEIGHT)
+    neck_w = 0.09 * size
+    armhole_drop = 0.22 * size
+    sleeve_ext = 0.14 * size
+    sleeve_opening = 0.10 * size
     waist_y = m.get('waist_y', 0.62 * (m['height'] / 100 if 'height' in m else 1.70))
     base_y = max(0.0, waist_y - 0.15)
 
@@ -31,7 +36,7 @@ def create_tee_starter(measurements, fabric='COTTON'):
         (-half_waist, base_y),
         (half_waist, base_y),
         (half_chest, base_y + torso_h - armhole_drop),
-        (half_sh + sleeve_ext, base_y + torso_h - armhole_drop * 0.4),
+        (half_sh + sleeve_ext, base_y + torso_h - 0.04 - sleeve_opening),
         (half_sh + sleeve_ext, base_y + torso_h - 0.04),
         (half_sh, base_y + torso_h - 0.02),
         (neck_w, base_y + torso_h),
@@ -39,7 +44,7 @@ def create_tee_starter(measurements, fabric='COTTON'):
         (-neck_w, base_y + torso_h),
         (-half_sh, base_y + torso_h - 0.02),
         (-(half_sh + sleeve_ext), base_y + torso_h - 0.04),
-        (-(half_sh + sleeve_ext), base_y + torso_h - armhole_drop * 0.4),
+        (-(half_sh + sleeve_ext), base_y + torso_h - 0.04 - sleeve_opening),
         (-half_chest, base_y + torso_h - armhole_drop),
     ]
 
@@ -69,7 +74,7 @@ def create_tee_starter(measurements, fabric='COTTON'):
     s.sew_chains([make_edge(s.document, f_id, 8, rev=True)], [make_edge(s.document, b_id, 5)], reverse=False)
 
     for pattern,point in zip(s.document.patterns,('front','back')):
-        pattern.arrangement=arrangement_record('chest',point,version=2)
+        pattern.arrangement=arrangement_record('chest',point,version=3)
     return s.document
 
 
@@ -85,7 +90,7 @@ def create_tank_starter(measurements, fabric='COTTON'):
     half_waist = (m['waist'] / 2 + 4.0) / 200
     torso_h = max(0.40, (m['torso_length'] + 12.0) / 100)
     half_sh = max(half_chest * 0.80, (m['shoulder_width'] + 2.0) / 400)
-    neck_w = 0.10
+    neck_edge = min(0.13, half_sh * 0.75 * 0.9)
     armhole_drop = 0.24
     waist_y = m.get('waist_y', 0.62 * (m['height'] / 100 if 'height' in m else 1.70))
     base_y = max(0.0, waist_y - 0.15)
@@ -95,9 +100,9 @@ def create_tank_starter(measurements, fabric='COTTON'):
         (half_waist, base_y),
         (half_chest, base_y + torso_h - armhole_drop),
         (half_sh * 0.75, base_y + torso_h - 0.02),
-        (neck_w + 0.03, base_y + torso_h),
+        (neck_edge, base_y + torso_h),
         (0.0, base_y + torso_h - 0.12),
-        (-(neck_w + 0.03), base_y + torso_h),
+        (-neck_edge, base_y + torso_h),
         (-half_sh * 0.75, base_y + torso_h - 0.02),
         (-half_chest, base_y + torso_h - armhole_drop),
     ]
@@ -124,7 +129,7 @@ def create_tank_starter(measurements, fabric='COTTON'):
     s.sew_chains([make_edge(s.document, f_id, 6, rev=True)], [make_edge(s.document, b_id, 3)], reverse=False)
 
     for pattern,point in zip(s.document.patterns,('front','back')):
-        pattern.arrangement=arrangement_record('chest',point,version=2)
+        pattern.arrangement=arrangement_record('chest',point,version=3)
     return s.document
 
 
@@ -165,7 +170,7 @@ def create_skirt_starter(measurements, fabric='COTTON'):
     s.sew_chains([make_edge(s.document, f_id, 3, rev=True)], [make_edge(s.document, b_id, 1)], reverse=False)
 
     for pattern,point in zip(s.document.patterns,('front','back')):
-        pattern.arrangement=arrangement_record('waist',point,version=2)
+        pattern.arrangement=arrangement_record('waist',point,version=3)
     return s.document
 
 

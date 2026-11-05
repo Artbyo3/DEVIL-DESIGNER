@@ -403,7 +403,7 @@ def _volume_avatar(context):
     avatar = context.scene.dd_avatar
     if avatar is None or avatar.type != 'MESH' or avatar not in list(context.scene.objects):
         raise ValueError('Choose an avatar body mesh in the current scene.')
-    if avatar.get('dd_kind') in {'panel', 'simulation', 'final', 'anchor'}:
+    if avatar.get('dd_kind') in {'panel', 'simulation', 'final', 'anchor', 'collider'}:
         raise ValueError('Arrangement volumes belong to an avatar, not a garment.')
     return avatar
 
@@ -935,7 +935,7 @@ def arrange(context, mode):
     if avatar is None:
         raise ValueError('Choose your avatar body mesh first.')
     if (avatar.type != 'MESH' or avatar not in list(scene.objects)
-            or avatar.get('dd_kind') in {'panel', 'simulation', 'final', 'anchor'}
+            or avatar.get('dd_kind') in {'panel', 'simulation', 'final', 'anchor', 'collider'}
             or not avatar.data.vertices):
         raise ValueError('Choose an avatar body mesh in the current scene.')
     document = garment.document(scene)

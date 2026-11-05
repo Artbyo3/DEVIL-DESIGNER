@@ -108,6 +108,12 @@ def relax_strain(final,edges,rest,tree,target,iterations=800):
     return final
 
 
+def has_opposite_piece(context,pattern,record):
+    from . import garment
+    return any(other.id!=pattern.id and other.arrangement and other.arrangement['volume']==record['volume']
+               and other.arrangement['point']!=record['point'] for other in garment.document(context.scene).patterns)
+
+
 def checked_positions(context,pattern,vertices,triangles,edges,record,frame,resolved,unit):
     import numpy
     from .ellipse_volumes import surface_positions
@@ -120,8 +126,9 @@ def checked_positions(context,pattern,vertices,triangles,edges,record,frame,reso
     rest=numpy.maximum(numpy.linalg.norm(flat[edges[:,1]]-flat[edges[:,0]],axis=1),1e-12)
     inverse=numpy.linalg.inv(motion)
     extra=0.0;report=None
+    half_wrap=has_opposite_piece(context,pattern,record)
     for _ in range(5):
-        positions=surface_positions(vertices,resolved,.003/unit,.001/unit,record['overwrap'],record['direction'],extra)
+        positions=surface_positions(vertices,resolved,.003/unit,.001/unit,record['overwrap'],record['direction'],extra,half_wrap)
         final=positions@motion[:3,:3].T+motion[:3,3]
         if len(edges):
             final=relax_strain(final,edges,rest,tree,resolved['clearance'])

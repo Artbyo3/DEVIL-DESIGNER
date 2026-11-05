@@ -1,0 +1,36 @@
+## sleeved 1765v about-90k run 1
+"arm_after": 527 "arm_settled": 530 "kept": [["DD Garment", 1639] "grab_frames": 238 "grab_fps": 29.912639568487315 "median": 33.26389996800572 "p99": 43.229900016449385 "max": 62.800200073979795 "over50": 1
+open 0
+tracebacks 0
+## sleeved 1765v about-90k run 2
+"arm_after": 530 "arm_settled": 530 "kept": [["DD Garment", 1639] "grab_frames": 237 "grab_fps": 29.828716557671523 "median": 32.99284999957308 "p99": 44.859285023994744 "max": 60.97079999744892 "over50": 1
+open 0
+tracebacks 0
+## sleeved 1765v about-90k run 3
+"arm_after": 533 "arm_settled": 530 "kept": [["DD Garment", 1639] "grab_frames": 239 "grab_fps": 30.05015939764698 "median": 32.89365000091493 "p99": 44.67579999589361 "max": 65.97689993213862 "over50": 1
+open 0
+tracebacks 0
+## tee 1149v about-90k run 1
+"arm_after": 0 "arm_settled": 0 "kept": [["DD Garment", 1083] "grab_frames": 240 "grab_fps": 30.044167062305675 "median": 34.57220003474504 "p99": 41.488893982023 "max": 57.90199991315603 "over50": 1
+open 0
+tracebacks 0
+## tee 1149v about-90k run 2
+"arm_after": 0 "arm_settled": 0 "kept": [["DD Garment", 1083] "grab_frames": 239 "grab_fps": 30.003769255346764 "median": 34.79840001091361 "p99": 41.750694044167176 "max": 55.62100000679493 "over50": 1
+open 0
+tracebacks 0
+## tee 1149v about-90k run 3
+"arm_after": 0 "arm_settled": 0 "kept": [["DD Garment", 1083] "grab_frames": 239 "grab_fps": 29.981564865057145 "median": 34.345049993135035 "p99": 40.93737000017427 "max": 52.431700052693486 "over50": 1
+open 0
+tracebacks 0
+## skirt 1156v about-90k
+"arm_after": 0 "arm_settled": 0 "kept": [["DD Garment", 1104] "grab_frames": 239 "grab_fps": 29.97732555358621 "median": 34.31150002870709 "p99": 40.64109304570593 "max": 55.99780008196831 "over50": 1
+open 0
+tracebacks 0
+## sleeved denim about-90k
+"arm_after": 547 "arm_settled": 550 "kept": [["DD Garment", 1639] "grab_frames": 224 "grab_fps": 28.136492116810004 "median": 35.23819998372346 "p99": 41.84871601872146 "max": 65.11709990445524 "over50": 1
+open 0
+tracebacks 0
+## sleeved from 24 fps scene
+"arm_after": 526 "arm_settled": 530 "kept": [["DD Garment", 1639] "grab_frames": 237 "grab_fps": 29.833898380347797 "median": 33.15259999362752 "p99": 44.08383503323421 "max": 60.63630001153797 "over50": 1
+open 0
+tracebacks 0

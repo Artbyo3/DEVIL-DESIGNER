@@ -9,6 +9,13 @@ from devil_designer.starters import (
 
 
 class StarterTests(unittest.TestCase):
+    def test_tee_sleeves_and_neck_scale_down_for_small_avatars(self):
+        measurements = dict(chest=60.0, waist=48.0, hip=70.0, torso_length=25.0, shoulder_width=28.0, arm_length=40.0)
+        adult = create_tee_starter(dict(measurements, height=150.0)).patterns[0].outline()
+        small = create_tee_starter(dict(measurements, height=100.0, waist_y=.93)).patterns[0].outline()
+        width = lambda points: max(x for x, _ in points) - min(x for x, _ in points)
+        self.assertLess(width(small), width(adult))
+
     def test_starter_registry_completeness(self):
         self.assertIn('STARTER_TEE', STARTER_GENERATORS)
         self.assertIn('STARTER_TANK', STARTER_GENERATORS)

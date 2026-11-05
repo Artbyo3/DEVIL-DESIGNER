@@ -50,13 +50,13 @@ def do_tests():
 
     print("\n=== RUNNING REAL-BLENDER BACKGROUND & LOAD SMOKE SUITES ===")
     for t in ["blender_smoke.py", "blender_garment.py", "blender_advanced.py", "blender_silhouette.py",
-              "blender_density.py", "blender_arrangement.py", "blender_tack_binding.py", "blender_tracing.py", "blender_layering.py", "blender_piece_states.py", "blender_sewing_preview.py", "blender_cloth_shaping.py"]:
+              "blender_density.py", "blender_arrangement.py", "blender_tack_binding.py", "blender_tracing.py", "blender_layering.py", "blender_piece_states.py", "blender_sewing_preview.py", "blender_xpbd.py"]:
         if not run_cmd([BLENDER_PATH, "--background", "--factory-startup", "--python-exit-code", "1", "--python", f"tests/{t}"],
                        desc=f"Blender Background: {t}"):
             return False
 
     print("\n=== RUNNING REAL-BLENDER IN-ENGINE GUI SUITES ===")
-    for t in ["gui_preview", "gui_silhouette", "gui_design", "gui_fast_flow", "gui_library", "gui_arrangement", "gui_arrangement_display", "gui_fit_map", "gui_avatar_field", "gui_viewport_sewing", "gui_core_workflow", "gui_editor_release", "gui_cloth_shaping"]:
+    for t in ["gui_preview", "gui_silhouette", "gui_design", "gui_fast_flow", "gui_library", "gui_arrangement", "gui_arrangement_display", "gui_fit_map", "gui_avatar_field", "gui_viewport_sewing", "gui_core_workflow", "gui_editor_release", "gui_live_grab"]:
         if not run_cmd([BLENDER_PATH, "--enable-event-simulate", "--factory-startup", "--python", "tools/run_blender_gui.py", "--", t],
                        desc=f"In-Engine GUI: {t}"):
             return False
@@ -130,7 +130,7 @@ def do_screenshots():
         ('empty', {'empty': True, 'tool': 'RECTANGLE'}),
         ('sew', {'demo': True, 'tool': 'SEW'}),
         ('arrange', {'demo': True, 'section': 'AVATAR'}),
-        ('simulate', {'demo': True, 'section': 'CLOTH'}),
+        ('simulate', {'demo': True, 'section': 'SIMULATE'}),
         ('library', {'demo': True, 'section': 'LIBRARY'}),
         ('fabric', {'demo': True, 'tool': 'SELECT', 'card_kind': 'FABRIC'}),
         ('compact', {'empty': True, 'panel_size': (620, 440), 'tool': 'RECTANGLE'}),

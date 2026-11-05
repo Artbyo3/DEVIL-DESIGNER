@@ -6,7 +6,7 @@ all features below are complete or production-ready. Author identity: Artbyo3.
 ## Product direction
 
 Create clothing for VRChat and other game characters through a dedicated flat
-pattern editor, avatar placement, sewing, Blender-native cloth, and editable mesh
+pattern editor, avatar placement, sewing, live XPBD simulation, and editable mesh
 output. Every garment control belongs in the custom UI. Keep the floating editor
 movable/resizable, retain its body silhouette reference, and do not add an N-panel.
 
@@ -148,13 +148,23 @@ preserve valid pair membership. Designs without pair records remain unchanged.
 - Keep the UV correspondence intact through simulation, seam welding, and finalize.
   Changing density changes sampling, not the source UV mapping.
 - Face sets/piece face identifiers and vertex groups for every pattern piece.
-- Per-pattern cloth presets. Determine which settings can be represented using
-  native cloth groups/attributes and clearly handle settings that remain global
-  on one sewn cloth object; do not silently claim full per-piece material control.
+- Per-pattern fabric presets. Stretch, bending and mass density are per-vertex and
+  per-edge attributes on the one sewn simulation mesh, so each piece keeps its own.
 
 ### Simulation, finalize, and garment library
 
-- Prepare and simulate with Blender's native cloth.
+- Simulate with the Geometry Nodes XPBD system in `xpbd.py` and `xpbd_nodes.py`.
+  It is the only simulation engine. The zone runs in realtime mode at a fixed
+  30 fps clock, so playback runs until stopped and accepts live input. The
+  artist's frame rate and timeline are restored on Keep and Reset.
+- Fabrics differ through bending stiffness. Linen, Denim and Leather add links across
+  two cloth edges, because the solver's own bending saturates.
+- A piece with a partner on the opposite side of the same volume stops wrapping at
+  the body side, and extra width stands out as a flap so the panels cannot cross.
+- Grab cloth while it simulates. Pull follows the hand in the view plane, Push
+  presses along the surface normal, and radius is set by Ctrl+wheel or the strip. The wheel alone zooms the view.
+- Keep runs a short high-substep refine, then checks the result against every
+  collision body. Contacts within 12 mm are nudged clear and deeper ones refuse.
 - Reset/rebuild without losing valid source relationships or arranged placements.
 - Finalize to editable garment meshes with the pattern UVs and piece identifiers.
 - Kept garments are collision layers for later simulations. A five-row scrollable
@@ -181,15 +191,13 @@ State controls live in the piece right-click Simulation submenu; existing piece
 labels name active states in 2D and revealed 3D, without additional panels.
 
 Freeze holds the exact current evaluated pose inside the shared sewn cloth mesh.
-Both endpoints of incident sewing springs are pinned; live neighboring interiors
-remain simulated. Frozen anchors do not animate held vertices, and same-mesh
-self-collision is enabled for frozen runs. No separate frozen collider is created.
-An in-mesh post-cloth position clamp removes native pin roundoff on held vertices;
-its private attributes are removed before evaluated output reaches Keep.
+Both endpoints of incident sewing pairs are pinned; live neighboring interiors
+remain simulated. Frozen anchors do not animate held vertices. No separate frozen
+collider is created. Pins are enforced exactly after each solver pass.
 Deactivate filters patterns, incident seams, and anchors out of a run-only design
 before invoking existing meshing functions; active sampling equals physical absence.
-Strengthen multiplies only selected pieces' tension, compression, shear and bending
-by four through native groups, without changing shared presets or mass density.
+Strengthen divides only selected pieces' stretch and bending compliance by four,
+without changing shared presets or mass density.
 
 The normal compiler, protected mesh/placement functions, sewing formulas and Keep
 mesh processing remain unchanged behind a scoped state-run dispatch. All-normal
@@ -234,7 +242,7 @@ off or closing the editor removes the display handler. It is an approximate
 deformation guide, not pressure or stress, and folded loose cloth may remain
 neutral. Mismatched source topology or changed patterns must not display stale data.
 
-No seam rest lengths, spring forces, cloth settings or design fields are changed
+No seam rest lengths, solver settings or design fields are changed
 by the fit-map feature.
 
 ### Opt-in seam Shrink contract
@@ -242,21 +250,11 @@ by the fit-map feature.
 A seam right-click menu offers 0, 10, 20 and 30 percent Shrink. Zero is omitted
 from serialized seams for legacy document and cache-signature equivalence.
 Nonzero choices persist with the seam and participate in transactional undo/redo.
-Both sampled sewn boundaries receive calibrated native shrink weights; at shared
-vertices maximum Shrink wins. Sampling, flat mesh output, UVs, sewing connections
-and sewing forces remain unchanged.
-
-The approved hook immediately follows apply_presets in compile_garment and is
-bypassed when every seam is zero. Only garments opting into nonzero Shrink use
-1 mm self-collision distance; all-zero garments retain the prior 3 mm settings.
-Calibration uses shrink_min 0, shrink_max 0.60, and weights 0.1844,
-0.3587166666666667, 0.5313 for the three nonzero choices. These shared weights
-passed two Cotton rigid-cylinder fixtures within +/-1 pp on both sewn sides,
-including held-out frames. The ruler is paired against a same-frame diagnostic
-1 mm zero reference, not the actual 3 mm default garment. Total opt-in changes
-may differ more, and folds outside the seam can change visibly. README records
-the measured calibration table and opt-in cost. Accuracy is not established for
-arbitrary fabrics, geometries or body-limited contraction.
+Both sampled sewn boundaries receive shortened rest lengths that fade over eight
+rings of cloth; at shared vertices maximum Shrink wins. Sampling, flat mesh output,
+UVs and sewing connections remain unchanged. One gain is calibrated so a free seam
+shortens by the chosen percentage to within 3 points. A seam around a body can
+shorten less, because the body limits it.
 
 The requested feature families now have initial working implementations.
 The README documents the UI and practical limits.
@@ -270,14 +268,14 @@ The README documents the UI and practical limits.
 | Segment/free/partial/M:N sewing | Arc-length ranges/chains, four-click free sewing, reverse/remove and nonblocking mismatch warnings |
 | Click placement, wrapping, pins/tacks | Mesh-fitted ellipse stacks and arrangement points, live layout panels, native constraints; legacy circle/ray/bend fallback |
 | Density, UV layout, face sets and groups | Constrained triangulation with shared persistent UV transform and piece metadata |
-| Per-pattern presets | Native stiffness groups; mass density remains an explicit shared weighted value |
-| Simulation/finalize | Native cloth, reset, evaluated output, matched seam welds, UV/group retention |
+| Per-pattern presets | Per-edge stretch and per-vertex bending and mass attributes |
+| Simulation/finalize | GN XPBD, live grab, refine on Keep, true-body check, matched seam welds, UV/group retention |
 | Garment library/refits | Portable editable designs, body-relative placement, optional height-based refit |
 | Per-piece mesh density | Named overrides, independent interiors, seam-compatible component boundaries |
 | Reference-image tracing | Persistent image placement/opacity and two-point measured scale calibration |
 | Multi-piece arrangement | Stable avatar-owned volumes/points, relative G/R deltas, optional arrangement, legacy named layouts |
 | Persistent undo | Validated document-matched undo/redo stacks saved with the blend file |
-| Pose-stable tacks | Triangle weights and native evaluated-vertex parenting, with topology checks |
+| Pose-stable tacks | Triangle weights on the body baked at Simulate, with topology checks |
 | Crossing-cut recovery | Transactional preview, split-and-retry, and actionable unsupported-case refusal |
 
 Offsets approximate Bezier offsets with sampled paths. Straight open crossing

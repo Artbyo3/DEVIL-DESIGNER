@@ -302,7 +302,7 @@ class LivePanelTests(unittest.TestCase):
         panel=self.panels()[0];expected=[tuple(panel.matrix_world @ vertex.co) for vertex in panel.data.vertices]
         simulation=garment.compile_garment(bpy.context)
         self.assertEqual([tuple(vertex.co) for vertex in simulation.data.vertices],expected)
-        self.assertTrue(next(modifier for modifier in simulation.modifiers if modifier.type=='CLOTH').settings.use_sewing_springs)
+        self.assertIn('DD XPBD',simulation.modifiers)
         garment.reset(bpy.context)
         live_panels.arrange_piece(bpy.context,self.session.selected,'chest','front')
         arranged=garment.document(self.scene).patterns[0].arrangement
@@ -349,10 +349,7 @@ class LivePanelTests(unittest.TestCase):
         self.assertAlmostEqual(panel.location.z,.85,places=5)
         self.assertAlmostEqual(panel.location.y,-.18,places=5)
         simulation=garment.compile_garment(bpy.context)
-        cloth=next(modifier for modifier in simulation.modifiers if modifier.type=='CLOTH')
-        self.assertEqual(cloth.settings.sewing_force_max,50)
-        self.assertAlmostEqual(cloth.collision_settings.distance_min,.003,places=6)
-        self.assertEqual(cloth.collision_settings.collision_quality,4)
+        self.assertIn('DD XPBD',simulation.modifiers)
 
     def test_spiral_wrap_is_finite_and_outside_volume(self):
         from devil_designer import garment,arrangement

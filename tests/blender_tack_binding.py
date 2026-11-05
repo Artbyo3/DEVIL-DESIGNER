@@ -12,7 +12,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 import devil_designer
 from devil_designer import garment,tack_binding
 from devil_designer.core import Session,Document
-from devil_designer.native_features import add_anchors
+from devil_designer.panel_features import add_anchors
 
 
 class TackDeformationTests(unittest.TestCase):
@@ -165,27 +165,24 @@ class TackDeformationTests(unittest.TestCase):
         self.assert_follows(binding,target)
         self.assertAlmostEqual(target.matrix_world.translation.z,0,places=5)
 
-    def test_native_hook_follows_target_and_cleanup_removes_helpers(self):
+    def test_tack_target_follows_body_and_cleanup_removes_helpers(self):
         binding=tack_binding.bind_target(bpy.context,self.body,(.6,1,0))
         mesh=bpy.data.meshes.new('Tacked fabric')
         mesh.from_pydata([(8,7,6)],[],[])
         fabric=bpy.data.objects.new('Tacked fabric',mesh)
         bpy.context.collection.objects.link(fabric)
         anchor=SimpleNamespace(id='tack',kind='TACK',target=None,binding=binding)
-        cloth=SimpleNamespace(settings=SimpleNamespace())
         before=bpy.context.scene.dd_document
-        add_anchors(bpy.context,fabric,cloth,SimpleNamespace(anchors=[anchor]),{'tack':0})
+        tacks=add_anchors(bpy.context,fabric,SimpleNamespace(anchors=[anchor]),{'tack':0})
         self.assertEqual(before,bpy.context.scene.dd_document)
-        hook=next(modifier for modifier in fabric.modifiers if modifier.type=='HOOK')
+        self.assertEqual(tacks,{0:binding})
+        target=next(obj for obj in garment.generated(bpy.context.scene,'anchor') if 'dd_tack_binding' in obj)
         self.body.shape_key_add(name='Basis')
         pose=self.body.shape_key_add(name='Pose')
         pose.data[1].co.z=4
         for value in (0,.5,1):
             pose.value=value
-            self.assert_follows(binding,hook.object)
-            evaluated=fabric.evaluated_get(bpy.context.evaluated_depsgraph_get())
-            self.assertLess((evaluated.matrix_world @ evaluated.data.vertices[0].co-self.expected(binding)).length,1e-5)
-        self.assertTrue(cloth.settings.vertex_group_mass)
+            self.assert_follows(binding,target)
         generated=garment.generated(bpy.context.scene,'anchor')
         self.assertGreater(len(generated),1)
         self.assertEqual(sum('dd_tack_binding' in obj for obj in generated),1)

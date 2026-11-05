@@ -99,7 +99,7 @@ def save(context,name,tags=()):
             point=panel.matrix_world.translation
             data['panels'].append(dict(pattern=panel['dd_pattern_id'],position=[(point[i]-low[i])/max(1e-6,high[i]-low[i]) for i in range(3)],
                 orientation=[list(row) for row in panel.matrix_world.to_3x3()]))
-    data['settings']={key:getattr(scene,key) for key in ('dd_spacing','dd_quality','dd_frames','dd_self_collision','dd_pin_top','dd_weld_distance','dd_thickness')}
+    data['settings']={key:getattr(scene,key) for key in ('dd_spacing','dd_quality','dd_self_collision','dd_pin_top','dd_weld_distance','dd_thickness')}
     output=directory(scene,True)/(safe+'.garment.json')
     temporary=output.with_suffix('.tmp')
     temporary.write_text(json.dumps(data,indent=2,allow_nan=False),encoding='utf-8')
@@ -126,18 +126,19 @@ def load(context,index):
         if type(height) not in (int,float) or not math.isfinite(height) or height<0:raise ValueError('Invalid stored body height.')
         settings=data.get('settings',{})
         if not isinstance(settings,dict):raise ValueError('Invalid stored garment settings.')
-        supported=('dd_spacing','dd_quality','dd_frames','dd_self_collision','dd_pin_top','dd_weld_distance','dd_thickness')
+        supported=('dd_spacing','dd_quality','dd_self_collision','dd_pin_top','dd_weld_distance','dd_thickness')
         float_bounds={'dd_spacing':(.003,.2),'dd_weld_distance':(.0001,.05),'dd_thickness':(0,.01)}
         settings={key:value for key,value in settings.items() if key in supported}
         for key,value in settings.items():
             prop=scene.bl_rna.properties[key]
             valid=type(value) is bool if prop.type=='BOOLEAN' else type(value) is int if prop.type=='INT' else type(value) in (int,float)
+            if not valid or prop.type!='BOOLEAN' and not math.isfinite(value):
+                raise ValueError('Invalid stored garment setting: '+key+'.')
             if prop.type!='BOOLEAN':
                 lower,upper=prop.hard_min,prop.hard_max
                 if key in float_bounds:
                     lower=min(lower,float_bounds[key][0]);upper=max(upper,float_bounds[key][1])
-            if not valid or prop.type!='BOOLEAN' and (not math.isfinite(value) or not lower<=value<=upper):
-                raise ValueError('Invalid stored garment setting: '+key+'.')
+                settings[key]=min(max(value,lower),upper)
         poses=data.get('panels',[])
         if not isinstance(poses,list):raise ValueError('Invalid stored garment placement.')
         identities={pattern.id for pattern in doc.patterns}

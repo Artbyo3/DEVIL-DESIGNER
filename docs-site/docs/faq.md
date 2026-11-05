@@ -28,7 +28,7 @@ Check that the avatar is selected and move the garment pieces so they begin outs
 
 ### Will my avatar work with armatures and shape keys?
 
-Yes. Devil Designer follows the visible avatar shape, including active poses and shape keys. A tack attached to the avatar follows its movement.
+Yes. Devil Designer drapes on the avatar's visible shape, including its pose and shape keys, at the moment you click **Simulate**. If you change the pose, click **Reset** and simulate again.
 
 ## Simulation & Drafting Questions
 

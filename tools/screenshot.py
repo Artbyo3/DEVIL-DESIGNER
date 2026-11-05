@@ -114,7 +114,7 @@ with bpy.context.temp_override(area=area, region=region):
         op.choose_tool({tool!r})
     if {section!r}:
         if op.minimal_ui:
-            op.show_card({{'AVATAR': 'GARMENT', 'SEW': 'SEWING', 'CLOTH': 'SIMULATE', 'LIBRARY': 'LIBRARY'}}[{section!r}])
+            op.show_card({{'AVATAR': 'GARMENT', 'SEW': 'SEWING', 'SIMULATE': 'SIMULATE', 'LIBRARY': 'LIBRARY'}}[{section!r}])
         else:
             op.open_section({section!r})
     if {query!r}:

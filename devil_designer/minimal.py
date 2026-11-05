@@ -27,7 +27,7 @@ def text_unscaled_width(text, size=11):
 
 
 DENSITY = {'Coarse': .04, 'Standard': .02, 'Fine': .01}
-QUALITY = {'Draft': 6, 'Standard': 12, 'High': 24}
+QUALITY = {'Draft': 12, 'Standard': 24, 'High': 36}
 THICKNESS = {'None': 0, 'Thin': .0005, 'Standard': .001}
 FABRICS = ('COTTON', 'LINEN', 'DENIM', 'SILK', 'LEATHER', 'KNIT')
 GUIDE_OPACITY = {'Light': .15, 'Medium': .30, 'Strong': .50}
@@ -49,7 +49,7 @@ def minimal_layout(layout, pending=False, confirmation=False, playing=False, kep
     layout.rail = Rect(dock_x, dock_y, dock_width, dock_height)
     layout.buttons = {}
     tools = [('SELECT', 'Select'), ('DRAW', 'Draw'), ('INTERNAL', 'Internal'), ('SEW', 'Sew'),
-             ('PIN', 'Pin'), ('SHAPE', 'Shape'), ('UNDO', 'Undo'), ('REDO', 'Redo'), ('LIBRARY', 'Library')]
+             ('PIN', 'Pin'), ('SHAPE', 'Grab'), ('UNDO', 'Undo'), ('REDO', 'Redo'), ('LIBRARY', 'Library')]
     col_w = round(40 * scale)
     col_pad = round(8 * scale)
     tool_x = round(layout.rail.x + col_pad)
@@ -375,7 +375,6 @@ class MinimalCards:
             active = pattern.preset if getattr(pattern, 'fabric_override', False) else getattr(doc, 'preset', 'COTTON')
             rows.append(('CHOICES_FABRIC', 'Fabric preset', ('SET_PIECE_FABRIC', all_presets, active)))
             rows.append(('SLIDER', 'dd_fabric_structural', 'Stretch stiffness'))
-            rows.append(('SLIDER', 'dd_fabric_shear', 'Shear stiffness'))
             rows.append(('SLIDER', 'dd_fabric_bending', 'Bending stiffness'))
             rows.append(('SLIDER', 'dd_fabric_density', 'Mass density'))
             rows.append(('SAVE_PIECE_CUSTOM_PRESET', 'Save as custom preset', ''))
@@ -386,7 +385,6 @@ class MinimalCards:
             active = getattr(doc, 'preset', 'COTTON')
             rows.append(('INFO', 'Preset', active.title()))
             rows.append(('SLIDER', 'dd_fabric_structural', 'Stretch stiffness'))
-            rows.append(('SLIDER', 'dd_fabric_shear', 'Shear stiffness'))
             rows.append(('SLIDER', 'dd_fabric_bending', 'Bending stiffness'))
             rows.append(('SLIDER', 'dd_fabric_density', 'Mass density'))
             rows.append(('SAVE_GARMENT_CUSTOM_PRESET', 'Save as custom preset', ''))
@@ -497,16 +495,14 @@ class MinimalCards:
                         ('FOLD_EDIT_REVERSE', 'Reverse direction', 'Entire pleat'),
                         ('PAIR_ACTIONS', 'FOLD_EDIT_60', 'FOLD_EDIT_120', '60 degrees', '120 degrees'),
                         ('FOLD_EDIT_150', 'Sharp fold', '150 degrees'),
-                        ('FOLD_EDIT_REMOVE', 'Remove fold or pleat', 'Keep internal paths'),
-                        ('INFO', '1 mm self-collision', 'Shared by every piece in this garment')]
+                        ('FOLD_EDIT_REMOVE', 'Remove fold or pleat', 'Keep internal paths')]
             else:
                 rows = [('PAIR_ACTIONS', 'FOLD_ADD_MOUNTAIN_2', 'FOLD_ADD_VALLEY_2', 'Mountain', 'Valley'),
                         ('INFO', 'Pleat depth', 'Distance between fold lines'),
                         ('PAIR_ACTIONS', 'FOLD_ADD_KNIFE_1', 'FOLD_ADD_BOX_1', 'Knife 1 cm', 'Box 1 cm'),
                         ('PAIR_ACTIONS', 'FOLD_ADD_KNIFE_2', 'FOLD_ADD_BOX_2', 'Knife 2 cm', 'Box 2 cm'),
                         ('PAIR_ACTIONS', 'FOLD_ADD_KNIFE_4', 'FOLD_ADD_BOX_4', 'Knife 4 cm', 'Box 4 cm'),
-                        ('INFO', 'Straight lines across fabric', 'Parallel folds per piece'),
-                        ('INFO', '1 mm self-collision', 'Shared by every piece in this garment')]
+                        ('INFO', 'Straight lines across fabric', 'Parallel folds per piece')]
         elif kind == 'ANCHOR':
             if anchor is None:
                 return None
@@ -520,8 +516,6 @@ class MinimalCards:
                 _, _, diff, pct = doc.seam_stats(seam)
                 rows.append(('INFO', 'Mismatch', f'{diff * 100:.1f} cm ({pct:.1f}%)'))
                 rows.append(('CHOICES', 'Shrink', ('SEAM_SHRINK', ('0%', '10%', '20%', '30%'), f'{seam.shrink}%')))
-                rows.append(('INFO', 'Nonzero: 1 mm self-collision', ''))
-                rows.append(('INFO', 'Other folds may change', ''))
             rows.append(('PAIR_ACTIONS', 'FLIP_SEAM', 'REMOVE_SEAM', 'Reverse', 'Remove'))
         elif kind == 'REFERENCE_IMAGE':
             title = 'Reference image'
@@ -873,15 +867,14 @@ class MinimalCards:
         from .presets import resolve_preset
         vals = resolve_preset(preset_name, getattr(self.session.document, 'custom_presets', None))
         self._scene.dd_fabric_structural = vals['structural']
-        self._scene.dd_fabric_shear = vals['shear']
         self._scene.dd_fabric_bending = vals['bending']
         self._scene.dd_fabric_density = vals['density']
 
     def apply_local_setting(self, key):
         if key == 'dd_weld_distance':
             self.weld_manual = True
-        if key in {'dd_fabric_structural', 'dd_fabric_shear', 'dd_fabric_bending', 'dd_fabric_density'}:
-            prop_map = {'dd_fabric_structural': 'structural', 'dd_fabric_shear': 'shear',
+        if key in {'dd_fabric_structural', 'dd_fabric_bending', 'dd_fabric_density'}:
+            prop_map = {'dd_fabric_structural': 'structural',
                         'dd_fabric_bending': 'bending', 'dd_fabric_density': 'density'}
             prop = prop_map[key]
             val = getattr(self._scene, key)
@@ -1042,7 +1035,7 @@ class MinimalCards:
             while cand in existing:
                 idx += 1
                 cand = f'{base} {idx}'
-            vals = dict(structural=scene.dd_fabric_structural, shear=scene.dd_fabric_shear,
+            vals = dict(structural=scene.dd_fabric_structural,
                         bending=scene.dd_fabric_bending, density=scene.dd_fabric_density)
             self.run_edit(lambda: (self.session.set_custom_preset(cand, vals), self.session.set_document_preset(cand)),
                           f'Custom preset "{cand}" saved with garment.')
@@ -1058,7 +1051,7 @@ class MinimalCards:
                 while cand in existing:
                     idx += 1
                     cand = f'{base} {idx}'
-                vals = dict(structural=scene.dd_fabric_structural, shear=scene.dd_fabric_shear,
+                vals = dict(structural=scene.dd_fabric_structural,
                             bending=scene.dd_fabric_bending, density=scene.dd_fabric_density)
                 self.run_edit(lambda: (self.session.set_custom_preset(cand, vals), self.session.set_fabric_override(cand)),
                               f'Custom preset "{cand}" saved for {pattern.name}.')

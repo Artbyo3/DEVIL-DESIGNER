@@ -12,7 +12,8 @@ ROOT = Path(__file__).resolve().parents[1]
 ALIAS = 'Artbyo3'
 EMAIL = '170281415+'+ALIAS+'@users.noreply.github.com'
 FORBIDDEN_SUFFIXES = {'.blend','.blend1','.zip','.pyc','.pyo','.pem','.key'}
-PUBLIC_IDENTITIES = {(ALIAS, EMAIL), ('T3 Code', 't3code@users.noreply.github.com')}
+PUBLIC_IDENTITIES = {(ALIAS, EMAIL), ('T3 Code', 't3code@users.noreply.github.com'),
+                     ('github-actions[bot]', 'github-actions[bot]@users.noreply.github.com')}
 PUBLIC_COMMITTERS = PUBLIC_IDENTITIES | {('GitHub', 'noreply' + '@github.com')}
 APPROVED_AUTHOR_FINGERPRINTS = {'b18b665c5f6c803b9215ddde43d51f1d8c60927f051acaf08c2989da82883697'}
 

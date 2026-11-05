@@ -5,6 +5,11 @@ except ImportError:
     bpy = None
 
 
+ARMS_OUT_RATIO = 1.6
+SHOULDER_TO_CHEST = 1.45
+ARMPIT_JUMP = 1.15
+
+
 def slice_mesh_z(mesh, matrix, z, world_verts=None):
     if world_verts is None:
         world_verts = [(matrix @ v.co) for v in mesh.vertices]
@@ -81,12 +86,37 @@ def torso_loop_circumference(segments, center_x=0.0):
         return 0.0
 
     best_comp = min(components, key=lambda comp: abs((min(points[i][0] for i in comp) + max(points[i][0] for i in comp)) / 2 - center_x))
-    comp_set = set(best_comp)
-    total_len = 0.0
-    for i1, i2 in edges:
-        if i1 in comp_set and i2 in comp_set:
-            total_len += math.hypot(points[i1][0] - points[i2][0], points[i1][1] - points[i2][1])
-    return total_len
+    return tape_length([points[i] for i in best_comp])
+
+
+def tape_length(points):
+    ordered = sorted(set(points))
+    if len(ordered) < 3:
+        return 0.0
+    def turn(origin, first, second):
+        return (first[0] - origin[0]) * (second[1] - origin[1]) - (first[1] - origin[1]) * (second[0] - origin[0])
+    def half(sequence):
+        hull = []
+        for point in sequence:
+            while len(hull) >= 2 and turn(hull[-2], hull[-1], point) <= 0:
+                hull.pop()
+            hull.append(point)
+        return hull[:-1]
+    hull = half(ordered) + half(ordered[::-1])
+    return sum(math.dist(first, second) for first, second in zip(hull, hull[1:] + hull[:1]))
+
+
+def single_torso_loop(mesh, matrix, z, ceiling, world_verts, center_x):
+    step = max((ceiling - z) / 12, 1e-4)
+    level = z
+    while level < ceiling:
+        segments = slice_mesh_z(mesh, matrix, level, world_verts=world_verts)
+        components, points, _ = get_connected_loops(segments)
+        central = [comp for comp in components if min(points[i][0] for i in comp) < center_x < max(points[i][0] for i in comp)]
+        if central:
+            return level, torso_loop_circumference(segments, center_x)
+        level += step
+    return z, torso_loop_circumference(slice_mesh_z(mesh, matrix, z, world_verts=world_verts), center_x)
 
 
 def estimate_body_measurements(body, scene, reference=None):
@@ -126,16 +156,16 @@ def estimate_body_measurements(body, scene, reference=None):
         ref_h = (reference.bounds[1][1] - reference.bounds[0][1]) if (reference and getattr(reference, 'bounds', None)) else total_height
         pts_2d = ref_verts if ref_verts else [(v.x - center_x, v.z - low_z) for v in world_verts]
 
-        n_bins = 24
+        n_bins = 30
         bin_data = []
         for i in range(n_bins):
-            f = 0.46 + 0.32 * (i / (n_bins - 1))
+            f = 0.46 + 0.40 * (i / (n_bins - 1))
             y_level = f * ref_h
             bin_pts = [p[0] for p in pts_2d if abs(p[1] - y_level) < 0.02 * ref_h and abs(p[0]) < 0.28 * ref_h]
             w = (max(bin_pts) - min(bin_pts)) if bin_pts else 0.0
             bin_data.append((f, y_level, w))
 
-        waist_cands = [d for d in bin_data if 0.56 <= d[0] <= 0.68 and d[2] > 0]
+        waist_cands = [d for d in bin_data if 0.56 <= d[0] <= 0.74 and d[2] > 0]
         has_landmarks = True
         if waist_cands:
             waist_entry = min(waist_cands, key=lambda d: d[2])
@@ -156,7 +186,11 @@ def estimate_body_measurements(body, scene, reference=None):
             hip_y = hip_frac * ref_h
             hip_w = 0.0
 
-        chest_cands = [d for d in bin_data if waist_frac < d[0] <= 0.76 and d[2] > 0]
+        chest_cands = []
+        for entry in (d for d in bin_data if waist_frac < d[0] <= 0.84 and d[2] > 0):
+            if chest_cands and entry[2] > chest_cands[-1][2] * ARMPIT_JUMP:
+                break
+            chest_cands.append(entry)
         if chest_cands:
             chest_entry = max(chest_cands, key=lambda d: d[2])
             chest_frac, chest_y, chest_w = chest_entry
@@ -177,8 +211,10 @@ def estimate_body_measurements(body, scene, reference=None):
         chest_circ = torso_loop_circumference(c_segs, center_x)
         w_segs = slice_mesh_z(mesh, matrix, waist_z, world_verts=world_verts)
         waist_circ = torso_loop_circumference(w_segs, center_x)
-        h_segs = slice_mesh_z(mesh, matrix, hip_z, world_verts=world_verts)
-        hip_circ = torso_loop_circumference(h_segs, center_x)
+        hip_z, hip_circ = single_torso_loop(mesh, matrix, hip_z, waist_z, world_verts, center_x)
+
+        if chest_w > 0 and shoulder_width > chest_w * ARMS_OUT_RATIO:
+            shoulder_width = chest_w * SHOULDER_TO_CHEST
 
         if chest_circ <= 0.01 or not has_landmarks:
             chest_circ = 0.58 * total_height

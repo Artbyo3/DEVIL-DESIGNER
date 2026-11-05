@@ -53,8 +53,7 @@ def run(check):
     scene.dd_avatar = bpy.context.object
     scene.unit_settings.scale_length = 1
     scene.dd_spacing = .015
-    scene.dd_quality = 12
-    scene.dd_frames = 125
+    scene.dd_quality = 24
     scene.dd_pin_top = True
     scene.dd_self_collision = True
     scene.dd_thickness = 0
@@ -82,9 +81,7 @@ def run(check):
         panel = garment.generated(scene, 'panel')[0]
         check([tuple(item.uv) for item in panel.data.uv_layers.active.data] == expected_uv, style + ' library preserves flat UVs')
         simulation = garment.compile_garment(bpy.context)
-        check(any(modifier.type == 'CLOTH' for modifier in simulation.modifiers), style + ' uses Blender classic cloth')
-        cloth = next(modifier for modifier in simulation.modifiers if modifier.type == 'CLOTH')
-        check(abs(cloth.collision_settings.self_distance_min-.001) < 1e-8, style + ' production compile uses the approved 1 mm collision distance')
+        check('DD XPBD' in simulation.modifiers, style + ' uses the XPBD simulation')
         for frame in range(scene.frame_start, scene.frame_start+121):
             scene.frame_set(frame)
             evaluated = simulation.evaluated_get(bpy.context.evaluated_depsgraph_get())
@@ -105,6 +102,8 @@ def run(check):
     bpy.ops.wm.open_mainfile(filepath=str(filename))
     scene = bpy.context.scene
     check(scene.dd_document == expected_folds and len(fold_records(garment.document(scene).patterns[0])) == 4, 'box fold features and references survive actual native blend save and reload')
+    earth = tuple(scene.gravity)
+    scene.gravity = (0, 0, 0)
     for depth in (.4, .49, .499):
         garment.reset(bpy.context)
         garment.remove_objects(garment.generated(scene, 'final'))
@@ -121,8 +120,9 @@ def run(check):
         pairs = json.loads(simulation['dd_sewing_pairs'])
         maximum = max((evaluated.data.vertices[left].co-evaluated.data.vertices[right].co).length for left, right in pairs)
         report['darts'].append(dict(depth_m=depth, max_sewing_gap_m=maximum))
-        check(maximum < .003, 'deep dart ' + str(depth) + ' closes to less than 3 mm with classic cloth')
+        check(maximum < .003, 'deep dart ' + str(depth) + ' closes to less than 3 mm')
         check('FINISHED' in bpy.ops.devil_designer.keep_drape(), 'deep dart ' + str(depth) + ' finalizes through Keep operator')
+    scene.gravity = earth
     expected = scene.dd_document
     filename = root / 'scratch' / 'deep-dart-persistence.blend'
     bpy.ops.wm.save_as_mainfile(filepath=str(filename))

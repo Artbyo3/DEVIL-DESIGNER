@@ -19,16 +19,16 @@ except ModuleNotFoundError:
 BASELINE = {
     'tee': {
         'Tee front': {
-            'n_verts': 967,
-            'n_faces': 1801,
-            'n_uvs': 5403,
-            'sha256': '65b3ff0480a4f17308bfe5be8a2437cc5ffb7795ce642a32c38b30b94c353344',
+            'n_verts': 986,
+            'n_faces': 1837,
+            'n_uvs': 5511,
+            'sha256': '2e3b93a4503ba8a19d9568ddf06e6b28884f1d8dc100937b36dddc4e1a741bf7',
         },
         'Tee back': {
-            'n_verts': 980,
-            'n_faces': 1830,
-            'n_uvs': 5490,
-            'sha256': '4d00762b1d9a76e6acf00d622839c2c1edf3504f5d3cd6a3b4a6510892783369',
+            'n_verts': 999,
+            'n_faces': 1866,
+            'n_uvs': 5598,
+            'sha256': '1d390223c8004d0e1ae8143a69b974f1d22e4eac6edc6d61fabf8f52c515d060',
         },
     },
     'tank': {

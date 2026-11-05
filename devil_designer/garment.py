@@ -3,58 +3,41 @@ import json
 import math
 import bpy
 import bmesh
+import numpy as np
 from mathutils import Vector
 from .core import Document
 from .meshing import fabric_mesh
 from .density import boundary_plan,effective_spacing
 from .core import area
-from .native_features import decorate_mesh,apply_presets,add_anchors
+from .panel_features import decorate_mesh,add_anchors
 from .live_panels import build_guard
-from . import layering, seam_shrink
+from . import body_guard, layering, xpbd
 from .sewing_preview import resolve_sewing
 
 OWNER = "Artbyo3/DEVIL-DESIGNER"
-_playback_window = None
+LIVE_FRAMES = 1000000
 
 
-def stop_at_end():
-    global _playback_window
-    window = _playback_window
-    try:
-        if window is None or not window.screen.is_animation_playing:
-            _playback_window = None
-            return None
-        objects = generated(window.scene,'simulation')
-        if not objects:
-            _playback_window = None
-            return None
-        cloth = next(m for m in objects[0].modifiers if m.type=='CLOTH')
-        if window.scene.frame_current>=cloth.point_cache.frame_end:
-            with bpy.context.temp_override(window=window):
-                stop(bpy.context)
-            _playback_window = None
-            return None
-    except (ReferenceError,RuntimeError,StopIteration):
-        _playback_window = None
-        return None
-    return .15
+def lock_timeline(scene):
+    if 'dd_timeline' not in scene:
+        scene['dd_timeline'] = [scene.frame_end,scene.render.fps,scene.render.fps_base]
+    settings = ((scene,'frame_end',max(scene.frame_end,scene.frame_start+LIVE_FRAMES)),(scene.render,'fps',xpbd.SIM_FPS),
+                (scene.render,'fps_base',1),(scene,'sync_mode','NONE'))
+    for owner,name,value in settings:
+        if getattr(owner,name) != value:
+            setattr(owner,name,value)
+
+
+def restore_timeline(scene):
+    if 'dd_timeline' in scene:
+        end,fps,base = scene.pop('dd_timeline')
+        scene.frame_end,scene.render.fps,scene.render.fps_base = int(end),int(fps),base
 
 
 def start_playback(context):
-    global _playback_window
-    if not bpy.app.background and context.screen:
-        _playback_window = context.window
-        if not context.screen.is_animation_playing:
-            bpy.ops.screen.animation_play()
-        if not bpy.app.timers.is_registered(stop_at_end):
-            bpy.app.timers.register(stop_at_end,first_interval=.15)
-
-
-def cancel_playback():
-    global _playback_window
-    _playback_window = None
-    if bpy.app.timers.is_registered(stop_at_end):
-        bpy.app.timers.unregister(stop_at_end)
+    lock_timeline(context.scene)
+    if not bpy.app.background and context.screen and not context.screen.is_animation_playing:
+        bpy.ops.screen.animation_play()
 
 
 def document(scene):
@@ -80,9 +63,6 @@ def tag(obj,kind):
 
 def remove_objects(objects):
     for obj in objects:
-        if obj.get('dd_shape_topology'):
-            from .cloth_shaping import forget
-            forget(obj)
         mesh = obj.data if obj.type=='MESH' else None
         bpy.data.objects.remove(obj,do_unlink=True)
         if mesh and mesh.users==0:
@@ -98,39 +78,16 @@ def reset(context):
     stop(context)
     remove_objects(generated(context.scene,'simulation'))
     remove_objects(generated(context.scene,'anchor'))
+    remove_objects(generated(context.scene,'collider'))
     for obj in generated(context.scene,'panel'):
         obj.hide_set(False)
         obj.hide_render = False
     context.scene.frame_set(context.scene.frame_start)
+    restore_timeline(context.scene)
 
 
 def metres_per_unit(scene):
     return max(1e-6,scene.unit_settings.scale_length)
-
-
-def shaping_configuration(cloth):
-    result = {}
-    owners = {'settings': cloth.settings, 'collision_settings': cloth.collision_settings,
-              'effector_weights': cloth.settings.effector_weights}
-    for name, owner in owners.items():
-        result[name] = {prop.identifier: list(getattr(owner, prop.identifier)) if getattr(prop, 'is_array', False) else getattr(owner, prop.identifier)
-                        for prop in owner.bl_rna.properties
-                        if not prop.is_readonly and prop.identifier != 'rna_type'
-                        and prop.type in {'BOOLEAN', 'INT', 'FLOAT', 'ENUM', 'STRING', 'POINTER'}}
-    result['cache'] = (cloth.point_cache.frame_start, cloth.point_cache.frame_end)
-    return result
-
-
-def shaping_restore(context, source, configuration):
-    cloth = source.modifiers.new('DD Cloth', 'CLOTH')
-    owners = {'settings': cloth.settings, 'collision_settings': cloth.collision_settings,
-              'effector_weights': cloth.settings.effector_weights}
-    for name, owner in owners.items():
-        for key, value in configuration[name].items():
-            setattr(owner, key, value)
-    cloth.point_cache.frame_start, cloth.point_cache.frame_end = configuration['cache']
-    context.view_layer.update()
-    return cloth
 
 
 def material(index):
@@ -217,7 +174,7 @@ def build_panels(context, force_rebuild=False):
     old = {o.get('dd_pattern_id'):o for o in generated(scene,'panel')}
     avatar = scene.dd_avatar
     has_avatar = (avatar is not None and getattr(avatar, 'type', None) == 'MESH' and avatar in list(scene.objects)
-                  and avatar.get('dd_kind') not in {'panel', 'simulation', 'final', 'anchor'}
+                  and avatar.get('dd_kind') not in {'panel', 'simulation', 'final', 'anchor', 'collider'}
                   and bool(avatar.data.vertices))
     if has_avatar:
         low, high = bounds(avatar)
@@ -310,7 +267,7 @@ def arrange(context):
     avatar = scene.dd_avatar
     if avatar is None:
         raise ValueError("Choose your avatar body mesh first.")
-    if avatar.type!='MESH' or avatar not in list(scene.objects) or avatar.get('dd_kind') in {'panel','simulation','final'}:
+    if avatar.type!='MESH' or avatar not in list(scene.objects) or avatar.get('dd_kind') in {'panel','simulation','final','collider'}:
         raise ValueError("Choose an avatar mesh in the current scene.")
     if len(document(scene).patterns)!=2:
         raise ValueError("Front/back arrangement needs exactly two patterns. Other layouts can be positioned manually.")
@@ -336,7 +293,7 @@ def arrange(context):
 
 
 def signature(scene,panels):
-    data = [scene.dd_document,scene.dd_spacing,scene.dd_quality,scene.dd_frames,
+    data = [scene.dd_document,scene.dd_spacing,scene.dd_quality,
             scene.dd_self_collision,scene.dd_pin_top,metres_per_unit(scene),
             [[p.get('dd_pattern_id'),[v for row in p.matrix_world for v in row]] for p in panels]]
     avatar = scene.dd_avatar
@@ -348,29 +305,25 @@ def signature(scene,panels):
     return hashlib.sha256(json.dumps(data,sort_keys=True).encode()).hexdigest()
 
 
-def ensure_collision(scene):
+def require_body(scene):
     avatar = scene.dd_avatar
     if avatar is None or avatar.type!='MESH' or avatar not in list(scene.objects):
         raise ValueError("Choose an avatar body mesh in the current scene.")
     if avatar.library and not avatar.override_library:
-        raise ValueError("Make the avatar editable or create a library override before adding collision.")
-    if avatar.get('dd_kind') in {'panel','simulation','final'}:
-        raise ValueError("The collider must be your avatar body, not generated clothing.")
-    if not any(m.type=='COLLISION' for m in avatar.modifiers):
-        avatar.modifiers.new('DD Body Collision','COLLISION')
-        avatar.collision.thickness_outer = .003/metres_per_unit(scene)
-        avatar.collision.thickness_inner = .001/metres_per_unit(scene)
+        raise ValueError("Make the avatar editable or create a library override before simulating.")
+    if avatar.get('dd_kind') in {'panel','simulation','final','collider'}:
+        raise ValueError("The body must be your avatar, not generated clothing.")
 
 
 def compile_garment(context):
     scene = context.scene
     doc = document(scene)
+    lock_timeline(scene)
     from . import piece_states
     piece_states.update_display(context,doc)
     if piece_states.required(doc):
         return piece_states.compile_run(context,doc)
-    ensure_collision(scene)
-    layering.prepare_colliders(context)
+    require_body(scene)
     panels = generated(scene,'panel')
     if not panels or any(o.get('dd_document')!=doc.dumps() or o.get('dd_spacing')!=scene.dd_spacing
                          or o.get('dd_units')!=metres_per_unit(scene) for o in panels) or len(panels)!=len(doc.patterns):
@@ -379,7 +332,7 @@ def compile_garment(context):
     context.view_layer.update()
     marker = signature(scene,panels)
     old = generated(scene,'simulation')
-    old_anchors=generated(scene,'anchor')
+    old_anchors=generated(scene,'anchor')+generated(scene,'collider')
     if old and old[0].get('dd_signature')==marker:
         return old[0]
     stop(context)
@@ -431,37 +384,14 @@ def compile_garment(context):
     obj['dd_signature'] = marker
     obj['dd_sewing_pairs'] = json.dumps(sorted(springs),separators=(',',':'))
     obj['dd_sewing_inspection'] = json.dumps(inspection,separators=(',',':'))
-    cloth = obj.modifiers.new('DD Cloth','CLOTH')
-    settings = cloth.settings
-    settings.use_sewing_springs = True
-    settings.sewing_force_max = 50
-    settings.quality = scene.dd_quality
-    settings.mass = .3
-    settings.tension_stiffness = 25
-    settings.compression_stiffness = 25
-    settings.shear_stiffness = 15
-    settings.bending_stiffness = .5
-    for ids,_,preset in pieces:
+    for ids,_,_ in pieces:
         pattern=doc.patterns[len(obj.vertex_groups)]
         group=obj.vertex_groups.new(name='Piece '+pattern.name)
         group.add(ids,1,'REPLACE')
     obj['dd_piece_ids']=json.dumps([p.id for p in doc.patterns])
-    apply_presets(obj,cloth,pieces,getattr(doc,'custom_presets',None))
-    if any(seam.shrink for seam in doc.seams):
-        seam_shrink.apply(doc,obj,cloth,maps,plan)
-    cloth.collision_settings.use_collision = True
-    cloth.collision_settings.distance_min = .003/metres_per_unit(scene)
-    cloth.collision_settings.use_self_collision = scene.dd_self_collision
-    cloth.collision_settings.self_distance_min = (.001 if any(seam.shrink for seam in doc.seams) or any(feature.get('type') == 'FOLD' for pattern in doc.patterns for feature in pattern.features) else .003)/metres_per_unit(scene)
-    cloth.collision_settings.collision_quality = 4
-    cloth.point_cache.frame_start = scene.frame_start
-    cloth.point_cache.frame_end = scene.frame_start+scene.dd_frames
-    scene.frame_end = max(scene.frame_end,cloth.point_cache.frame_end)
-    if pin:
-        group = obj.vertex_groups.new(name='DD Pins')
-        group.add(pin,1,'REPLACE')
-        settings.vertex_group_mass = group.name
-    add_anchors(context,obj,cloth,doc,anchor_indices)
+    tacks=add_anchors(context,obj,doc,anchor_indices)
+    pin.extend(anchor_indices[anchor.id] for anchor in doc.anchors if anchor.id in anchor_indices and anchor.kind!='TACK')
+    xpbd.attach(context,obj,doc,panels,pieces,maps,plan,pin,tacks)
     remove_objects(old_anchors)
     remove_objects(old)
     for panel in panels:
@@ -482,12 +412,10 @@ def keep_drape(context):
     if not simulations:
         raise ValueError("Simulate a garment first, then stop on the frame you want to keep.")
     source = simulations[0]
-    if source.get('dd_shape_topology'):
-        from .cloth_shaping import keep_guard
-        keep_guard(context, source)
     panels = generated(scene,'panel')
     if source.get('dd_signature')!=signature(scene,panels):
         raise ValueError("The patterns or arrangement changed. Reset and simulate the current version first.")
+    xpbd.refine(context,source)
     depsgraph = context.evaluated_depsgraph_get()
     mesh = bpy.data.meshes.new_from_object(source.evaluated_get(depsgraph),preserve_all_data_layers=True,depsgraph=depsgraph)
     bm = bmesh.new()
@@ -518,9 +446,9 @@ def keep_drape(context):
                 target.co = sum((bm.verts[i].co for i in members),Vector())/len(members)
                 for i in members[1:]:
                     targets[bm.verts[i]] = target
-        bmesh.ops.delete(bm,geom=[e for e in bm.edges if not e.link_faces],context='EDGES')
         if targets:
             bmesh.ops.weld_verts(bm,targetmap=targets)
+        bmesh.ops.delete(bm,geom=[e for e in bm.edges if not e.link_faces],context='EDGES')
         bmesh.ops.recalc_face_normals(bm,faces=list(bm.faces))
         bm.verts.index_update()
         deform=bm.verts.layers.deform.active
@@ -533,6 +461,7 @@ def keep_drape(context):
         bm.free()
     for polygon in mesh.polygons:
         polygon.use_smooth = True
+    xpbd.strip_attributes(mesh)
     obj = bpy.data.objects.new('DD Garment',mesh)
     collection(scene).objects.link(obj)
     obj.matrix_world = source.matrix_world.copy()
@@ -542,22 +471,23 @@ def keep_drape(context):
     for i,values in enumerate(weights):
         for group,weight in values.items():
             if group<len(obj.vertex_groups):obj.vertex_groups[group].add([i],weight,'REPLACE')
+    try:
+        bodies=[item for item in layering.collision_bodies(scene) if item!=obj]
+        coordinates=np.empty(len(mesh.vertices)*3,dtype=np.float32)
+        mesh.vertices.foreach_get('co',coordinates)
+        cleared=body_guard.check(context,bodies,coordinates.reshape(-1,3),metres_per_unit(scene))
+        mesh.vertices.foreach_set('co',cleared.ravel())
+        mesh.update()
+    except ValueError:
+        remove_objects([obj])
+        raise
     if scene.dd_thickness>0:
         modifier = obj.modifiers.new('Fabric Thickness','SOLIDIFY')
         modifier.thickness = scene.dd_thickness/metres_per_unit(scene)
         modifier.offset = 0
-    if source.get('dd_shape_topology'):
-        try:
-            context.view_layer.update()
-            keep_guard(context, source, obj)
-        except Exception:
-            remove_objects([obj])
-            raise
     source.hide_set(True)
     source.hide_render = True
-    if source.get('dd_shape_topology'):
-        from .cloth_shaping import forget
-        forget(source)
+    restore_timeline(scene)
     for other in context.selected_objects:
         other.select_set(False)
     obj.select_set(True)

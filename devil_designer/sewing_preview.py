@@ -122,7 +122,7 @@ def snapshot(context, document):
                 setattr(temporary, key, getattr(context.scene, key))
         temporary.dd_document = active.dumps()
         for obj in context.scene.objects:
-            if obj.get('dd_kind') not in {'panel', 'simulation', 'anchor'} or obj.get('dd_owner') != garment.OWNER:
+            if obj.get('dd_kind') not in {'panel', 'simulation', 'anchor', 'collider'} or obj.get('dd_owner') != garment.OWNER:
                 temporary.collection.objects.link(obj)
         with context.temp_override(scene=temporary, view_layer=temporary.view_layers[0]):
             run_panels = garment.build_panels(context)

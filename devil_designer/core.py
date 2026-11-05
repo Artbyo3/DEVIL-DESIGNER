@@ -305,8 +305,9 @@ class Document:
             doc_preset=data.get('preset','COTTON')
             custom_presets=data.get('custom_presets',{})
             if not isinstance(custom_presets,dict):raise ValueError('Invalid custom presets.')
+            custom_presets={cp_name:{key:val for key,val in cp_vals.items() if key!='shear'} if isinstance(cp_vals,dict) else cp_vals for cp_name,cp_vals in custom_presets.items()}
             for cp_name,cp_vals in custom_presets.items():
-                if not isinstance(cp_name,str) or not cp_name.strip() or not isinstance(cp_vals,dict) or set(cp_vals)!={'structural','shear','bending','density'} or any(type(val) not in (int,float) or not math.isfinite(val) or val<=0 for val in cp_vals.values()):
+                if not isinstance(cp_name,str) or not cp_name.strip() or not isinstance(cp_vals,dict) or set(cp_vals)!={'structural','bending','density'} or any(type(val) not in (int,float) or not math.isfinite(val) or val<=0 for val in cp_vals.values()):
                     raise ValueError('Invalid custom fabric preset.')
             patterns=[]
             for item in data['patterns']:
@@ -1085,7 +1086,7 @@ class Session(ConstructionMixin):
         return self.commit(op)
 
     def set_custom_preset(self,name,values):
-        if not isinstance(name,str) or not name.strip() or not isinstance(values,dict) or set(values)!={'structural','shear','bending','density'} or any(type(val) not in (int,float) or not math.isfinite(val) or val<=0 for val in values.values()):
+        if not isinstance(name,str) or not name.strip() or not isinstance(values,dict) or set(values)!={'structural','bending','density'} or any(type(val) not in (int,float) or not math.isfinite(val) or val<=0 for val in values.values()):
             raise ValueError('Invalid custom fabric preset.')
         def op():
             if not hasattr(self.document,'custom_presets') or self.document.custom_presets is None:

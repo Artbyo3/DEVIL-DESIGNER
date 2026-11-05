@@ -1,6 +1,6 @@
 import traceback
 import bpy
-from . import garment,layering
+from . import garment
 from .core import Session
 
 
@@ -61,11 +61,10 @@ class DD_OT_arrange(bpy.types.Operator):
 class DD_OT_simulate(bpy.types.Operator):
     bl_idname = 'devil_designer.simulate'
     bl_label = 'Simulate'
-    bl_description = 'Assemble sewn panels and play Blender cloth simulation'
+    bl_description = 'Assemble sewn panels and run the live cloth simulation'
     def execute(self,context):
         def action():
             obj = garment.compile_garment(context)
-            layering.configure_collision_collection(context,obj)
             obj.hide_set(False)
             obj.hide_render = False
             garment.start_playback(context)
@@ -91,7 +90,7 @@ class DD_OT_stop(bpy.types.Operator):
 class DD_OT_reset(bpy.types.Operator):
     bl_idname = 'devil_designer.reset'
     bl_label = 'Reset to Arrangement'
-    bl_description = 'Discard the simulation cache and show the original positioned panels'
+    bl_description = 'Discard the simulation and show the original positioned panels'
     bl_options = {'REGISTER','UNDO'}
     def execute(self,context):
         def action():
@@ -103,7 +102,7 @@ class DD_OT_reset(bpy.types.Operator):
 class DD_OT_keep_drape(bpy.types.Operator):
     bl_idname = 'devil_designer.keep_drape'
     bl_label = 'Keep Draped Mesh'
-    bl_description = 'Copy the current cloth shape, remove sewing springs, and weld matched seam vertices within tolerance'
+    bl_description = 'Refine the current cloth, check it against the body, and weld matched seam vertices into the final mesh'
     bl_options = {'REGISTER','UNDO'}
     def execute(self,context):
         try:
@@ -183,49 +182,5 @@ class DD_OT_demo(bpy.types.Operator):
         return run(self,action)
 
 
-class DD_OT_shape_cloth(bpy.types.Operator):
-    bl_idname = 'devil_designer.shape_cloth'
-    bl_label = 'Shape cloth'
-    bl_description = 'Shape a settled drape along its normal; live retention is not supported'
-    finish: bpy.props.BoolProperty(default=False)
-
-    def execute(self, context):
-        def action():
-            from . import editor
-            workspace = editor._active
-            if workspace is None:
-                raise ValueError('Open the Devil Designer minimal workspace first.')
-            if self.finish:
-                workspace.choose_tool('SELECT')
-            else:
-                workspace.enable_shaping(context)
-            return {'FINISHED'}
-        return run(self, action)
-
-
-class DD_OT_reset_shaping(bpy.types.Operator):
-    bl_idname = 'devil_designer.reset_shaping'
-    bl_label = 'Reset shaping'
-    bl_description = 'Restore the captured plain drape; resets cloth velocity'
-
-    def execute(self, context):
-        def action():
-            from .cloth_shaping import ShapingSession
-            from . import editor
-            simulations = garment.generated(context.scene, 'simulation')
-            if not simulations:
-                raise ValueError('There is no drape to reset.')
-            garment.stop(context)
-            session = ShapingSession(simulations[0])
-            session.reset(context)
-            workspace = editor._active
-            if workspace is not None:
-                workspace.shaping = session
-                workspace.message = session.message
-                context.window.cursor_modal_set('HAND' if workspace.tool == 'SHAPE' else 'DEFAULT')
-            return {'FINISHED'}
-        return run(self, action)
-
-
 CLASSES = (DD_OT_build_panels,DD_OT_arrange,DD_OT_simulate,DD_OT_stop,DD_OT_reset,
-           DD_OT_keep_drape,DD_OT_seam,DD_OT_demo,DD_OT_shape_cloth,DD_OT_reset_shaping)
+           DD_OT_keep_drape,DD_OT_seam,DD_OT_demo)
