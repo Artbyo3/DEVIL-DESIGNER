@@ -35,9 +35,10 @@
 
 ## ARCHITECTURE & IMPLEMENTATION PRINCIPLES
 1. **Garment & Simulation Math Integrity**:
-   - Initial built-panel position and orientation in garment.build_panels and arrangement.arrange are editable, and arrangement.py may implement bounding volumes and arrangement points; placement.py, tack_binding.py, cloth setup/loop/modifiers, meshing output, and sewing springs remain locked.
-   - Strictly locked and protected: simulation algorithms and cloth loop/modifiers in `garment.py`, meshing output and Delaunay CDT math in `meshing.py`, sewing spring force formulations in `garment.py`, and 3D placement math in `placement.py` and `tack_binding.py`.
-   - Now editable: the pattern-editing code in `core.py` and `construction.py` (specifically pattern selection state, multi-piece and point selection, point and handle movement and editing, segment splitting, and internal/boundary path cutting). Downstream simulation, meshing output, sewing springs, and placement math must remain untouched and verified by automated meshing regression tests.
+   - Initial built-panel position and orientation in garment.build_panels and arrangement.arrange are editable, and arrangement.py may implement bounding volumes and arrangement points; placement.py, tack_binding.py and meshing output remain locked.
+   - The one simulation engine is the Geometry Nodes XPBD system in `xpbd.py`, `xpbd_nodes.py` and `xpbd_live.py`. Do not add a second solver or a fallback.
+   - Strictly locked and protected: meshing output and Delaunay CDT math in `meshing.py`, and 3D placement math in `placement.py` and `tack_binding.py`.
+   - Now editable: the pattern-editing code in `core.py` and `construction.py` (specifically pattern selection state, multi-piece and point selection, point and handle movement and editing, segment splitting, and internal/boundary path cutting). Downstream meshing output and placement math must remain untouched and verified by automated meshing regression tests.
 2. **UI & Rendering Architecture**:
    - Blender native GPU rendering (`gpu.shader.from_builtin('UNIFORM_COLOR')`, `POLYLINE_UNIFORM_COLOR`).
    - Shared computed bounds for rendering and hit detection.
@@ -63,8 +64,9 @@
   6. Pin/Tack right-click: attached pattern name, Remove tack / Remove pin.
   7. Empty canvas right-click: Body selector submenu, Garment default fabric chips, Garment mesh density chips, Simulation quality chips, Guide opacity chips, Fit design.
 - Quick auto-dismissal: executing any action in a contextual menu immediately completes the action and dismisses the menu back to pure canvas. Pressing Escape or clicking outside also instantly dismisses the menu.
-- Reduced left dock: 8 tools (Select, Draw, Internal, Sew, Pin, Undo, Redo, Library) with micro-toggles for Snapping [S], Body guide [H], and Lengths [L]. Shortcuts P, R, E, I, D, K, T, V, J, S, H, L remain fully functional.
+- Reduced left dock: 9 tools (Select, Draw, Internal, Sew, Pin, Grab, Undo, Redo, Library) with micro-toggles for Snapping [S], Body guide [H], and Lengths [L]. Shortcuts P, R, E, I, D, K, T, V, J, S, H, L remain fully functional.
 - Keep mesh retains its options menu (Auto weld and Thickness). Simulate directly starts drape.
+- Grab works on the draped cloth while it simulates, with a Pull/Push toggle and a radius control in its strip.
 
 ## REQUIRED ARTIST ACCEPTANCE AND SHIPPING WORKFLOW
 - The required sequence is: implement -> automated verification -> ready for artist testing -> artist approval -> PR and merge -> verified session closure. Do not replace artist acceptance with automated tests or agent reviews.

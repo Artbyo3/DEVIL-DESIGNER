@@ -59,18 +59,19 @@ for loop in new.data.loops:
         check(all(abs(a-b)<1e-5 for a,b in zip(original_uv[key],new.data.uv_layers.active.data[loop.index].uv)),
               'density rebuild preserves source UV mapping')
 obj=garment.compile_garment(bpy.context)
-cloth=next(m for m in obj.modifiers if m.type=='CLOTH')
 check(bool(json.loads(obj['dd_sewing_pairs'])),'M:N ranges compile to real sewing springs')
 check(sum(bool(anchor.get('dd_tack_binding')) for anchor in garment.generated(scene,'anchor'))==1,'tack creates an avatar-bound target')
-check(bool(cloth.settings.vertex_group_mass),'pins and tacks feed the cloth pin group')
-scene.frame_set(scene.frame_start)
+pinned=[item.value for item in obj.data.attributes['dd_pinned'].data]
+check(any(pinned),'pins and tacks feed the XPBD pin attribute')
+tacked=[index for index,item in enumerate(obj.data.attributes['dd_tacked'].data) if item.value]
+check(len(tacked)==1,'one fabric vertex is bound to the avatar tack')
+target=next(item for item in garment.generated(scene,'anchor') if item.get('dd_tack_binding')).matrix_world.translation
+for frame in range(scene.frame_start,scene.frame_start+40):
+    scene.frame_set(frame)
 deps=bpy.context.evaluated_depsgraph_get()
-for hook in [m for m in obj.modifiers if m.type=='HOOK']:
-    index=list(hook.vertex_indices)[0]
-    actual=obj.evaluated_get(deps).data.vertices[index].co
-    target=hook.object.evaluated_get(deps).matrix_world.translation
-    check((actual-target).length<.002,'tack moves the pinned fabric vertex to the actual avatar target')
-check(bool(cloth.settings.vertex_group_structural_stiffness) and bool(cloth.settings.vertex_group_bending),'per-pattern presets use native stiffness groups')
+check((obj.evaluated_get(deps).data.vertices[tacked[0]].co-target).length<.002,'tack moves the pinned fabric vertex to the actual avatar target')
+compliance=sorted({round(item.value,12) for item in obj.data.attributes['dd_edge_compliance'].data})
+check(len(compliance)>=2,'per-pattern presets produce per-edge stretch stiffness')
 check(obj.data.attributes.get('dd_piece') is not None,'combined garment preserves piece face sets')
 scene.frame_set(scene.frame_start)
 obj.evaluated_get(bpy.context.evaluated_depsgraph_get()).data.vertices[0].co
@@ -93,7 +94,7 @@ loaded=library.load(bpy.context,scene.dd_library_selected)
 check(len(loaded.patterns)==2 and len(loaded.seams)==1 and len(loaded.anchors)==2,'library restores patterns, sewing and anchors')
 check(abs(loaded.patterns[0].vertices[0].x-first.vertices[0].x*1.5)<1e-5,'refitting scales source design by new body height')
 check(loaded.uv_layout['scale']>0,'library preserves a reusable UV layout transform')
-state_keys=('dd_document','dd_spacing','dd_quality','dd_frames','dd_self_collision','dd_pin_top','dd_weld_distance','dd_thickness','dd_library_name','dd_library_selected','dd_avatar')
+state_keys=('dd_document','dd_spacing','dd_quality','dd_self_collision','dd_pin_top','dd_weld_distance','dd_thickness','dd_library_name','dd_library_selected','dd_avatar')
 def library_state():
     return (
         tuple(getattr(scene,key) for key in state_keys),
@@ -133,12 +134,12 @@ for value in (dict(valid_pose,pattern='stale',position=None),
     invalid_designs.append(('malformed stale pose '+repr(value),invalid))
 invalid=deepcopy(data);invalid['panels']=[valid_pose,valid_pose]
 invalid_designs.append(('duplicate placement',invalid))
-for key in state_keys[1:8]:
+for key in state_keys[1:7]:
     prop=scene.bl_rna.properties[key]
     values=(None,'bad',[],{})
     if prop.type=='BOOLEAN':values+=(0,1)
     else:
-        values+=(True,float('nan'),float('inf'),prop.hard_min-1,prop.hard_max+1,10**400)
+        values+=(True,float('nan'),float('inf'),10**400)
         if prop.type=='INT':values+=(10.5,10.0)
     for value in values:
         invalid=deepcopy(data);invalid['settings'][key]=value
@@ -169,7 +170,7 @@ try:
         check(not build_calls and library_state()==before,'invalid UTF-8 preserves the garment without building')
     scene.dd_avatar=new_body
     incoming=deepcopy(data)
-    incoming['settings'].update(dd_quality=15,dd_frames=150,dd_self_collision=False,dd_pin_top=True,dd_weld_distance=.02,dd_thickness=.002)
+    incoming['settings'].update(dd_quality=15,dd_self_collision=False,dd_pin_top=True,dd_weld_distance=.02,dd_thickness=.002)
     incoming['name']='Rollback candidate'
     path.write_text(json.dumps(incoming),encoding='utf-8')
     before=library_state()
@@ -195,30 +196,36 @@ try:
     garment.build_panels=accepted_build
     for upper in (False,True):
         boundary=deepcopy(data)
-        for key in state_keys[1:8]:
+        for key in state_keys[1:7]:
             prop=scene.bl_rna.properties[key]
             boundary['settings'][key]=upper if prop.type=='BOOLEAN' else prop.hard_max if upper else prop.hard_min
         boundary['settings']['future_setting']={'ignored':True}
         path.write_text(json.dumps(boundary),encoding='utf-8')
         library.load(bpy.context,scene.dd_library_selected)
-        check(all(getattr(scene,key)==boundary['settings'][key] for key in state_keys[1:8]),'RNA setting bounds round-trip without clamping')
-    for key in state_keys[1:8]:setattr(scene,key,before[0][state_keys.index(key)])
+        check(all(getattr(scene,key)==boundary['settings'][key] for key in state_keys[1:7]),'RNA setting bounds round-trip without clamping')
+    for key in state_keys[1:7]:setattr(scene,key,before[0][state_keys.index(key)])
     boundary=deepcopy(data)
     boundary['settings'].update(dd_spacing=.003,dd_weld_distance=.0001,dd_thickness=.01)
     path.write_text(json.dumps(boundary),encoding='utf-8')
     library.load(bpy.context,scene.dd_library_selected)
     check(abs(scene.dd_spacing-.003)<1e-9 and abs(scene.dd_thickness-.01)<1e-9,'declared decimal setting bounds remain valid')
+    outdated=deepcopy(data)
+    lowest=scene.bl_rna.properties['dd_quality'].hard_min
+    outdated['settings'].update(dd_quality=lowest-2)
+    path.write_text(json.dumps(outdated),encoding='utf-8')
+    library.load(bpy.context,scene.dd_library_selected)
+    check(scene.dd_quality==lowest,'a setting saved by an older build loads at the nearest allowed value')
     optional=deepcopy(data)
     for key in ('settings','panels','name','body_height_m'):optional.pop(key,None)
     path.write_text(json.dumps(optional),encoding='utf-8')
-    previous_settings=tuple(getattr(scene,key) for key in state_keys[1:8])
+    previous_settings=tuple(getattr(scene,key) for key in state_keys[1:7])
     library.load(bpy.context,scene.dd_library_selected)
-    check(tuple(getattr(scene,key) for key in state_keys[1:8])==previous_settings,'omitted settings preserve current supported defaults')
+    check(tuple(getattr(scene,key) for key in state_keys[1:7])==previous_settings,'omitted settings preserve current supported defaults')
     garment.build_panels=original_build
     incoming['panels']=[valid_pose]
     path.write_text(json.dumps(incoming),encoding='utf-8')
     library.load(bpy.context,scene.dd_library_selected)
-    check(scene.dd_quality==15 and scene.dd_frames==150 and scene.dd_pin_top and not scene.dd_self_collision,'valid nondefault library settings round-trip')
+    check(scene.dd_quality==15 and scene.dd_pin_top and not scene.dd_self_collision,'valid nondefault library settings round-trip')
     positioned=next(obj for obj in garment.generated(scene,'panel') if obj['dd_pattern_id']==valid_pose['pattern'])
     low,high=garment.bounds(new_body)
     expected=tuple(low[axis]+(high[axis]-low[axis])*valid_pose['position'][axis] for axis in range(3))

@@ -1,6 +1,9 @@
 import math
 import traceback
+import time
 import bpy
+import gpu
+from gpu_extras.presets import draw_texture_2d
 from .core import Document, Session, Vertex
 from . import curves
 from .canvas import Layout, View, Rect
@@ -11,6 +14,8 @@ from .silhouette import BodyReference, torso_alignment
 from . import history,layering
 from .fit_display import FitOverlay
 
+OVERLAY_REFRESH = .4
+RADIUS_STEP = 1.15
 _active = None
 
 
@@ -60,13 +65,11 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         self.error_message = None
         self._closed = False
         self.shaping = None
-        self.shape_start = None
         self.shape_cursor = None
-        self.shape_hover = None
-        self.shape_mode = 'PULL'
-        self.pending_release = False
-        self.release_frame = None
-        self.shape_save_pending = False
+        self.shaping_strip_rects = {}
+        self.overlay_cache = None
+        self.overlay_cache_size = None
+        self.overlay_cache_time = 0.0
         self.fit_overlay = FitOverlay(self)
         from .state_display import StateOverlay
         self.state_overlay = StateOverlay(self)
@@ -406,12 +409,39 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
             return
         try:
             self.canvas_layout = self.make_layout()
-            self.renderer.draw(self)
-            if self.tool != 'SHAPE':
-                self.fit_overlay.legend(self.renderer)
+            if context.screen.is_animation_playing:
+                self.draw_cached_overlay()
+            else:
+                self.draw_interface()
+            self.renderer.draw_grab_ring(self)
         except Exception as exc:
             self.error_message = f"Render error: {exc}"
             print("Devil Designer drawing error:", exc)
+
+    def draw_interface(self):
+        self.renderer.draw(self)
+        if self.tool != 'SHAPE':
+            self.fit_overlay.legend(self.renderer)
+
+    def draw_cached_overlay(self):
+        region = self._region
+        size = (region.width, region.height)
+        now = time.perf_counter()
+        held = self.shaping is not None and self.shaping.held
+        stale = self.overlay_cache is None or self.overlay_cache_size != size
+        if stale or (not held and now - self.overlay_cache_time > OVERLAY_REFRESH):
+            if stale:
+                if self.overlay_cache is not None:
+                    self.overlay_cache.free()
+                self.overlay_cache = gpu.types.GPUOffScreen(*size)
+                self.overlay_cache_size = size
+            with self.overlay_cache.bind():
+                gpu.state.active_framebuffer_get().clear(color=(0.0, 0.0, 0.0, 0.0))
+                self.draw_interface()
+            self.overlay_cache_time = now
+        gpu.state.blend_set('ALPHA_PREMULT')
+        draw_texture_2d(self.overlay_cache.texture_color, (0, 0), *size)
+        gpu.state.blend_set('NONE')
 
     def modal(self, context, event):
         if self._closed:
@@ -428,6 +458,10 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
             return {'RUNNING_MODAL'}
 
     def handle_event(self, context, event):
+        if event.type == 'MOUSEMOVE' and self.tool == 'SHAPE' and self.shaping is not None and self.shaping.held:
+            self.pointer = (event.mouse_x - self._region.x, event.mouse_y - self._region.y)
+            self.shaping.drag(*self.pointer_ray())
+            return {'RUNNING_MODAL'}
         if (self._area not in list(self._window.screen.areas) or self._area.type != 'VIEW_3D'
                 or self._window.scene != self._scene):
             self.cleanup()
@@ -1170,306 +1204,152 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                             self.gesture = dict(mode='MOVE', start=cursor_world, ref_pos=cursor_world, delta=(0.0, 0.0), moved=False)
         return {'RUNNING_MODAL'}
 
-    def frame_cloth(self, context):
-        from . import garment
-        from .cloth_shaping import points
-        from bpy_extras import view3d_utils
-        from mathutils import Vector
-        simulations = garment.generated(context.scene, 'simulation')
-        if not simulations:
-            return
-        coords = [simulations[0].matrix_world @ point for point in points(simulations[0])]
-        if not coords:
-            return
-        center = Vector(tuple((min(point[axis] for point in coords) + max(point[axis] for point in coords)) / 2 for axis in range(3)))
-        radius = max((point - center).length for point in coords)
-        view = self._area.spaces.active.region_3d
-        bounds = self.shaping_view_bounds()
-        view.view_location = center
-        view.view_distance = max(.3, radius * 3 * self._region.width / max(1, bounds.w))
-        view.update()
-        target = (bounds.x + bounds.w / 2, bounds.y + bounds.h / 2)
-        projected = view3d_utils.region_2d_to_location_3d(self._region, view, target, center)
-        view.view_location = center - (projected - center)
-        view.update()
-        self.message = 'Framed cloth in exposed 3D view.'
-
     def shaping_view_bounds(self):
         available = self.canvas_layout.available
         return Rect(available.x, available.y, max(0, self.canvas_layout.panel.x - available.x), available.h)
+
+    def grab_ring_pixels(self):
+        if self.tool != 'SHAPE' or self.shaping is None:
+            return None
+        strip = self.shaping_strip_rects.get('STRIP_BOUNDS')
+        if not self.shaping_view_bounds().contains(*self.pointer) or strip and strip.contains(*self.pointer):
+            return None
+        from bpy_extras import view3d_utils
+        from mathutils import Vector
+        grab = self.shaping
+        view = self._area.spaces.active.region_3d
+        depth = grab.plane_point if grab.held else grab.source.matrix_world @ (sum((Vector(corner) for corner in grab.source.bound_box), Vector()) / 8)
+        reach = view.view_rotation @ Vector((grab.radius / max(1e-6, self._scene.unit_settings.scale_length), 0, 0))
+        center = view3d_utils.location_3d_to_region_2d(self._region, view, depth)
+        edge = view3d_utils.location_3d_to_region_2d(self._region, view, depth + reach)
+        return None if center is None or edge is None else (edge - center).length
 
     def shaping_controls_layout(self):
         if self.tool != 'SHAPE':
             return {}
         s = self.canvas_layout.scale
         panel = self.shaping_view_bounds()
-        panel_x = panel.w
         rects = {}
-        if panel_x < 200 * s:
+        if panel.w < 200 * s:
             return rects
-        s = min(s, (panel_x - 24 * s) / 280)
-        strip_w = min(panel_x - 24 * s, 280 * s)
-        strip_x = round(panel.x + (panel_x - strip_w) / 2)
+        s = min(s, (panel.w - 24 * s) / 220)
+        strip_w = min(panel.w - 24 * s, 220 * s)
+        strip_x = round(panel.x + (panel.w - strip_w) / 2)
         strip_y = round(panel.y + panel.h - 44 * s)
         rects['STRIP_BOUNDS'] = Rect(strip_x, strip_y, strip_w, 36 * s)
         mode_w = round(64 * s)
         rects['MODE_TOGGLE'] = Rect(strip_x + 6 * s, strip_y + 4 * s, mode_w, 28 * s)
         btn_w = round(24 * s)
-        rminus_x = strip_x + 6 * s + mode_w + 8 * s
-        rects['RADIUS_MINUS'] = Rect(rminus_x, strip_y + 4 * s, btn_w, 28 * s)
-        val_w = round(60 * s)
-        rects['RADIUS_VALUE'] = Rect(rminus_x + btn_w + 2 * s, strip_y + 4 * s, val_w, 28 * s)
-        rplus_x = rminus_x + btn_w + 2 * s + val_w + 2 * s
-        rects['RADIUS_PLUS'] = Rect(rplus_x, strip_y + 4 * s, btn_w, 28 * s)
-        reset_w = round(60 * s)
-        rects['RESET'] = Rect(rplus_x + btn_w + 8 * s, strip_y + 4 * s, reset_w, 28 * s)
+        minus_x = strip_x + 6 * s + mode_w + 8 * s
+        rects['RADIUS_MINUS'] = Rect(minus_x, strip_y + 4 * s, btn_w, 28 * s)
+        value_w = round(60 * s)
+        rects['RADIUS_VALUE'] = Rect(minus_x + btn_w + 2 * s, strip_y + 4 * s, value_w, 28 * s)
+        rects['RADIUS_PLUS'] = Rect(minus_x + btn_w + value_w + 4 * s, strip_y + 4 * s, btn_w, 28 * s)
         return rects
 
     def enable_shaping(self, context):
         from . import garment
-        from .cloth_shaping import ShapingSession
+        from .xpbd_live import ClothGrab
         simulations = garment.generated(context.scene, 'simulation')
         if not simulations or simulations[0].hide_get():
-            raise ValueError('Start a drape before shaping it.')
+            raise ValueError('Start a drape before grabbing it.')
         if self.shaping is None or self.shaping.source != simulations[0]:
-            self.shaping = ShapingSession(simulations[0])
+            self.shaping = ClothGrab(simulations[0])
         if not self.choose_tool('SHAPE'):
             return
         if self.full:
             self.reveal_3d()
         self.card_kind = None
-        self.shape_mode = getattr(self, 'shape_mode', 'PULL')
-        self.pending_release = False
-        self.release_frame = None
         self._window.cursor_modal_set('HAND')
         self.shape_cursor = 'HAND'
-        space = self._area.spaces.active
-        view = space.region_3d
-        if view.view_distance > 3.0:
-            from mathutils import Quaternion
-            view.view_rotation = Quaternion((1, 0, 0), 1.5707963267948966)
-            view.view_perspective = 'ORTHO'
-            self.frame_cloth(context)
-        recovery = context.scene.get('dd_shaping_recovery')
-        self.message = recovery or 'Use on a settled drape. Drag with Pull or Push. Wheel changes radius. Live retention is not supported.'
-        if recovery:
-            del context.scene['dd_shaping_recovery']
+        self.message = 'Drag the cloth while it simulates. Ctrl+wheel changes radius. Release to let it fall back.'
 
     def end_shaping(self):
-        from .cloth_shaping import Phase
-        from . import garment
-        try:
-            if self.shaping is not None and (self.shaping.phase == Phase.HELD or getattr(self, 'pending_release', False)):
-                garment.stop(bpy.context)
-                with bpy.context.temp_override(scene=self._scene, view_layer=self._scene.view_layers[0]):
-                    try:
-                        self.shaping.cancel(bpy.context)
-                    except ValueError as failure:
-                        self.message = str(failure)
-        finally:
-            self.pending_release = False
-            self.release_frame = None
-            self.shape_save_pending = False
-            if self.shape_cursor is not None:
-                self._window.cursor_modal_restore()
-            self.shape_cursor = None
-            self.shape_start = None
-            self.shape_hover = None
+        if self.shaping is not None:
+            self.shaping.release()
+        if self.shape_cursor is not None:
+            self._window.cursor_modal_restore()
+        self.shape_cursor = None
 
-    def shaping_menu(self):
-        def draw(menu, context):
-            menu.layout.operator('devil_designer.shape_cloth', text='Shape cloth')
-            menu.layout.operator('devil_designer.reset_shaping', text='Reset shaping')
-            if self.tool == 'SHAPE':
-                menu.layout.operator('devil_designer.shape_cloth', text='Done shaping').finish = True
-                menu.layout.label(text=f'Radius {self.shaping.radius * 1000:.0f} mm | change with wheel')
-                menu.layout.label(text='Normal push / pull on a settled drape')
-        bpy.context.window_manager.popup_menu(draw, title='Draped cloth')
+    def pointer_ray(self):
+        from bpy_extras import view3d_utils
+        view = self._area.spaces.active.region_3d
+        origin = view3d_utils.region_2d_to_origin_3d(self._region, view, self.pointer)
+        return origin, view3d_utils.region_2d_to_vector_3d(self._region, view, self.pointer)
 
     def shaping_event(self, context, event, panel):
         from . import garment
-        from .cloth_shaping import Phase, ShapingSession
-        from bpy_extras import view3d_utils
-        import math
         press = event.value == 'PRESS'
         if self.tool != 'SHAPE':
-            if not panel and press and event.type == 'RIGHTMOUSE':
-                simulations = garment.generated(context.scene, 'simulation')
-                if simulations and not simulations[0].hide_get():
-                    probe = ShapingSession(simulations[0])
-                    view = self._area.spaces.active.region_3d
-                    origin = view3d_utils.region_2d_to_origin_3d(self._region, view, self.pointer)
-                    direction = view3d_utils.region_2d_to_vector_3d(self._region, view, self.pointer)
-                    if probe.pick(context, origin, direction) is not None:
-                        self.shaping_menu()
-                        return {'RUNNING_MODAL'}
             return None
-        session = self.shaping
+        grab = self.shaping
         self.shaping_strip_rects = self.shaping_controls_layout()
-        self._area.tag_redraw()
-        if press and event.ctrl and event.type == 'S':
-            if self.pending_release:
-                self.shape_save_pending = True
-                self.message = 'Applying fold before saving...'
-                return {'RUNNING_MODAL'}
-            if session.phase == Phase.HELD:
-                self.message = 'Release the cloth before saving.'
-                return {'RUNNING_MODAL'}
-            return {'PASS_THROUGH'}
+        if event.type == 'MOUSEMOVE':
+            self._area.tag_redraw()
         if event.type == 'MIDDLEMOUSE' or event.alt:
             return {'PASS_THROUGH'}
-        if press and not event.ctrl and not event.alt and event.type in {'S', 'H', 'L'}:
-            if event.type == 'H':
-                self._scene.dd_reference_visible = not self._scene.dd_reference_visible
-            elif event.type == 'S':
-                self.snap = not self.snap
-            elif event.type == 'L':
-                self._scene.dd_lengths_visible = not self._scene.dd_lengths_visible
-            return {'RUNNING_MODAL'}
-        if press and not event.ctrl and not event.alt and event.type in {'V', 'P', 'R', 'E', 'I', 'D', 'J', 'K', 'T', 'N'}:
-            tool_name = {'V': 'SELECT', 'P': 'POLYGON', 'R': 'RECTANGLE', 'E': 'ELLIPSE',
-                         'I': 'INTERNAL', 'D': 'DART', 'J': 'SEW', 'K': 'PIN', 'T': 'TACK', 'N': 'KNIFE'}[event.type]
-            self.choose_tool(tool_name)
-            return {'RUNNING_MODAL'}
-        if press and event.ctrl and event.type in {'Z', 'Y'}:
-            self.choose_tool('SELECT')
-            return None
-        if self.card_kind:
-            return self.minimal_event(context, event) or {'RUNNING_MODAL'}
-        if session.phase == Phase.BLOCKED:
-            if session.message:
-                self.message = session.message
-            self.pending_release = False
-            self.release_frame = None
-            self.shape_save_pending = False
-            self.shape_start = None
-            self._window.cursor_modal_set('HAND')
-            self.shape_cursor = 'HAND'
-        if press and event.type in {'ESC', 'RIGHTMOUSE'}:
-            if session.phase == Phase.HELD or getattr(self, 'pending_release', False):
-                garment.stop(context)
-                session.cancel(context)
-                self.pending_release = False
-                self.release_frame = None
-                self.shape_start = None
-                self.message = session.message
-                self._window.cursor_modal_set('HAND')
-                self.shape_cursor = 'HAND'
-            elif event.type == 'ESC':
-                self.choose_tool('SELECT')
-            else:
-                self.shaping_menu()
-            return {'RUNNING_MODAL'}
-        if event.type == 'TIMER':
-            if getattr(self, 'pending_release', False) and context.scene.frame_current >= (self.release_frame or 0):
-                session.release(context)
-                self.pending_release = False
-                self.release_frame = None
-                self.shape_start = None
-                self.message = session.message
-                self._window.cursor_modal_set('HAND')
-                self.shape_cursor = 'HAND'
-                if self.shape_save_pending:
-                    self.shape_save_pending = False
-                    bpy.ops.wm.save_mainfile('INVOKE_DEFAULT')
-            elif session.phase == Phase.BLOCKED and session.message:
-                self.message = session.message
-            return {'RUNNING_MODAL'}
-        if self.pending_release:
-            return {'RUNNING_MODAL'}
-        if event.type == 'LEFTMOUSE' and event.value == 'RELEASE' and session.phase == Phase.HELD:
-            self._window.cursor_modal_set('HAND')
-            self.shape_cursor = 'HAND'
-            if context.scene.frame_current >= (self.release_frame or 0):
-                session.release(context)
-                self.pending_release = False
-                self.release_frame = None
-                self.shape_start = None
-                self.message = session.message
-            else:
-                self.pending_release = True
-                self.message = 'Applying fold...'
-            return {'RUNNING_MODAL'}
-        if event.type == 'MOUSEMOVE' and session.phase == Phase.HELD:
-            units = garment.metres_per_unit(context.scene)
-            dx = self.pointer[0] - self.shape_start[0]
-            dy = self.pointer[1] - self.shape_start[1]
-            dist = math.hypot(dx, dy)
-            sign = 1.0 if getattr(self, 'shape_mode', 'PULL') == 'PULL' else -1.0
-            session.update(context, sign * dist * .0002 / units)
-            self.release_frame = context.scene.frame_current + 10
-            self.message = session.message
-            self._area.tag_redraw()
-            return {'RUNNING_MODAL'}
-        if press and event.type == 'LEFTMOUSE' and session.phase != Phase.HELD and not getattr(self, 'pending_release', False):
-            strip_rects = getattr(self, 'shaping_strip_rects', {})
-            if strip_rects.get('MODE_TOGGLE', Rect(0, 0, 0, 0)).contains(*self.pointer):
-                self.shape_mode = 'PUSH' if getattr(self, 'shape_mode', 'PULL') == 'PULL' else 'PULL'
-                self.message = f'Shape mode: {self.shape_mode}'
-                return {'RUNNING_MODAL'}
-            if strip_rects.get('RADIUS_MINUS', Rect(0, 0, 0, 0)).contains(*self.pointer):
-                session.radius = max(0.015, min(0.15, session.radius / 1.15))
-                self.message = f'Shape radius {session.radius * 1000:.0f} mm'
-                return {'RUNNING_MODAL'}
-            if strip_rects.get('RADIUS_PLUS', Rect(0, 0, 0, 0)).contains(*self.pointer):
-                session.radius = max(0.015, min(0.15, session.radius * 1.15))
-                self.message = f'Shape radius {session.radius * 1000:.0f} mm'
-                return {'RUNNING_MODAL'}
-            if strip_rects.get('RESET', Rect(0, 0, 0, 0)).contains(*self.pointer):
-                bpy.ops.devil_designer.reset_shaping()
-                return {'RUNNING_MODAL'}
-            if strip_rects.get('STRIP_BOUNDS', Rect(0, 0, 0, 0)).contains(*self.pointer):
-                return {'RUNNING_MODAL'}
-        if panel and session.phase != Phase.HELD:
-            if press and event.type == 'LEFTMOUSE':
-                button = self.canvas_layout.button(*self.pointer)
-                if button and button not in {'SHAPE', 'KEEP', 'KEEP_OPTIONS', 'SIMULATE', 'SIMULATE_OPTIONS', 'CLOSE'}:
-                    self.choose_tool('SELECT')
-            return None
         if event.type in {'WHEELUPMOUSE', 'WHEELDOWNMOUSE'}:
-            if session.phase != Phase.HELD and not getattr(self, 'pending_release', False):
-                session.radius = max(.015, min(.15, session.radius * (1.1 if event.type == 'WHEELUPMOUSE' else 1 / 1.1)))
-                self.message = f'Shape radius {session.radius * 1000:.0f} mm'
-            return {'RUNNING_MODAL'}
-        if event.type == 'LEFTMOUSE' and press and not panel and not getattr(self, 'pending_release', False):
-            if not self.shaping_view_bounds().contains(*self.pointer) or event.ctrl or event.shift:
+            if panel:
+                return None
+            if not event.ctrl:
                 return {'PASS_THROUGH'}
-            view = self._area.spaces.active.region_3d
-            origin = view3d_utils.region_2d_to_origin_3d(self._region, view, self.pointer)
-            direction = view3d_utils.region_2d_to_vector_3d(self._region, view, self.pointer)
-            center = session.pick(context, origin, direction)
-            try:
-                session.begin(context, center)
-            except ValueError as failure:
-                self.message = str(failure)
-                session.message = self.message
+            if not grab.held:
+                grab.scale_radius(RADIUS_STEP if event.type == 'WHEELUPMOUSE' else 1 / RADIUS_STEP)
+                self.message = f'Grab radius {grab.radius * 1000:.0f} mm'
+                self.overlay_cache_time = 0.0
+            return {'RUNNING_MODAL'}
+        if self.card_kind and not grab.held:
+            return self.minimal_event(context, event) or {'RUNNING_MODAL'}
+        if press and event.type == 'ESC':
+            if grab.held:
+                grab.release()
                 self._window.cursor_modal_set('HAND')
                 self.shape_cursor = 'HAND'
+            else:
+                self.choose_tool('SELECT')
+            return {'RUNNING_MODAL'}
+        if press and not event.ctrl and event.type in {'V', 'P', 'R', 'E', 'I', 'D', 'J', 'K', 'T', 'N'}:
+            self.choose_tool({'V': 'SELECT', 'P': 'POLYGON', 'R': 'RECTANGLE', 'E': 'ELLIPSE', 'I': 'INTERNAL', 'D': 'DART',
+                              'J': 'SEW', 'K': 'PIN', 'T': 'TACK', 'N': 'KNIFE'}[event.type])
+            return {'RUNNING_MODAL'}
+        if event.type == 'LEFTMOUSE' and event.value == 'RELEASE' and grab.held:
+            grab.release()
+            self._window.cursor_modal_set('HAND')
+            self.shape_cursor = 'HAND'
+            self.message = 'Released. The cloth keeps simulating from where you left it.'
+            return {'RUNNING_MODAL'}
+        if event.type == 'MOUSEMOVE' and grab.held:
+            grab.drag(*self.pointer_ray())
+            return {'RUNNING_MODAL'}
+        if press and event.type == 'LEFTMOUSE' and not panel:
+            strip = self.shaping_strip_rects
+            if 'STRIP_BOUNDS' in strip and strip['STRIP_BOUNDS'].contains(*self.pointer):
+                if strip['MODE_TOGGLE'].contains(*self.pointer):
+                    grab.toggle_mode()
+                    self.message = f'Grab mode {grab.mode.title()}'
+                elif strip['RADIUS_MINUS'].contains(*self.pointer):
+                    grab.scale_radius(1 / RADIUS_STEP)
+                    self.message = f'Grab radius {grab.radius * 1000:.0f} mm'
+                elif strip['RADIUS_PLUS'].contains(*self.pointer):
+                    grab.scale_radius(RADIUS_STEP)
+                    self.message = f'Grab radius {grab.radius * 1000:.0f} mm'
+                self.overlay_cache_time = 0.0
                 return {'RUNNING_MODAL'}
-            self.shape_start = self.pointer
-            self.release_frame = context.scene.frame_current + 10
+            origin, direction = self.pointer_ray()
+            hit = grab.pick(context, origin, direction)
+            if hit is None:
+                self.message = 'Press on the cloth to grab it.'
+                return {'RUNNING_MODAL'}
+            grab.begin(context, hit[0], hit[1], hit[2], direction)
             self._window.cursor_modal_set('HAND_CLOSED')
             self.shape_cursor = 'HAND_CLOSED'
-            self.message = session.message
             garment.start_playback(context)
             return {'RUNNING_MODAL'}
-        if event.type == 'MOUSEMOVE' and not panel:
-            from .cloth_shaping import points
-            from mathutils import Vector
-            self.shape_hover = None
-            view = self._area.spaces.active.region_3d
-            origin = view3d_utils.region_2d_to_origin_3d(self._region, view, self.pointer)
-            direction = view3d_utils.region_2d_to_vector_3d(self._region, view, self.pointer)
-            center = session.pick(context, origin, direction)
-            if center is not None:
-                point = session.source.matrix_world @ points(session.source)[center]
-                units = garment.metres_per_unit(context.scene)
-                offset = view.view_rotation @ Vector((session.radius / units, 0, 0))
-                first = view3d_utils.location_3d_to_region_2d(self._region, view, point)
-                second = view3d_utils.location_3d_to_region_2d(self._region, view, point + offset)
-                if first is not None and second is not None:
-                    self.shape_hover = (tuple(first), (second - first).length)
-            return {'RUNNING_MODAL'}
+        if panel and press and event.type == 'LEFTMOUSE':
+            button = self.canvas_layout.button(*self.pointer)
+            if button and button not in {'SHAPE', 'KEEP', 'KEEP_OPTIONS', 'SIMULATE', 'SIMULATE_OPTIONS', 'CLOSE'}:
+                self.choose_tool('SELECT')
+        return None
 
     def _parse_dist(self, s):
         s = s.strip().lower()
@@ -1588,6 +1468,9 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         self.avatar_field.release_surface()
         self.save_window()
         self._closed = True
+        if self.overlay_cache is not None:
+            self.overlay_cache.free()
+            self.overlay_cache = None
         self.fit_overlay.close()
         self.state_overlay.close()
         self.viewport_sewing.close()

@@ -5,6 +5,7 @@ from devil_designer.measurements import (
     get_connected_loops,
     torso_loop_circumference,
     estimate_body_measurements,
+    tape_length,
 )
 
 
@@ -139,6 +140,10 @@ class MeasurementsTests(unittest.TestCase):
         self.assertGreater(m['shoulder_width'], 0)
         self.assertGreater(m['torso_length'], 0)
         self.assertGreater(m['inseam'], 0)
+
+    def test_tape_goes_around_the_outside_of_a_crease(self):
+        crease = [(0, 0), (4, 0), (4, 3), (2, .5), (0, 3)]
+        self.assertAlmostEqual(tape_length(crease), 14.0)
 
     def test_estimate_body_measurements_invalid_inputs(self):
         scene = MockScene()

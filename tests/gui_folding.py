@@ -86,7 +86,7 @@ def run(workspace, event, click, button, check, cleanup):
             check(not workspace.error_message and bool(garment.generated(scene, 'panel')), style + ' arranged real folded geometry draws')
             button('SIMULATE')
             button('SIMULATE')
-            check(bool(garment.generated(scene, 'simulation')), style + ' starts classic cloth through minimal UI')
+            check(bool(garment.generated(scene, 'simulation')), style + ' starts the simulation through minimal UI')
             simulation = garment.generated(scene, 'simulation')[0]
             for frame in range(scene.frame_start, scene.frame_start+4):
                 scene.frame_set(frame)

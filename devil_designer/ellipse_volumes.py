@@ -209,7 +209,7 @@ def _row_sections(entries, heights, up, right, front):
     return center, metrics
 
 
-def surface_positions(vertices, resolved, step, minimum_clearance, overwrap=False, direction=1, extra=0.0):
+def surface_positions(vertices, resolved, step, minimum_clearance, overwrap=False, direction=1, extra=0.0, half_wrap=False):
     points = numpy.asarray(vertices, dtype=float)
     up, right, front = (tuple(resolved[key]) for key in ('up', 'right', 'front'))
     clearance = resolved['clearance'] + extra
@@ -266,8 +266,8 @@ def surface_positions(vertices, resolved, step, minimum_clearance, overwrap=Fals
     reach = float(numpy.abs(meridian).max()) * 4 + 1
     stacked = (meridian.T + numpy.arange(len(columns))[:, None] * reach).ravel()
     steps = numpy.diff(meridian, axis=0)
-    def along(column_indices):
-        clamped = numpy.clip(vertical, meridian[0, column_indices], meridian[-1, column_indices])
+    def along(column_indices, heights):
+        clamped = numpy.clip(heights, meridian[0, column_indices], meridian[-1, column_indices])
         found = numpy.searchsorted(stacked, clamped + column_indices * reach, side='right') - 1
         lower = numpy.clip(found - column_indices * rows, 0, rows - 2)
         fraction = lower + (clamped - meridian[lower, column_indices]) / numpy.maximum(steps[lower, column_indices], 1e-15)
@@ -275,11 +275,24 @@ def surface_positions(vertices, resolved, step, minimum_clearance, overwrap=Fals
         weight = (fraction - lower)[:, None]
         return (grid[lower, column_indices] + weight * (grid[lower + 1, column_indices] - grid[lower, column_indices]),
                 lower + weight[:, 0])
-    first, first_rows = along(left)
-    second, second_rows = along(numpy.minimum(left + 1, len(columns) - 1))
-    positions = first + blend * (second - first)
-    row_position = first_rows + blend[:, 0] * (second_rows - first_rows)
+    def locate(across, heights):
+        place = numpy.clip((across - columns[0]) / step, 0, len(columns) - 1 - 1e-9)
+        left = place.astype(int)
+        blend = (place - left)[:, None]
+        first, first_rows = along(left, heights)
+        second, second_rows = along(numpy.minimum(left + 1, len(columns) - 1), heights)
+        return first + blend * (second - first), first_rows + blend[:, 0] * (second_rows - first_rows)
+    positions, row_position = locate(horizontal, vertical)
     row_index = numpy.clip(numpy.rint(row_position).astype(int), 0, rows - 1)
+    if half_wrap:
+        limit = perimeters[row_index] / 4
+        beyond = numpy.abs(horizontal) > limit
+        if beyond.any():
+            edge, _ = locate(numpy.sign(horizontal[beyond]) * limit[beyond], vertical[beyond])
+            outward = edge - centers[row_index[beyond]]
+            outward -= (outward @ numpy.asarray(up))[:, None] * numpy.asarray(up)[None, :]
+            outward /= numpy.maximum(numpy.linalg.norm(outward, axis=1), 1e-12)[:, None]
+            positions[beyond] = edge + outward * (numpy.abs(horizontal[beyond]) - limit[beyond])[:, None]
     bands = numpy.rint(vertical / step).astype(int)
     starts, ends = {}, {}
     for band, value in zip(bands.tolist(), horizontal.tolist()):

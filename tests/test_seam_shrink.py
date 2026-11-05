@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from devil_designer.core import Document, Session
 from devil_designer.density import boundary_plan
 from devil_designer.history import restore, store
-from devil_designer.seam_shrink import CALIBRATED_WEIGHTS, boundary_weights
+from devil_designer.seam_shrink import boundary_weights
 
 
 class SeamShrinkTests(unittest.TestCase):
@@ -111,7 +111,7 @@ class SeamShrinkTests(unittest.TestCase):
                             for edge, fraction in pair:
                                 expected.add(min(maps[edge.pattern][edge.start], key=lambda sample: abs(sample[0] - fraction))[1])
                     self.assertEqual(set(weights), expected)
-                    self.assertEqual(set(weights.values()), {CALIBRATED_WEIGHTS[30]})
+                    self.assertEqual(set(weights.values()), {.3})
                     self.assertTrue(all(any(edge.pattern == pattern.id for _, pairs in plan.seam_pairs for pair in pairs for edge, _ in pair) for pattern in session.document.patterns))
                     if partial:
                         edge = session.document.seams[0].a
@@ -126,7 +126,7 @@ class SeamShrinkTests(unittest.TestCase):
         seams = [SimpleNamespace(id="low", shrink=10), SimpleNamespace(id="high", shrink=30), SimpleNamespace(id="zero", shrink=0)]
         for order in (seams, seams[::-1]):
             plan = SimpleNamespace(seam_pairs=[(seam.id, pairs) for seam in order])
-            self.assertEqual(boundary_weights(order, maps, plan), {4: CALIBRATED_WEIGHTS[30], 9: CALIBRATED_WEIGHTS[30]})
+            self.assertEqual(boundary_weights(order, maps, plan), {4: .3, 9: .3})
 
     def test_zero_has_no_weights_and_changed_samples_refuse(self):
         session = self.fixture()

@@ -6,6 +6,16 @@
 - Click **Pause** to inspect it.
 - Click **Reset drape** on the garment card to restore the starting arrangement. Reset does not delete finished meshes.
 
+## Grab the Cloth While It Simulates
+
+Choose **Grab** in the dock and drag the cloth. It keeps simulating under your hand and carries on from wherever you let go.
+
+- **Pull** moves the cloth with your hand across the view.
+- **Push** presses the cloth in along its surface.
+- Use <kbd>Ctrl</kbd>+wheel or the **+** and **-** buttons to set how much cloth you pick up. The wheel on its own zooms as usual. The circle at your cursor shows the size.
+
+Taut cloth will not follow your hand all the way. That protects the garment from being dragged through the body.
+
 ## Choose Fabric and Mesh Detail
 
 Right-click a piece to choose its fabric or mesh detail. A fabric preset is a ready-made choice that helps the drape behave like that material.
@@ -20,7 +30,7 @@ Choose Silk, Knit, Cotton, Linen, Leather, or Denim to set how a piece drapes.
 
 ## Choose Simulation Quality
 
-Choose **Draft** for a quick first look, **Standard** for everyday draping, or **High** when you need a more detailed result, especially for layers. Higher quality can take longer to simulate.
+Quality sets how carefully **Keep mesh** finishes the garment. Choose **Draft** for the fastest result, **Standard** for everyday work, or **High** for the tightest fit and seams, especially for layers. Live draping runs at the same speed in all three.
 
 ## Adjust Individual Pieces
 
@@ -63,6 +73,8 @@ Press <kbd>F</kbd> to show or hide the **Fit Map**, a color guide that shows whe
 1. Pause on the frame you want.
 2. Use the **Keep mesh** arrow for **Weld: Auto/Manual** and **Thickness**.
 3. Click **Keep mesh**.
+
+Keep takes a second or two to finish the cloth, then checks it against your avatar. It clears small contacts for you. If cloth is too far inside the body, Keep stops and tells you where, so you can let it settle or pull it clear.
 
 The finished mesh is editable in Blender. Its UVs are the flat map used to place textures on the garment and follow the pattern pieces.
 

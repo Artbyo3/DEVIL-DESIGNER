@@ -3,7 +3,6 @@ from bpy.app.handlers import persistent
 from .editor import DD_OT_pattern_editor, close_active
 from .operators import CLASSES
 from .viewport_sewing import DD_OT_viewport_seam_action
-from .garment import cancel_playback
 from .avatar_field import avatar_poll
 
 
@@ -17,26 +16,17 @@ KEYMAPS = []
 @persistent
 def on_load(_):
     close_active()
-    cancel_playback()
-    from .cloth_shaping import clear
-    clear()
-
-
-@persistent
-def after_load(_):
-    from .cloth_shaping import recover_loaded
-    recover_loaded(bpy.context)
 
 
 classes = (DD_OT_pattern_editor,DD_OT_viewport_seam_action)+CLASSES
 PROPERTIES = ('dd_document','dd_history','dd_collection','dd_avatar','dd_spacing','dd_clearance',
-              'dd_quality','dd_frames','dd_self_collision','dd_pin_top','dd_weld_distance','dd_thickness',
+              'dd_quality','dd_self_collision','dd_pin_top','dd_weld_distance','dd_thickness',
               'dd_ui_rect','dd_reference_visible','dd_reference_view',
               'dd_reference_opacity','dd_reference_x','dd_reference_y','dd_reference_placed',
               'dd_point_x','dd_point_y','dd_segment_length',
               'dd_sew_a0','dd_sew_a1','dd_sew_b0','dd_sew_b1','dd_free_sewing','dd_sew_reverse','dd_internal_mode',
               'dd_lengths_visible','dd_measure_visible','dd_library_name','dd_library_dir','dd_library_selected','dd_library_refit','dd_fabric',
-              'dd_fabric_structural','dd_fabric_shear','dd_fabric_bending','dd_fabric_density')
+              'dd_fabric_structural','dd_fabric_bending','dd_fabric_density')
 
 
 def register():
@@ -67,7 +57,6 @@ def register():
     Scene.dd_library_refit=bpy.props.BoolProperty(default=True)
     Scene.dd_fabric = bpy.props.StringProperty(name='Garment fabric',default='COTTON')
     Scene.dd_fabric_structural = bpy.props.FloatProperty(name='Stretch stiffness',default=25.0,min=0.1,max=500.0,precision=2)
-    Scene.dd_fabric_shear = bpy.props.FloatProperty(name='Shear stiffness',default=15.0,min=0.1,max=500.0,precision=2)
     Scene.dd_fabric_bending = bpy.props.FloatProperty(name='Bending stiffness',default=0.5,min=0.001,max=120.0,precision=3)
     Scene.dd_fabric_density = bpy.props.FloatProperty(name='Mass density',default=0.3,min=0.01,max=10.0,precision=3)
     Scene.dd_document = bpy.props.StringProperty(name='Pattern document',default='')
@@ -76,8 +65,7 @@ def register():
     Scene.dd_avatar = bpy.props.PointerProperty(type=bpy.types.Object,name='Avatar body',poll=avatar_poll,update=live_panels.avatar_changed)
     Scene.dd_spacing = bpy.props.FloatProperty(name='Mesh spacing (m)',default=.02,min=.003,max=.2,precision=3)
     Scene.dd_clearance = bpy.props.FloatProperty(name='Body clearance (m)',default=.03,min=.005,max=.3,precision=3)
-    Scene.dd_quality = bpy.props.IntProperty(name='Quality steps',default=10,min=5,max=40)
-    Scene.dd_frames = bpy.props.IntProperty(name='Simulation frames',default=120,min=10,max=1000)
+    Scene.dd_quality = bpy.props.IntProperty(name='Keep quality steps',default=24,min=12,max=48)
     Scene.dd_self_collision = bpy.props.BoolProperty(name='Self collision',default=True)
     Scene.dd_pin_top = bpy.props.BoolProperty(name='Pin highest panel points',default=False)
     Scene.dd_weld_distance = bpy.props.FloatProperty(name='Seam weld distance (m)',default=.01,min=.0001,max=.05,precision=4)
@@ -87,7 +75,6 @@ def register():
     live_panels.register()
     arrangement_controls.register()
     bpy.app.handlers.load_pre.append(on_load)
-    bpy.app.handlers.load_post.append(after_load)
     bpy.types.VIEW3D_MT_view.append(launch_menu)
     config=bpy.context.window_manager.keyconfigs.addon
     if config:
@@ -101,15 +88,10 @@ def unregister():
     arrangement_controls.unregister()
     live_panels.unregister()
     close_active()
-    from .cloth_shaping import clear
-    clear()
     from . import tracing
     tracing.unregister()
-    cancel_playback()
     if on_load in bpy.app.handlers.load_pre:
         bpy.app.handlers.load_pre.remove(on_load)
-    if after_load in bpy.app.handlers.load_post:
-        bpy.app.handlers.load_post.remove(after_load)
     bpy.types.VIEW3D_MT_view.remove(launch_menu)
     for keymap,item in KEYMAPS:
         keymap.keymap_items.remove(item)

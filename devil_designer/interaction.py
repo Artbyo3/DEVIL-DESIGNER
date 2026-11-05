@@ -95,8 +95,6 @@ class OverlayControls:
         return True
 
     def action_blocker(self, action):
-        if getattr(self, 'pending_release', False) and action in {'KEEP', 'SIMULATE'}:
-            return 'Applying fold... please wait.'
         if self.confirm_action:
             return 'Confirm the pending action or choose Cancel first.'
         if self.gesture and action != 'CANCEL_DRAFT':

@@ -1223,7 +1223,7 @@ def run():
                 rect, row = next((rect, row) for rect, row in workspace.minimal_card()[2] if row[0] == 'CHOICES' and row[1] == 'Shrink')
                 check(tuple(row[2][1]) == ('0%', '10%', '20%', '30%'), 'seam menu exposes exactly four Shrink choices')
                 warnings = [row for control, row in workspace.minimal_card()[2] if row[0] == 'INFO' and row[1] in ('Nonzero: 1 mm self-collision', 'Other folds may change')]
-                check(len(warnings) == 2 and all(not row[2] for row in warnings), 'Shrinks collision cost and fold warning each use a full-width readable row')
+                check(not warnings, 'Shrink menu carries no retired collision warnings')
                 click((rect.x + (shrink / 10 + .5) * rect.w / 4, rect.y + rect.h / 2))
                 check(workspace.card_kind is None and workspace.session.document.seams[0].shrink == shrink,
                       f'Shrink {shrink}% executes and dismisses the contextual menu')

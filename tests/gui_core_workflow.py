@@ -11,6 +11,32 @@ sys.path.insert(0, str(ROOT))
 bpy.context.preferences.view.show_splash = False
 
 
+def mannequin():
+    import bmesh
+    from math import pi
+    from mathutils import Matrix
+    mesh = bpy.data.meshes.new('Test Mannequin')
+    body = bmesh.new()
+    def limb(radius, depth, location, rotation=Matrix.Identity(4)):
+        bmesh.ops.create_cone(body, cap_ends=True, segments=24, radius1=radius, radius2=radius, depth=depth,
+                              matrix=Matrix.Translation(location) @ rotation)
+    def ball(scale, location):
+        bmesh.ops.create_uvsphere(body, u_segments=24, v_segments=16, radius=1,
+                                  matrix=Matrix.Translation(location) @ Matrix.Diagonal((*scale, 1)))
+    ball((.17, .11, .34), (0, 0, 1.15))
+    ball((.16, .12, .14), (0, 0, .86))
+    ball((.1, .11, .12), (0, 0, 1.62))
+    limb(.05, .34, (0, 0, 1.46))
+    for side in (-1, 1):
+        limb(.075, .84, (side * .085, 0, .42))
+        limb(.04, .62, (side * .46, 0, 1.38), Matrix.Rotation(pi / 2, 4, 'Y'))
+    body.to_mesh(mesh)
+    body.free()
+    result = bpy.data.objects.new('Test Mannequin', mesh)
+    bpy.context.scene.collection.objects.link(result)
+    return result
+
+
 def run():
     passed = []
 
@@ -110,6 +136,7 @@ def run():
             check(bool(kept_multi), 'Keep creates real final mesh for multi-piece sewn garment')
             check(len(kept_multi[0].data.vertices) > 0, 'multi-piece final mesh has vertices')
 
+            scene.dd_avatar = mannequin()
             for starter_key in ('STARTER_TEE', 'STARTER_TANK', 'STARTER_SKIRT'):
                 cleanup_garments()
                 workspace.session = Session(Document())
@@ -125,7 +152,7 @@ def run():
                 check(not bpy.context.screen.is_animation_playing, f'{starter_key} simulation pauses')
                 button('KEEP')
                 kept_starter = garment.generated(scene, 'final')
-                check(bool(kept_starter), f'{starter_key} finalized into kept mesh')
+                check(bool(kept_starter), f'{starter_key} finalized into kept mesh: {workspace.message}')
                 check(len(kept_starter[0].data.vertices) > 0, f'{starter_key} final mesh has geometry')
 
             cleanup_garments()

@@ -30,7 +30,7 @@ HANDLED = {'RUNNING_MODAL'}
 
 
 def avatar_poll(self,obj):
-    return obj.type=='MESH' and obj.get('dd_kind') not in {'panel','simulation','final'}
+    return obj.type=='MESH' and obj.get('dd_kind') not in {'panel','simulation','final','collider'}
 
 
 def match_rank(name,query):

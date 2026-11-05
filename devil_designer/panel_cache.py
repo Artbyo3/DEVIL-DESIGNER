@@ -20,7 +20,7 @@ def panel_pose(context, pattern):
     if pattern.arrangement:
         try:
             _, resolved = live_panels.point_frame(context, pattern.arrangement)
-            return json.dumps([resolved, scene.dd_clearance], sort_keys=True, separators=(',', ':'))
+            return json.dumps([resolved, scene.dd_clearance, live_panels.has_opposite_piece(context, pattern, pattern.arrangement)], sort_keys=True, separators=(',', ':'))
         except ValueError:
             return None
     if pattern.placement_mode == 'LEGACY':

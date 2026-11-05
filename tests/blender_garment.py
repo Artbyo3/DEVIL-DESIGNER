@@ -56,10 +56,9 @@ check(all(abs(a-b)<1e-6 for row1,row2 in zip(pose,first.matrix_world) for a,b in
 check(len(garment.document(scene).seams)==4,'pattern revision preserves sewing references')
 garment.arrange(context)
 obj = garment.compile_garment(context)
-cloth = next(m for m in obj.modifiers if m.type=='CLOTH')
 pairs = json.loads(obj['dd_sewing_pairs'])
-check(bool(pairs) and cloth.settings.use_sewing_springs,'sewing springs compiled')
-check(any(m.type=='COLLISION' for m in scene.dd_avatar.modifiers),'avatar collision added')
+check(bool(pairs) and 'DD XPBD' in obj.modifiers,'sewing pairs compile into the XPBD simulation')
+check(not any(m.type in {'CLOTH','COLLISION'} for m in list(obj.modifiers)+list(scene.dd_avatar.modifiers)),'no Cloth or Collision modifier is used')
 check(all(p.hide_get() for p in garment.generated(scene,'panel')),'source panels hidden during simulation')
 initial = sum((obj.data.vertices[a].co-obj.data.vertices[b].co).length for a,b in pairs)/len(pairs)
 for frame in range(scene.frame_start,scene.frame_start+61):
@@ -129,7 +128,7 @@ finally:
 check(len(bpy.data.meshes) == original_mesh_count, 'fit refusal paths release evaluated meshes')
 result,unclosed = garment.keep_drape(context)
 check('DD Fit Map' not in result.data.color_attributes, 'Keep mesh never inherits the transient fit color attribute')
-check(not any(m.type=='CLOTH' for m in result.modifiers),'kept garment is an ordinary editable mesh')
+check(not any(m.type=='NODES' for m in result.modifiers),'kept garment is an ordinary editable mesh')
 check(result.data.uv_layers.active is not None,'kept mesh preserves pattern UVs')
 actual_uvs=sorted(tuple(round(x,6) for x in uv.uv) for uv in result.data.uv_layers.active.data)
 check(actual_uvs==expected_uvs,'seam welding preserves every source UV loop')
@@ -142,7 +141,7 @@ check(all(tuple(sorted(e.vertices)) in face_edges for e in result.data.edges),'k
 garment.reset(context)
 check(result.name in scene.objects,'reset preserves finished garments')
 check(all(not p.hide_get() for p in garment.generated(scene,'panel')),'reset restores arranged panels')
-check(not garment.generated(scene,'simulation'),'reset discards old cloth cache object')
+check(not garment.generated(scene,'simulation'),'reset discards the simulation object')
 expected = scene.dd_document
 output = ROOT/'scratch'/'garment-test.blend'
 output.parent.mkdir(exist_ok=True)
