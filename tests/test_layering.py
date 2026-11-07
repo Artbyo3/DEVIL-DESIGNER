@@ -45,7 +45,7 @@ class LayeringTests(unittest.TestCase):
         namespace=dict(hashlib=hashlib,json=json,layering=layering,metres_per_unit=lambda scene:1)
         exec(segment,namespace)
         exec(segment.replace(extension,'',1),namespace,baseline)
-        scene=SimpleNamespace(dd_document='',dd_spacing=.02,dd_quality=24,dd_self_collision=True,dd_pin_top=False,dd_avatar=None)
+        scene=SimpleNamespace(dd_document='',dd_spacing=.02,dd_skin_offset=.003,dd_quality=24,dd_self_collision=True,dd_pin_top=False,dd_avatar=None,dd_friction=.3)
         with patch.object(layering,'kept_garments',return_value=[]):
             self.assertEqual(namespace['signature'](scene,[]),namespace['signature'](scene,[]))
         shirt=self.kept('Shirt')

@@ -14,6 +14,9 @@ from .live_panels import build_guard
 from . import body_guard, layering, xpbd
 from .sewing_preview import resolve_sewing
 
+QUAD_FACE_ANGLE = math.radians(40)
+QUAD_SHAPE_ANGLE = math.radians(40)
+
 OWNER = "Artbyo3/DEVIL-DESIGNER"
 LIVE_FRAMES = 1000000
 
@@ -63,6 +66,9 @@ def tag(obj,kind):
     obj['dd_owner'],obj['dd_kind'] = OWNER,kind
 
 
+_carried_drape = None
+
+
 def remove_objects(objects):
     for obj in objects:
         mesh = obj.data if obj.type=='MESH' else None
@@ -74,6 +80,38 @@ def remove_objects(objects):
 def stop(context):
     if context.screen and context.screen.is_animation_playing:
         bpy.ops.screen.animation_cancel(restore_frame=False)
+
+
+def remember_drape(context):
+    global _carried_drape
+    scene = context.scene
+    simulations = generated(scene,'simulation')
+    if not simulations or simulations[0].hide_get():
+        return
+    from . import piece_states
+    poses = piece_states.snapshot(context,generated(scene,'panel'))
+    if poses:
+        _carried_drape = dict(scene=scene.name,avatar=scene.dd_avatar.name if scene.dd_avatar else '',poses=poses)
+
+
+def forget_drape():
+    global _carried_drape
+    _carried_drape = None
+
+
+def restore_drape(scene,obj,panels):
+    carried = _carried_drape
+    forget_drape()
+    if carried is None or carried['scene']!=scene.name or carried['avatar']!=(scene.dd_avatar.name if scene.dd_avatar else ''):
+        return
+    from . import piece_states
+    rests = {panel['dd_pattern_id']:[tuple(item.vector) for item in panel.data.attributes['dd_rest'].data] for panel in panels}
+    for identity,indices in piece_states.piece_indices(obj).items():
+        if identity in carried['poses']:
+            for index,point in zip(indices,piece_states.carry(*carried['poses'][identity],rests[identity])):
+                obj.data.vertices[index].co = point
+    obj.data.update()
+    xpbd.restart_from_pose(obj)
 
 
 def reset(context):
@@ -172,6 +210,7 @@ def build_panels(context, force_rebuild=False):
         for mesh in allocated:
             if mesh.users == 0:bpy.data.meshes.remove(mesh)
         raise
+    remember_drape(context)
     reset(context)
     old = {o.get('dd_pattern_id'):o for o in generated(scene,'panel')}
     avatar = scene.dd_avatar
@@ -295,7 +334,7 @@ def arrange(context):
 
 
 def signature(scene,panels):
-    data = [scene.dd_document,scene.dd_spacing,
+    data = [scene.dd_document,scene.dd_spacing,scene.dd_skin_offset,scene.dd_friction,
             scene.dd_self_collision,scene.dd_pin_top,metres_per_unit(scene),
             [[p.get('dd_pattern_id'),[v for row in p.matrix_world for v in row]] for p in panels]]
     avatar = scene.dd_avatar
@@ -347,6 +386,7 @@ def build_simulation(context):
     old_anchors=generated(scene,'anchor')+generated(scene,'collider')
     if old and old[0].get('dd_signature')==marker:
         return old[0]
+    remember_drape(context)
     stop(context)
     scene.frame_set(scene.frame_start)
     verts,faces,uvs,face_materials = [],[],[],[]
@@ -377,6 +417,12 @@ def build_simulation(context):
             pin.extend(offset+v.index for v in panel.data.vertices if highest-v.co.y<.002/metres_per_unit(scene))
     plan=boundary_plan(doc,scene.dd_spacing)
     springs,inspection=resolve_sewing(maps,plan)
+    for seam in doc.seams:
+        if not seam.active:
+            springs.difference_update(tuple(sorted(pair)) for pair in inspection.get(seam.id,{}).get('pairs',[]))
+    for first,second in doc.joins:
+        if first in anchor_indices and second in anchor_indices:
+            springs.add(tuple(sorted((anchor_indices[first],anchor_indices[second]))))
     mesh = bpy.data.meshes.new('DD Sewn Fabric')
     mesh.from_pydata(verts,list(springs),faces)
     mesh.update()
@@ -402,8 +448,10 @@ def build_simulation(context):
         group.add(ids,1,'REPLACE')
     obj['dd_piece_ids']=json.dumps([p.id for p in doc.patterns])
     tacks=add_anchors(context,obj,doc,anchor_indices)
-    pin.extend(anchor_indices[anchor.id] for anchor in doc.anchors if anchor.id in anchor_indices and anchor.kind!='TACK')
+    pin.extend(anchor_indices[anchor.id] for anchor in doc.anchors if anchor.id in anchor_indices and anchor.kind=='PIN')
     xpbd.attach(context,obj,doc,panels,pieces,maps,plan,pin,tacks)
+    obj['dd_run_rest'] = json.dumps({panel['dd_pattern_id']:[tuple(item.vector) for item in panel.data.attributes['dd_rest'].data] for panel in panels},separators=(',',':'))
+    restore_drape(scene,obj,panels)
     remove_objects(old_anchors)
     remove_objects(old)
     for panel in panels:
@@ -461,6 +509,9 @@ def keep_drape(context):
         if targets:
             bmesh.ops.weld_verts(bm,targetmap=targets)
         bmesh.ops.delete(bm,geom=[e for e in bm.edges if not e.link_faces],context='EDGES')
+        if scene.dd_keep_quads:
+            bmesh.ops.join_triangles(bm,faces=list(bm.faces),cmp_uvs=True,cmp_materials=True,
+                                     angle_face_threshold=QUAD_FACE_ANGLE,angle_shape_threshold=QUAD_SHAPE_ANGLE)
         bmesh.ops.recalc_face_normals(bm,faces=list(bm.faces))
         bm.verts.index_update()
         deform=bm.verts.layers.deform.active

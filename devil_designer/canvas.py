@@ -41,6 +41,10 @@ class Layout:
             default = (available.x + available.w - w, available.y + (available.h - h) / 2, w, h)
             self.panel = clamp_window(position or default, available, s)
         self.buttons = {}
+        self.strip_panel = None
+        self.strip_title = None
+        self.tool_groups = []
+        self.strip_active = set()
 
     def button(self, x, y):
         return next((name for name, (r, _) in self.buttons.items() if r.contains(x, y)), None)

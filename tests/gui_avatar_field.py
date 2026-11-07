@@ -48,9 +48,11 @@ def run():
         with bpy.context.temp_override(area=area, region=region):
             bpy.ops.devil_designer.pattern_editor('INVOKE_DEFAULT')
             workspace = editor._active
-            workspace.reveal_3d()
-            workspace.canvas_layout = workspace.make_layout()
             view = area.spaces.active.region_3d
+            original_view = view.view_location.copy(), view.view_distance
+            workspace.reveal_3d()
+            view.view_location, view.view_distance = original_view
+            workspace.canvas_layout = workspace.make_layout()
             panel = workspace.canvas_layout.panel
             side = panel.x / 2
             target = cube_at(bpy.context, region, view, (side, region.height * .6), 'Pick target')

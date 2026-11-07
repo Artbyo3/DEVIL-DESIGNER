@@ -60,9 +60,6 @@ class ClothGrab:
     def scale_radius(self, factor):
         self.radius = max(RADIUS_RANGE[0], min(RADIUS_RANGE[1], self.radius * factor))
 
-    def toggle_mode(self):
-        self.mode = PUSH if self.mode == PULL else PULL
-
     def begin(self, context, vertex, point, normal, view_direction):
         handle = xpbd.input_slot(self.source, 'Grab Handle').value
         handle.location = point

@@ -11,7 +11,7 @@ def make_edge(doc, pattern_id, index, rev=False):
     return e
 
 
-def create_tee_starter(measurements, fabric='COTTON'):
+def create_tee_starter(measurements, fabric='COTTON', name='Tee', sleeve_scale=1.0):
     m = measurements or {
         'chest': 96.0,
         'waist': 80.0,
@@ -27,8 +27,8 @@ def create_tee_starter(measurements, fabric='COTTON'):
     size = min(1.0, m.get('height', ADULT_HEIGHT) / ADULT_HEIGHT)
     neck_w = 0.09 * size
     armhole_drop = 0.22 * size
-    sleeve_ext = 0.14 * size
-    sleeve_opening = 0.10 * size
+    sleeve_ext = 0.14 * size * sleeve_scale
+    sleeve_opening = (0.10 if sleeve_scale == 1.0 else 0.17) * size
     waist_y = m.get('waist_y', 0.62 * (m['height'] / 100 if 'height' in m else 1.70))
     base_y = max(0.0, waist_y - 0.15)
 
@@ -54,11 +54,11 @@ def create_tee_starter(measurements, fabric='COTTON'):
 
     s = Session()
     s.add(front_pts)
-    s.document.patterns[-1].name = 'Tee front'
+    s.document.patterns[-1].name = name + ' front'
     s.document.patterns[-1].preset = fabric
 
     s.add(back_pts)
-    s.document.patterns[-1].name = 'Tee back'
+    s.document.patterns[-1].name = name + ' back'
     s.document.patterns[-1].preset = fabric
 
     f_id = s.document.patterns[0].id
@@ -78,7 +78,7 @@ def create_tee_starter(measurements, fabric='COTTON'):
     return s.document
 
 
-def create_tank_starter(measurements, fabric='COTTON'):
+def create_tank_starter(measurements, fabric='COTTON', name='Tank', extra_length=0.0, hem_flare=0.0):
     m = measurements or {
         'chest': 96.0,
         'waist': 80.0,
@@ -88,16 +88,17 @@ def create_tank_starter(measurements, fabric='COTTON'):
     }
     half_chest = (m['chest'] / 2 + 4.0) / 200
     half_waist = (m['waist'] / 2 + 4.0) / 200
-    torso_h = max(0.40, (m['torso_length'] + 12.0) / 100)
+    torso_h = max(0.40, (m['torso_length'] + 12.0) / 100) + extra_length
     half_sh = max(half_chest * 0.80, (m['shoulder_width'] + 2.0) / 400)
     neck_edge = min(0.13, half_sh * 0.75 * 0.9)
     armhole_drop = 0.24
     waist_y = m.get('waist_y', 0.62 * (m['height'] / 100 if 'height' in m else 1.70))
-    base_y = max(0.0, waist_y - 0.15)
+    base_y = max(0.0, waist_y - 0.15 - extra_length)
+    half_hem = half_waist + hem_flare
 
     front_pts = [
-        (-half_waist, base_y),
-        (half_waist, base_y),
+        (-half_hem, base_y),
+        (half_hem, base_y),
         (half_chest, base_y + torso_h - armhole_drop),
         (half_sh * 0.75, base_y + torso_h - 0.02),
         (neck_edge, base_y + torso_h),
@@ -113,11 +114,11 @@ def create_tank_starter(measurements, fabric='COTTON'):
 
     s = Session()
     s.add(front_pts)
-    s.document.patterns[-1].name = 'Tank front'
+    s.document.patterns[-1].name = name + ' front'
     s.document.patterns[-1].preset = fabric
 
     s.add(back_pts)
-    s.document.patterns[-1].name = 'Tank back'
+    s.document.patterns[-1].name = name + ' back'
     s.document.patterns[-1].preset = fabric
 
     f_id = s.document.patterns[0].id
@@ -174,8 +175,97 @@ def create_skirt_starter(measurements, fabric='COTTON'):
     return s.document
 
 
+def create_long_sleeve_starter(measurements, fabric='COTTON'):
+    document = create_tee_starter(measurements, fabric, 'Long sleeve', 3.2)
+    for pattern in document.patterns:
+        pattern.arrangement['flat'] = True
+    return document
+
+
+def create_jacket_starter(measurements, fabric='COTTON'):
+    document = create_long_sleeve_starter(measurements, fabric)
+    front = document.patterns[0]
+    top = max(y for _, y in front.points)
+    bottom = min(y for _, y in front.points)
+    session = Session(document)
+    session.selected = front.id
+    session.knife_cut([(0.0, top + .1), (0.0, bottom - .1)], False)
+    for pattern in session.document.patterns:
+        pattern.name = pattern.name.replace('Long sleeve', 'Jacket')
+    return session.document
+
+
+def create_hoodie_starter(measurements, fabric='COTTON'):
+    document = create_long_sleeve_starter(measurements, fabric)
+    session = Session(document)
+    front, back = document.patterns
+    for pattern in document.patterns:
+        pattern.name = pattern.name.replace('Long sleeve', 'Hoodie')
+    right_neck = [make_edge(document, back.id, 7), make_edge(document, front.id, 6)]
+    left_neck = [make_edge(document, front.id, 7), make_edge(document, back.id, 6)]
+    width = document.chain_length(right_neck)
+    depth = .34
+    base = max(y for _, y in front.points) + .08
+    hoods = []
+    for label, offset in (('Hood right', -.4), ('Hood left', .6)):
+        session.add([(offset, base), (offset + width, base), (offset + width, base + depth), (offset, base + depth)])
+        hood = document.patterns[-1]
+        hood.name = label
+        hood.preset = fabric
+        hood.arrangement = arrangement_record('neck', 'opposite_side' if label == 'Hood right' else 'side', True, version=3)
+        hoods.append(hood.id)
+    right, left = hoods
+    session.sew_chains(right_neck, [make_edge(document, right, 0)], reverse=False)
+    session.sew_chains(left_neck, [make_edge(document, left, 0)], reverse=False)
+    session.sew_chains([make_edge(document, right, 3)], [make_edge(document, left, 1)], reverse=True)
+    session.sew_chains([make_edge(document, right, 2)], [make_edge(document, left, 2)], reverse=True)
+    return document
+
+
+def create_dress_starter(measurements, fabric='COTTON'):
+    return create_tank_starter(measurements, fabric, 'Dress', .45, .10)
+
+
+def create_pants_starter(measurements, fabric='COTTON'):
+    m = measurements or {'hip': 96.0, 'inseam': 76.0}
+    size = min(1.0, m.get('height', ADULT_HEIGHT) / ADULT_HEIGHT)
+    quarter = (m['hip'] / 4 + 3.0) / 100
+    waist_y = m.get('waist_y', 0.62 * (m['height'] / 100 if 'height' in m else 1.70))
+    crotch_y = waist_y - .28 * size
+    base_y = max(0.0, crotch_y - m.get('inseam', 76.0) / 100)
+    leg_x = quarter * .55
+    half_hem = .10 * size
+    right = [(leg_x - half_hem, base_y), (leg_x + half_hem, base_y), (quarter, waist_y), (0.0, waist_y),
+             (0.0, crotch_y + .05), (quarter * .15, crotch_y)]
+    left = [(-x, y) for x, y in reversed(right)]
+    back_offset = 0.85
+    s = Session()
+    pieces = []
+    for label, points, offset in (('Pants front right', left, 0.0), ('Pants front left', right, 0.0),
+                                  ('Pants back left', left, back_offset), ('Pants back right', right, back_offset)):
+        s.add([(x + offset, y) for x, y in points])
+        s.document.patterns[-1].name = label
+        s.document.patterns[-1].preset = fabric
+        pieces.append(s.document.patterns[-1].id)
+    front_right, front_left, back_left, back_right = pieces
+    for first, first_edge, second, second_edge in ((front_left, 1, back_left, 3), (front_left, 5, back_left, 5),
+                                                   (front_right, 3, back_right, 1), (front_right, 5, back_right, 5),
+                                                   (front_right, 1, front_left, 3), (front_right, 0, front_left, 4),
+                                                   (back_left, 1, back_right, 3), (back_left, 0, back_right, 4)):
+        s.sew_chains([make_edge(s.document, first, first_edge)], [make_edge(s.document, second, second_edge)], reverse=True)
+    for identity, volume, point in ((front_right, 'right_thigh', 'front'), (front_left, 'left_thigh', 'front'),
+                                    (back_left, 'left_thigh', 'back'), (back_right, 'right_thigh', 'back')):
+        s.document.find(identity).arrangement = arrangement_record(volume, point, version=3)
+    return s.document
+
+
 STARTER_GENERATORS = {
     'STARTER_TEE': ('Tee', create_tee_starter, 'BODICE'),
     'STARTER_TANK': ('Tank', create_tank_starter, 'BODICE'),
     'STARTER_SKIRT': ('Skirt', create_skirt_starter, 'SKIRT'),
+    'STARTER_LONG_SLEEVE': ('Long sleeve', create_long_sleeve_starter, 'BODICE'),
+    'STARTER_DRESS': ('Dress', create_dress_starter, 'BODICE'),
+    'STARTER_JACKET': ('Jacket', create_jacket_starter, 'BODICE'),
+    'STARTER_HOODIE': ('Hoodie', create_hoodie_starter, 'BODICE'),
+    'STARTER_PANTS': ('Pants', create_pants_starter, 'PANTS'),
 }

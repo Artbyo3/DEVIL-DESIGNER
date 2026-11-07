@@ -15,18 +15,30 @@ Use the Sew tool to connect pattern edges before you simulate the garment.
   <figcaption id="shot-sew-segment-selection-caption">Close-up view of the first selected pattern edge highlighted in the Sew tool state while awaiting the matching target edge.</figcaption>
 </figure>
 
-### Free Sewing (3D Viewport)
+### Free Sewing
 
-In the revealed 3D Viewport, press <kbd>Shift</kbd> + <kbd>J</kbd> to join part of an edge:
+Press <kbd>Shift</kbd> + <kbd>J</kbd>, or click the Sew tool and choose **Free**, to join part of an edge on the 2D canvas or in the revealed 3D Viewport:
 
 1. Click the start and end of the first edge range.
 2. Click the start and end of the matching range.
+
+### M:N Sewing
+
+Use this to sew several edges to several others, such as a two-piece sleeve to an armhole.
+
+1. Click the Sew tool and choose **M:N**.
+2. Click the edges of the first side, then press <kbd>Enter</kbd>.
+3. Click the partner edges, then press <kbd>Enter</kbd>.
 
 ## Direct 3D Viewport Sewing
 
 1. Reveal the 3D Viewport.
 2. Press <kbd>J</kbd> or <kbd>Shift</kbd> + <kbd>J</kbd>.
 3. Click the visible edges on the placed pieces.
+
+## Edit a Seam
+
+Select a seam, then drag the blue dots at its ends to slide them along the edge. Right-click its badge for an exact length on either side. Click the Sew tool and choose **Auto sew** to sew matching free edges between pieces, then check the result.
 
 ## Direction, Reversal, & Removal
 
@@ -48,6 +60,10 @@ Before draping, right-click a numbered seam badge to see the mismatch in centime
   <div class="dd-shot__frame"><span class="dd-shot__icon" aria-hidden="true"></span><span class="dd-shot__label">Screenshot coming soon</span></div>
   <figcaption id="shot-sew-mismatch-warning-caption">Close-up view of a numbered seam badge detailing centimetre and percentage length differences alongside the Gather warning status.</figcaption>
 </figure>
+
+## Switch a Seam Off
+
+Right-click a seam badge and set **Sewing** to **Off**. The seam stays in your pattern but is not sewn on the next drape, so you can test an open slit or vent without losing the seam. Set it back to **On** to sew it again.
 
 ## Seam Shrink (Elastic Cuffs & Waistbands)
 

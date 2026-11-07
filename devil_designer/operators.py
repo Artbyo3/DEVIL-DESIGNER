@@ -94,6 +94,7 @@ class DD_OT_reset(bpy.types.Operator):
     bl_options = {'REGISTER','UNDO'}
     def execute(self,context):
         def action():
+            garment.forget_drape()
             garment.reset(context)
             return {'FINISHED'}
         return run(self,action)
@@ -182,5 +183,50 @@ class DD_OT_demo(bpy.types.Operator):
         return run(self,action)
 
 
+class DD_OT_exact_shape(bpy.types.Operator):
+    bl_idname = 'devil_designer.exact_shape'
+    bl_label = 'Exact Size'
+    bl_options = {'INTERNAL'}
+    shape: bpy.props.StringProperty(options={'HIDDEN'})
+    x: bpy.props.FloatProperty(options={'HIDDEN'})
+    y: bpy.props.FloatProperty(options={'HIDDEN'})
+    width: bpy.props.FloatProperty(name='Width (cm)',default=40,min=.5,max=300)
+    height: bpy.props.FloatProperty(name='Height (cm)',default=60,min=.5,max=300)
+    def invoke(self,context,event):
+        return context.window_manager.invoke_props_dialog(self)
+    def execute(self,context):
+        from . import editor
+        active = editor._active
+        if active is None:
+            return {'CANCELLED'}
+        right,top = self.x+self.width/100,self.y+self.height/100
+        if self.shape=='ELLIPSE':
+            active.run_edit(lambda:active.session.add_ellipse((self.x,self.y),(right,top)),'Ellipse created.')
+        else:
+            active.run_edit(lambda:active.session.add([(self.x,self.y),(right,self.y),(right,top),(self.x,top)]),'Rectangle created.')
+        return {'FINISHED'}
+
+
+class DD_OT_seam_length(bpy.types.Operator):
+    bl_idname = 'devil_designer.seam_length'
+    bl_label = 'Sewn Length'
+    bl_options = {'INTERNAL'}
+    side: bpy.props.IntProperty(options={'HIDDEN'})
+    length: bpy.props.FloatProperty(name='Length (cm)',default=10,min=.1,max=500)
+    def invoke(self,context,event):
+        from . import editor
+        active = editor._active
+        seam = next((item for item in active.session.document.seams if item.id==active.seam_selected),None)
+        if seam is None:
+            return {'CANCELLED'}
+        self.length = active.session.document.chain_length(seam.side(self.side))*100
+        return context.window_manager.invoke_props_dialog(self)
+    def execute(self,context):
+        from . import editor
+        active = editor._active
+        active.run_edit(lambda:active.session.set_seam_length(active.seam_selected,self.side,self.length/100),'Seam length set.')
+        return {'FINISHED'}
+
+
 CLASSES = (DD_OT_build_panels,DD_OT_arrange,DD_OT_simulate,DD_OT_stop,DD_OT_reset,
-           DD_OT_keep_drape,DD_OT_seam,DD_OT_demo)
+           DD_OT_keep_drape,DD_OT_seam,DD_OT_demo,DD_OT_exact_shape,DD_OT_seam_length)

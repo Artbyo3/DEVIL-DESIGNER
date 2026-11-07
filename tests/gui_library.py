@@ -75,12 +75,12 @@ def run():
             tool=workspace.canvas_layout.buttons['SELECT'][0]
             rail=workspace.canvas_layout.rail
             from devil_designer.ui_system import MinimalMetrics,RADIUS_CONTROL
-            check(abs(rail.w/scale-56)<1,'Native dock envelope is 56 pixels')
-            check(abs(tool.w/scale-40)<1 and abs(tool.h/scale-33)<1 and abs((tool.x-rail.x)/scale-8)<1,
-                  'Native toolbar targets are 40 pixels centered with 8-pixel inner padding')
+            check(abs(rail.w/scale-40)<1,'Native dock envelope is 40 pixels')
+            check(abs(tool.w/scale-40)<1 and tool.h/scale>=20 and abs(tool.x-rail.x)<1,
+                  'Native toolbar targets match Blender at 40 pixels wide')
             garment_btn=workspace.canvas_layout.buttons.get('GARMENT')
-            check(garment_btn and abs(garment_btn[0].w/scale-40)<1 and abs((garment_btn[0].x-rail.x)/scale-8)<1,
-                  'Garment settings button resides in 40-pixel centered column')
+            check(garment_btn and abs(garment_btn[0].w/scale-40)<1 and abs(garment_btn[0].x-rail.x)<1,
+                  'Garment settings button resides in the 40-pixel column')
             check(RADIUS_CONTROL==4.0,
                   'Legacy constant fallbacks remain 4px')
             metrics=MinimalMetrics.resolve()
@@ -146,7 +146,7 @@ def run():
                   'All required stock icons have spans in geometry.json')
             check(all(name in sources_data and sources_data[name].get('license')=='GPL-2.0-or-later' for name in required_icons),
                   'All required stock icons have valid GPL provenance in sources.json')
-            check(abs(workspace.canvas_layout.buttons['SIMULATE'][0].h/scale-28)<1,'Main actions use compact native-style button proportions')
+            check(abs(workspace.canvas_layout.buttons['SIMULATE'][0].h/scale-24)<1,'Main actions use compact native-style button proportions')
             button('LIBRARY')
             draw('Empty library')
             check(not workspace.library_items,'Empty library is actionable without fixture garments')
@@ -349,6 +349,7 @@ def run():
             check(workspace.twin_tethers and not workspace.twin_label_ids,'Idle twins use a thin tether without permanent Twin text')
             workspace.session.selected=workspace.session.document.patterns[0].id
             workspace.session.document.patterns[0].name='Very long fitted garment pattern name with many words to reserve space for Twin'
+            workspace.session.segment=workspace.session.document.edges(workspace.session.selected)[0]
             draw('Selected linked pieces with edge lengths')
             check(bool(workspace.twin_label_ids),'Selected pair reveals Twin text')
             check(bool(workspace.measurement_rects) and bool(workspace.piece_label_rects),

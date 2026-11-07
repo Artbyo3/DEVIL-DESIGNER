@@ -44,7 +44,8 @@ def prepare():
                                      ('DART', 'mapbox/maki', 'triangle-stroked'),
                                      ('GARMENT', 'mapbox/maki', 'clothing-store'),
                                      ('SEW', 'rapideditor/temaki', 'needle_and_spool'),
-                                     ('PIN', 'rapideditor/temaki', 'pin')]:
+                                     ('PIN', 'rapideditor/temaki', 'pin'),
+                                     ('SHAPE', 'rapideditor/temaki', 'hand')]:
         commit = json.load(urllib.request.urlopen('https://api.github.com/repos/' + repository + '/commits/main'))['sha']
         url = 'https://raw.githubusercontent.com/' + repository + '/' + commit + '/icons/' + filename + '.svg'
         content = urllib.request.urlopen(url).read()

@@ -3,7 +3,10 @@ import json
 import math
 import uuid
 
+from .presets import valid_fabric
+
 EPS = 1e-10
+MAX_SPLIT_PARTS = 200
 
 def uid():
     return uuid.uuid4().hex
@@ -218,6 +221,8 @@ class Seam:
     chain_a: tuple = ()
     chain_b: tuple = ()
     shrink: int = 0
+    ease_side: int = 0
+    active: bool = True
 
     def side(self,index): return list((self.chain_a or (self.a,)) if index==0 else (self.chain_b or (self.b,)))
 
@@ -287,14 +292,17 @@ class Document:
         self.preset=preset
         self.linked_pairs=linked_pairs or []
         self.custom_presets=custom_presets or {}
+        self.elastics=[]
+        self.joins=[]
+        self.steam=[]
 
     def dumps(self):
         return json.dumps(dict(version=4,preset=getattr(self,'preset','COTTON'),patterns=[dict(id=p.id,name=p.name,\
             vertices=[vertex_data(v) for v in p.vertices],paths=[dict(id=q.id,name=q.name,closed=q.closed,role=q.role,\
             vertices=[vertex_data(v) for v in q.vertices]) for q in p.paths],preset=p.preset,wrap_radius=p.wrap_radius,\
             features=p.features,mesh_density=p.mesh_density,fabric_override=getattr(p,'fabric_override',False),placement_mode=p.placement_mode,arrangement=p.arrangement,panel_origin=p.panel_origin,**({'simulation':{key:getattr(p,key) for key in ('frozen','deactivated','strengthened') if getattr(p,key)}} if p.frozen or p.deactivated or p.strengthened else {})) for p in self.patterns],seams=[dict(id=s.id,a=vars(s.a),b=vars(s.b),reverse=s.reverse,\
-            chain_a=[vars(e) for e in s.side(0)],chain_b=[vars(e) for e in s.side(1)],**({"shrink":s.shrink} if s.shrink else {})) for s in self.seams],\
-            anchors=[vars(a) for a in self.anchors],uv_layout=self.uv_layout,**({'linked_pairs':self.linked_pairs} if self.linked_pairs else {}),**({'custom_presets':self.custom_presets} if getattr(self,'custom_presets',None) else {})),separators=(',',':'),allow_nan=False)
+            chain_a=[vars(e) for e in s.side(0)],chain_b=[vars(e) for e in s.side(1)],**({"shrink":s.shrink} if s.shrink else {}),**({"ease_side":s.ease_side} if s.ease_side else {}),**({"active":False} if not s.active else {})) for s in self.seams],\
+            anchors=[vars(a) for a in self.anchors],uv_layout=self.uv_layout,**({'linked_pairs':self.linked_pairs} if self.linked_pairs else {}),**({'custom_presets':self.custom_presets} if getattr(self,'custom_presets',None) else {}),**({'elastics':self.elastics} if self.elastics else {}),**({'joins':self.joins} if self.joins else {}),**({'steam':self.steam} if self.steam else {})),separators=(',',':'),allow_nan=False)
 
     @classmethod
     def loads(cls,value):
@@ -307,7 +315,7 @@ class Document:
             if not isinstance(custom_presets,dict):raise ValueError('Invalid custom presets.')
             custom_presets={cp_name:{key:val for key,val in cp_vals.items() if key!='shear'} if isinstance(cp_vals,dict) else cp_vals for cp_name,cp_vals in custom_presets.items()}
             for cp_name,cp_vals in custom_presets.items():
-                if not isinstance(cp_name,str) or not cp_name.strip() or not isinstance(cp_vals,dict) or set(cp_vals)!={'structural','bending','density'} or any(type(val) not in (int,float) or not math.isfinite(val) or val<=0 for val in cp_vals.values()):
+                if not isinstance(cp_name,str) or not cp_name.strip() or not valid_fabric(cp_vals):
                     raise ValueError('Invalid custom fabric preset.')
             patterns=[]
             for item in data['patterns']:
@@ -331,8 +339,11 @@ class Document:
             if data['version']>=2:
                 for item in data['seams']:
                     document.seams.append(Seam(EdgeRef(**item['a']),EdgeRef(**item['b']),item['reverse'],item['id'],
-                        tuple(EdgeRef(**e) for e in item.get('chain_a',[])),tuple(EdgeRef(**e) for e in item.get('chain_b',[])),item.get('shrink',0)))
+                        tuple(EdgeRef(**e) for e in item.get('chain_a',[])),tuple(EdgeRef(**e) for e in item.get('chain_b',[])),item.get('shrink',0),ease_side=item.get('ease_side',0),active=item.get('active',True) is not False))
             document.anchors=[Anchor(**a) for a in data.get('anchors',[])]
+            document.elastics=data.get('elastics',[])
+            document.joins=data.get('joins',[])
+            document.steam=data.get('steam',[])
             if data['version']<3 and patterns:
                 points=[point for p in patterns for point in p.points]
                 lo=[min(p[a] for p in points) for a in (0,1)]
@@ -420,7 +431,7 @@ class Document:
             identity(p.id)
             if not isinstance(p.name,str) or not p.name.strip(): raise ValueError('Pattern names must contain text.')
             if p.preset not in valid_presets: raise ValueError('Unknown cloth preset.')
-            if p.mesh_density not in ('AUTO','COARSE','STANDARD','FINE'): raise ValueError('Unknown mesh density.')
+            if p.mesh_density not in ('AUTO','COARSE','STANDARD','FINE','ULTRA'): raise ValueError('Unknown mesh density.')
             if any(type(getattr(p,key)) is not bool for key in ('frozen','deactivated','strengthened')):raise ValueError('Invalid piece simulation state.')
             if p.placement_mode not in ('LAYOUT','LEGACY'):raise ValueError('Unknown panel placement mode.')
             if p.arrangement is not None:validate_arrangement(p.arrangement)
@@ -465,11 +476,12 @@ class Document:
             identity(seam.id)
             if type(seam.shrink) is not int or seam.shrink not in (0,10,20,30):
                 raise ValueError("Seam Shrink must be 0, 10, 20 or 30 percent.")
+            if seam.ease_side not in (0,1,2):raise ValueError('Invalid seam ease side.')
         for anchor in self.anchors:
             identity(anchor.id)
             p=self.find(anchor.pattern)
             if p is None or not p.contains((anchor.x,anchor.y)): raise ValueError('Pins and tacks must lie on fabric.')
-            if anchor.kind not in {'PIN','TACK'}: raise ValueError('Unknown anchor type.')
+            if anchor.kind not in {'PIN','TACK','JOIN'}: raise ValueError('Unknown anchor type.')
             if anchor.target is not None and (len(anchor.target)!=3 or any(not math.isfinite(v) for v in anchor.target)):
                 raise ValueError('Invalid tack target.')
             if anchor.binding is not None:
@@ -491,6 +503,15 @@ class Document:
             except ValueError: pass
         self.seams=valid
         self.anchors=[a for a in self.anchors if self.find(a.pattern)]
+        present={a.id for a in self.anchors}
+        self.joins=[pair for pair in self.joins if all(identity in present for identity in pair)]
+        joined={identity for pair in self.joins for identity in pair}
+        self.anchors=[a for a in self.anchors if a.kind!='JOIN' or a.id in joined]
+        def elastic_valid(record):
+            try:self.edge_vertices(EdgeRef(record['pattern'],record['start'],record['end'],path=record['path']));return True
+            except ValueError:return False
+        self.elastics=[record for record in self.elastics if elastic_valid(record)]
+        self.steam=[record for record in self.steam if self.find(record['pattern'])]
 
     def split_edge(self,edge,fraction=.5):
         a,b=self.edge_vertices(edge)
@@ -1048,7 +1069,7 @@ class Session(ConstructionMixin):
         return False
 
     def set_mesh_density(self,name):
-        if name not in ('AUTO','COARSE','STANDARD','FINE'):raise ValueError('Unknown mesh density.')
+        if name not in ('AUTO','COARSE','STANDARD','FINE','ULTRA'):raise ValueError('Unknown mesh density.')
         if self._selected is None and not self.selected_patterns:raise ValueError('Select a pattern to change mesh density.')
         pats=[self.document.find(pid) for pid in self.selected_patterns if self.document.find(pid)]
         if not pats and self._selected:
@@ -1086,7 +1107,7 @@ class Session(ConstructionMixin):
         return self.commit(op)
 
     def set_custom_preset(self,name,values):
-        if not isinstance(name,str) or not name.strip() or not isinstance(values,dict) or set(values)!={'structural','bending','density'} or any(type(val) not in (int,float) or not math.isfinite(val) or val<=0 for val in values.values()):
+        if not isinstance(name,str) or not name.strip() or not valid_fabric(values):
             raise ValueError('Invalid custom fabric preset.')
         def op():
             if not hasattr(self.document,'custom_presets') or self.document.custom_presets is None:
@@ -1665,7 +1686,7 @@ class Session(ConstructionMixin):
                     if len(sides_patterns)>1 and sides_patterns.issubset(dup_ids):
                         try:
                             a=[remap(e) for e in seam.side(0)];b=[remap(e) for e in seam.side(1)]
-                            new_seam=Seam(a[0],b[0],seam.reverse,chain_a=tuple(a),chain_b=tuple(b),shrink=seam.shrink)
+                            new_seam=Seam(a[0],b[0],seam.reverse,chain_a=tuple(a),chain_b=tuple(b),shrink=seam.shrink,active=seam.active)
                             self.document.seams.append(new_seam)
                         except (ValueError,KeyError):continue
         result=self.commit(apply)
@@ -1716,7 +1737,15 @@ class Session(ConstructionMixin):
     def sew_chains(self,a,b,reverse=True):
         for e in a+b: self.document.edge_vertices(e)
         seam=Seam(a[0],b[0],reverse,chain_a=tuple(a),chain_b=tuple(b))
-        return self.commit(lambda:self.document.seams.append(seam))
+        def apply():
+            from .linked_editing import mirror_seam
+            self.document.seams.append(seam)
+            twin=mirror_seam(self.document,seam)
+            if twin is not None:
+                self.document.seams.append(twin)
+                try:self.document.validate_seams()
+                except ValueError:self.document.seams.remove(twin)
+        return self.commit(apply)
 
     def remove_seam(self,identity):
         seam=next((s for s in self.document.seams if s.id==identity),None)
@@ -1735,9 +1764,24 @@ class Session(ConstructionMixin):
         if seam is None:raise ValueError("That seam no longer exists.")
         return self.commit(lambda:setattr(seam,'shrink',shrink))
 
+    def set_seam_active(self,identity,active):
+        seam=next((seam for seam in self.document.seams if seam.id==identity),None)
+        if seam is None:raise ValueError("That seam no longer exists.")
+        return self.commit(lambda:setattr(seam,'active',bool(active)))
+
     def split_segment(self,edge,fraction=.5):
         if not .0001<fraction<.9999:raise ValueError('Split inside the segment, away from its endpoints.')
         return self.commit(lambda:self.document.split_edge(edge,fraction))
+
+    def split_segment_into(self,edge,parts):
+        if type(parts) is not int or not 2<=parts<=MAX_SPLIT_PARTS:raise ValueError(f'Split into 2 to {MAX_SPLIT_PARTS} parts.')
+        def apply():
+            current=edge.full()
+            _,end=self.document.edge_vertices(current)
+            for remaining in range(parts,1,-1):
+                point=self.document.split_edge(current,1/remaining)
+                current=EdgeRef(edge.pattern,point.id,end.id,path=edge.path)
+        return self.commit(apply)
 
     def set_point_type(self,point_type,points=None):
         if point_type not in ('CORNER','SMOOTH','AUTO'):raise ValueError('Unknown point type.')
@@ -1841,6 +1885,221 @@ class Session(ConstructionMixin):
         self.clear_selection();self.selected_patterns.add(new.id)
         self.selected,self.path,self.corner=new.id,'OUTER',None
 
+    def offset_path(self,distance):
+        p=self.document.find(self._selected)
+        if p is None or self.path=='OUTER':raise ValueError('Select an internal line to offset.')
+        source=p.path(self.path);nodes=source.vertices;count=len(nodes);copies=[]
+        for index,v in enumerate(nodes):
+            before=nodes[(index-1)%count] if source.closed or index else v
+            after=nodes[(index+1)%count] if source.closed or index<count-1 else v
+            dx,dy=after.x-before.x,after.y-before.y;length=math.hypot(dx,dy)
+            if length<1e-9:raise ValueError('This internal line is too short to offset.')
+            copies.append(Vertex(v.x-dy/length*distance,v.y+dx/length*distance,incoming=v.incoming,outgoing=v.outgoing,point_type=getattr(v,'point_type','CORNER')))
+        path=Path(source.name+' offset',copies,source.closed)
+        self.commit(lambda:p.paths.append(path));self.path,self.corner=path.id,None
+        return path
+
+    def round_corner(self,radius):
+        p=self.document.find(self._selected)
+        if p is None or self.corner is None:raise ValueError('Select a corner to round.')
+        nodes=p.path(self.path).vertices;v=nodes[self.corner];edges=self.document.edges(p.id,self.path)
+        incoming=next((edge for edge in edges if edge.end==v.id),None);outgoing=next((edge for edge in edges if edge.start==v.id),None)
+        if incoming is None or outgoing is None:raise ValueError('The end of an open line cannot be rounded.')
+        before,after=self.document.edge_length(incoming),self.document.edge_length(outgoing)
+        if radius*2>=min(before,after):raise ValueError('This corner is too close to the next point for that radius.')
+        def apply():
+            a=self.document.split_edge(incoming,1-radius/before);b=self.document.split_edge(outgoing,radius/after)
+            nodes.remove(v)
+            a.point_type=b.point_type='CORNER'
+            a.outgoing=((v.x-a.x)*.55,(v.y-a.y)*.55);b.incoming=((v.x-b.x)*.55,(v.y-b.y)*.55)
+        result=self.commit(apply);self.corner=None;self.point_selection=[];return result
+
+    def layer_clone(self,over=True):
+        p=self.document.find(self._selected)
+        if p is None:raise ValueError('Select a piece to layer.')
+        layer=clone_pattern(p,offset=(.03,-.03));layer.name=p.name+' layer'
+        def apply():
+            self.document.patterns.append(layer)
+            sewn={edge.full() for seam in self.document.seams for side in (seam.side(0),seam.side(1)) for edge in side}
+            for first,second in zip(self.document.edges(p.id),self.document.edges(layer.id)):
+                if first not in sewn:self.document.seams.append(Seam(first,second,False))
+            record=p.arrangement
+            if record and record.get('version')==3 and not record['flat']:
+                (layer if over else p).arrangement=dict(record,clearance=(record['clearance'] or 0.0)+.005)
+        result=self.commit(apply)
+        self.clear_selection();self.selected_patterns.add(layer.id)
+        self.selected,self.path,self.corner=layer.id,'OUTER',None
+        return result
+
+    def set_seam_end(self,identity,side,last,fraction):
+        seam=next((s for s in self.document.seams if s.id==identity),None)
+        if seam is None:raise ValueError('That seam no longer exists.')
+        chain=seam.side(side);index=-1 if last else 0;edge=chain[index]
+        moved=EdgeRef(edge.pattern,edge.start,edge.end,edge.t0 if last else fraction,fraction if last else edge.t1,edge.path)
+        if abs(moved.t1-moved.t0)<.005:raise ValueError('A sewn range needs some length.')
+        chain[index]=moved
+        def apply():
+            if side:seam.chain_b=tuple(chain);seam.b=chain[0]
+            else:seam.chain_a=tuple(chain);seam.a=chain[0]
+        return self.commit(apply)
+
+    def set_seam_length(self,identity,side,target):
+        seam=next((s for s in self.document.seams if s.id==identity),None)
+        if seam is None:raise ValueError('That seam no longer exists.')
+        chain=seam.side(side);edge=chain[-1];full=self.document.edge_length(edge.full())
+        span=(target-self.document.chain_length(chain[:-1]))/full
+        direction=1 if edge.t1>=edge.t0 else -1
+        fraction=edge.t0+span*direction
+        if span<=0 or not 0<=fraction<=1:raise ValueError('That length does not fit on this edge.')
+        return self.set_seam_end(identity,side,True,fraction)
+
+    def set_seam_ease(self,identity,side):
+        seam=next((s for s in self.document.seams if s.id==identity),None)
+        if seam is None:raise ValueError('That seam no longer exists.')
+        return self.commit(lambda:setattr(seam,'ease_side',side))
+
+    def set_elastic(self,edge,shrink):
+        def apply():
+            self.document.elastics=[record for record in self.document.elastics if (record['pattern'],record['start'],record['end'])!=(edge.pattern,edge.start,edge.end)]
+            if shrink:self.document.elastics.append(dict(pattern=edge.pattern,start=edge.start,end=edge.end,path=edge.path,shrink=shrink))
+        return self.commit(apply)
+
+    def add_steam(self,records):
+        return self.commit(lambda:self.document.steam.extend(records))
+
+    def clear_steam(self,identity):
+        def apply():
+            self.document.steam=[record for record in self.document.steam if record['pattern']!=identity]
+        return self.commit(apply)
+
+    def slash_spread(self,degrees):
+        p=self.document.find(self._selected)
+        if p is None or self.path=='OUTER':raise ValueError('Select an internal line that reaches the outline at both ends.')
+        path=p.path(self.path)
+        if path.closed:raise ValueError('Use an open internal line.')
+        points=path.points[0],path.points[-1]
+        def locate(point):
+            for edge in self.document.edges(p.id):
+                fraction,distance=curves.closest_fraction(self.document.edge_curve(edge),point)
+                if distance<1e-4:
+                    a,b=self.document.edge_vertices(edge)
+                    if fraction<1e-4:return a
+                    if fraction>1-1e-4:return b
+                    return self.document.split_edge(edge,fraction)
+            raise ValueError('Extend the line to the outline at both ends.')
+        turn=-math.radians(degrees);cos,sin=math.cos(turn),math.sin(turn)
+        def apply():
+            hinge=locate(points[0]);tip=locate(points[1])
+            nodes=p.vertices;start=nodes.index(hinge);order=nodes[start:]+nodes[:start];end=order.index(tip)
+            copy_tip=Vertex(tip.x,tip.y)
+            spin=lambda v:None if v is None else (v[0]*cos-v[1]*sin,v[0]*sin+v[1]*cos)
+            centre=(hinge.x,hinge.y)
+            for v in (*order[1:end],copy_tip):
+                dx,dy=v.x-centre[0],v.y-centre[1]
+                v.x,v.y=centre[0]+dx*cos-dy*sin,centre[1]+dx*sin+dy*cos
+                v.incoming=spin(v.incoming);v.outgoing=spin(v.outgoing)
+            p.vertices=[hinge,*order[1:end],copy_tip,tip,*order[end+1:]]
+            p.paths.remove(path)
+        result=self.commit(apply);self.path,self.corner='OUTER',None;return result
+
+    def add_join(self,first,second):
+        a,b=Anchor(first[0],first[1],first[2],'JOIN'),Anchor(second[0],second[1],second[2],'JOIN')
+        def apply():
+            self.document.anchors.extend((a,b))
+            self.document.joins.append([a.id,b.id])
+        return self.commit(apply)
+
+    def superimpose(self,over=True):
+        p=self.document.find(self._selected)
+        if p is None:raise ValueError('Select a piece first.')
+        partners=[edge.pattern for seam in self.document.seams for side in (0,1) if any(e.pattern==p.id for e in seam.side(1-side)) for edge in seam.side(side) if edge.pattern!=p.id]
+        target=next((self.document.find(identity) for identity in partners if self.document.find(identity).arrangement),None)
+        if target is None or target.arrangement.get('version')!=3:raise ValueError('Sew this piece to an arranged piece first.')
+        record=target.arrangement;raised=dict(record,clearance=(record['clearance'] or 0.0)+.005)
+        def apply():
+            p.arrangement=raised if over else dict(record)
+            if not over:target.arrangement=raised
+        return self.commit(apply)
+
+    def merge_pieces(self,edge):
+        seam=next((s for s in self.document.seams if any(e.full()==edge.full() for side in (0,1) for e in s.side(side))),None)
+        if seam is None or len(seam.side(0))!=1 or len(seam.side(1))!=1:raise ValueError('Sew one whole edge to one whole edge first.')
+        first,second=seam.side(0)[0],seam.side(1)[0]
+        if first.pattern==second.pattern or {round(first.t0,6),round(first.t1,6)}!={0,1} or {round(second.t0,6),round(second.t1,6)}!={0,1}:
+            raise ValueError('Merge needs one whole edge sewn to a whole edge of another piece.')
+        if not seam.reverse:raise ValueError('Reverse this seam before merging.')
+        keep,gone=self.document.find(first.pattern),self.document.find(second.pattern)
+        a0,a1=self.document.edge_vertices(first.full());b0,b1=self.document.edge_vertices(second.full())
+        before,after=(a1.x-a0.x,a1.y-a0.y),(b0.x-b1.x,b0.y-b1.y)
+        if abs(math.hypot(*before)-math.hypot(*after))>.002:raise ValueError('The sewn edges must be the same length to merge.')
+        turn=math.atan2(before[1],before[0])-math.atan2(after[1],after[0]);cos,sin=math.cos(turn),math.sin(turn)
+        spin=lambda v:None if v is None else (v[0]*cos-v[1]*sin,v[0]*sin+v[1]*cos)
+        origin,pivot=(a0.x,a0.y),(b1.x,b1.y)
+        place=lambda x,y:(origin[0]+(x-pivot[0])*cos-(y-pivot[1])*sin,origin[1]+(x-pivot[0])*sin+(y-pivot[1])*cos)
+        def apply():
+            for _,nodes,_,_ in gone.loops():
+                for v in nodes:
+                    v.x,v.y=place(v.x,v.y);v.incoming=spin(v.incoming);v.outgoing=spin(v.outgoing)
+            for anchor in self.document.anchors:
+                if anchor.pattern==gone.id:anchor.x,anchor.y=place(anchor.x,anchor.y);anchor.pattern=keep.id
+            nodes=keep.vertices;start=nodes.index(a1);walk=nodes[start:]+nodes[:start]
+            others=gone.vertices;start=others.index(b1);rest=(others[start:]+others[:start])[1:-1]
+            a0.outgoing=b1.outgoing;a1.incoming=b0.incoming
+            keep.vertices=walk+rest
+            keep.paths.extend(gone.paths);keep.features.extend(gone.features)
+            swap={b0.id:a1.id,b1.id:a0.id}
+            def remap(item):
+                if item.pattern!=gone.id:return item
+                return EdgeRef(keep.id,swap.get(item.start,item.start),swap.get(item.end,item.end),item.t0,item.t1,item.path)
+            self.document.seams.remove(seam)
+            for other in self.document.seams:
+                other.chain_a=tuple(remap(item) for item in other.side(0));other.chain_b=tuple(remap(item) for item in other.side(1))
+                other.a,other.b=other.chain_a[0],other.chain_b[0]
+            self.document.linked_pairs=[pair for pair in self.document.linked_pairs if gone.id not in pair['members']]
+            self.document.patterns.remove(gone)
+        result=self.commit(apply)
+        self.clear_selection();self.selected_patterns.add(keep.id)
+        self.selected,self.path,self.corner=keep.id,'OUTER',None
+        return result
+
+    def auto_sew(self):
+        doc=self.document
+        sewn={edge.full() for seam in doc.seams for side in (0,1) for edge in seam.side(side)}
+        free=[]
+        for pattern in doc.patterns:
+            for edge in doc.edges(pattern.id):
+                if edge in sewn:continue
+                a,b=doc.edge_point(edge,0),doc.edge_point(edge,1)
+                if abs(b[1]-a[1])<abs(b[0]-a[0])*.18:continue
+                free.append((edge,doc.edge_length(edge),(a[1]+b[1])/2))
+        pairs=[];used=set()
+        for index,(edge,length,height) in enumerate(free):
+            if index in used:continue
+            options=[(abs(length-other[1])+abs(height-other[2]),position) for position,other in enumerate(free)
+                     if position>index and position not in used and other[0].pattern!=edge.pattern and abs(length-other[1])<.01 and abs(height-other[2])<.03]
+            if options:
+                match=min(options)[1];used.update((index,match));pairs.append((edge,free[match][0]))
+        if not pairs:raise ValueError('No matching free edges found.')
+        def apply():
+            for first,second in pairs:doc.seams.append(Seam(first,second,True))
+        self.commit(apply)
+        return len(pairs)
+
+    def add_pins(self,items):
+        anchors=[Anchor(pattern,x,y,'PIN') for pattern,x,y in items]
+        if not anchors:raise ValueError('No fabric to pin there.')
+        return self.commit(lambda:self.document.anchors.extend(anchors))
+
+    def pins_in_box(self,a,b,spacing=.02):
+        x0,x1=sorted((a[0],b[0]));y0,y1=sorted((a[1],b[1]));items=[]
+        columns=max(1,round((x1-x0)/spacing));rows=max(1,round((y1-y0)/spacing))
+        for column in range(columns+1):
+            for row in range(rows+1):
+                point=(x0+(x1-x0)*column/columns,y0+(y1-y0)*row/rows)
+                owner=next((pattern for pattern in reversed(self.document.patterns) if pattern.contains(point)),None)
+                if owner:items.append((owner.id,*point))
+        return self.add_pins(items)
+
     def add_anchor(self,point,kind='PIN',target=None,binding=None):
         if not self._selected:raise ValueError('Select a pattern for the anchor.')
         anchor=Anchor(self._selected,*point,kind,target,binding=binding)
@@ -1900,7 +2159,7 @@ def clone_relationships(document,source,target,reverse_outer=False):
         if all(e.pattern==source.id for side in (seam.side(0),seam.side(1)) for e in side):
             try:a,b=[remap(e) for e in seam.side(0)],[remap(e) for e in seam.side(1)]
             except (ValueError,KeyError):continue
-            new=Seam(a[0],b[0],seam.reverse,chain_a=tuple(a),chain_b=tuple(b),shrink=seam.shrink)
+            new=Seam(a[0],b[0],seam.reverse,chain_a=tuple(a),chain_b=tuple(b),shrink=seam.shrink,active=seam.active)
             document.seams.append(new);seam_map[seam.id]=new.id
     for feature in source.features:
         if feature.get('seam') and feature['seam'] not in seam_map:continue

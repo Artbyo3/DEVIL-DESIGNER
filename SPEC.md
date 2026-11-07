@@ -173,9 +173,26 @@ preserve valid pair membership. Designs without pair records remain unchanged.
   simulation: always retain the body and every pre-existing scene collider except
   unchecked kept garments. Preserve kept meshes on Reset and the original path
   when no kept garments exist.
-- Triangle Keep output remains unchanged. Quad-grid conversion is deferred after
-  its seam-preservation prototype failed; a later prototype must lock welded seams
-  before any UI integration. No quad retry is part of the layering implementation.
+- The Keep arrow and the Keep message show the garment's triangle count and, with the avatar
+  counted, its VRChat PC and Quest rank on triangles alone. Thickness doubles the count as an
+  estimate. Other VRChat rank stats are not checked.
+- Number fields accept simple math with + - * / and brackets, as Blender's own fields do.
+- Keep output defaults to triangles. The Keep arrow's opt-in Faces: Quads joins triangle
+  pairs with Blender's Tris to Quads after seams are welded, matching UVs and materials, so
+  welded seams and UVs survive. The result is mostly quads, not a clean quad grid. A
+  seam-locked quad grid stays deferred (#54).
+- Garment and View has a body Friction choice (Slippery, Normal, Grippy). It feeds the
+  solver's body grip and the drape signature.
+- A seam can be switched off from its right-click menu. It stays in the pattern and keeps
+  its sampled points, but its sewing joins are dropped before the solver and its Shrink is
+  ignored. Only the off state is serialized.
+- Fabrics carry four optional values that default to no change: weft stretch and bias
+  stiffness as ratios of the main (warp) stretch, and lengthwise and widthwise shrinkage of
+  up to 30 percent. Pattern Y is the warp. Stretch edges are weighted by their direction in
+  the flat pattern, so the defaults reproduce the previous rest lengths and compliances.
+- Edge and internal edge menus split a segment into 3 or 4 equal parts, or into parts of
+  about 2 or 5 cm, measured along the curve, in one undo step.
+- Pinch and Steam paint along a drag, laying dabs spaced at 0.6 of the dab radius.
 - A garment library that saves the editable design, not only a frozen final mesh.
 - Load a design onto another avatar and refit it: preserve outlines, internal
   features, sewing, material choices, UV layout, and garment-relative arrangement.

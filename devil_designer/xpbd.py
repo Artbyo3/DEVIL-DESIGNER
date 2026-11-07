@@ -17,8 +17,6 @@ SHRINK_RINGS = 8
 SHRINK_FALLOFF = .9
 PIECE_SPACING = 100.0
 SIMULATION_ATTRIBUTES = {'rest_length', 'mass', 'radius', 'velocity', 'external_force', 'static_friction', 'dynamic_friction'}
-BODY_MARGIN = .003
-BODY_GRIP = .3
 BODY_STEP = .01
 LINK_MIN_BENDING = 6.0
 LINK_COMPLIANCE = 1.0e-3
@@ -276,11 +274,13 @@ def attach(context, obj, doc, panels, pieces, maps, plan, pinned, tacks):
     structural = np.empty(count)
     bending = np.empty(count)
     density = np.empty(count)
+    grain = np.empty((count, 4))
     for ids, _, preset in pieces:
         values = resolve_preset(preset, custom)
         structural[ids] = values['structural']
         bending[ids] = values['bending']
         density[ids] = values['density']
+        grain[ids] = values['weft'], values['bias'], values['shrink_weft'], values['shrink_warp']
     edges = np.empty(len(mesh.edges) * 2, dtype=np.int32)
     mesh.edges.foreach_get('vertices', edges)
     edges = edges.reshape(-1, 2)
@@ -292,19 +292,34 @@ def attach(context, obj, doc, panels, pieces, maps, plan, pinned, tacks):
     linked = np.concatenate((np.zeros(len(loose), dtype=bool), np.ones(len(links), dtype=bool)))
     loose = np.concatenate((loose, np.zeros(len(links), dtype=bool)))
     shrink = np.zeros(count)
-    if any(seam.shrink for seam in doc.seams):
-        for vertex, weight in seam_shrink.boundary_weights(doc.seams, maps, plan).items():
+    elastics = [record for record in doc.elastics if record['pattern'] in maps]
+    sewn = [seam for seam in doc.seams if seam.active]
+    if elastics or any(seam.shrink for seam in sewn):
+        for vertex, weight in seam_shrink.boundary_weights(sewn, maps, plan).items():
             shrink[vertex] = weight * SHRINK_GAIN
+        for record in elastics:
+            for _, vertex in maps[record['pattern']].get(record['start'], []):
+                shrink[vertex] = max(shrink[vertex], record['shrink'] / 100 * SHRINK_GAIN)
         spread = edges[~loose]
         for _ in range(SHRINK_RINGS):
             np.maximum.at(shrink, spread[:, 0], shrink[spread[:, 1]] * SHRINK_FALLOFF)
             np.maximum.at(shrink, spread[:, 1], shrink[spread[:, 0]] * SHRINK_FALLOFF)
-    length = np.linalg.norm(rest[edges[:, 0]] - rest[edges[:, 1]], axis=1)
+    for record in doc.steam:
+        for (ids, _, _), panel in zip(pieces, panels):
+            if panel['dd_pattern_id'] == record['pattern']:
+                flat = np.array([tuple(item.vector)[:2] for item in panel.data.attributes['dd_rest'].data])
+                reach = np.linalg.norm(flat - (record['x'], record['y']), axis=1) / record['radius']
+                shrink[ids] += np.clip(1 - reach, 0, 1) ** 2 * record['amount'] * SHRINK_GAIN
+    pair_grain = (grain[edges[:, 0]] + grain[edges[:, 1]]) * .5
+    span = (rest[edges[:, 1]] - rest[edges[:, 0]])[:, :2] * (1 - pair_grain[:, 2:])
+    length = np.linalg.norm(span, axis=1)
+    across, along = (np.square(span / np.maximum(length, 1e-12)[:, None])).T
+    grain_stiffness = along ** 2 + pair_grain[:, 0] * across ** 2 + pair_grain[:, 1] * (1 + pair_grain[:, 0]) * across * along
     length *= 1 - (shrink[edges[:, 0]] + shrink[edges[:, 1]]) * .5
     length[loose] = 0.0
     seam_start = np.linalg.norm(start[edges[:, 0]] - start[edges[:, 1]], axis=1)
     pair_stiffness = (structural[edges[:, 0]] + structural[edges[:, 1]]) * .5
-    compliance = STRETCH_COMPLIANCE * 32.0 / pair_stiffness
+    compliance = STRETCH_COMPLIANCE * 32.0 / (pair_stiffness * np.maximum(grain_stiffness, 1e-3))
     compliance[loose] = SEAM_COMPLIANCE
     compliance[linked] = LINK_COMPLIANCE * (LINK_MIN_BENDING / np.minimum(bending[edges[linked, 0]], bending[edges[linked, 1]])) ** 2
     write(mesh, 'rest_length', 'FLOAT', 'EDGE', length)
@@ -317,8 +332,8 @@ def attach(context, obj, doc, panels, pieces, maps, plan, pinned, tacks):
     write(mesh, 'mass', 'FLOAT', 'POINT', np.maximum(face_masses(mesh, rest, density) * MASS_SCALE, 1e-5))
     write(mesh, 'radius', 'FLOAT', 'POINT', np.full(count, CONTACT_RADIUS / unit))
     write(mesh, 'dd_contact_weight', 'FLOAT', 'POINT', np.where(near_seam, 0.0, 1.0))
-    write(mesh, 'dd_body_margin', 'FLOAT', 'POINT', np.full(count, BODY_MARGIN / unit))
-    write(mesh, 'dd_body_grip', 'FLOAT', 'POINT', np.full(count, BODY_GRIP))
+    write(mesh, 'dd_body_margin', 'FLOAT', 'POINT', np.full(count, scene.dd_skin_offset / unit))
+    write(mesh, 'dd_body_grip', 'FLOAT', 'POINT', np.full(count, scene.dd_friction))
     write(mesh, 'dd_body_step', 'FLOAT', 'POINT', np.full(count, BODY_STEP / unit))
     partner = np.full(count, -1, dtype=np.int32)
     partner[edges[loose, 0]] = edges[loose, 1]

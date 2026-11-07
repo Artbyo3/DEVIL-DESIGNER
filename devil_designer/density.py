@@ -6,9 +6,9 @@ from .meshing import SamplingPlan,edge_counts
 def effective_spacing(pattern,default_spacing):
     if not math.isfinite(default_spacing) or not .003<=default_spacing<=.2:
         raise ValueError('Mesh spacing must be between 3 mm and 20 cm.')
-    if pattern.mesh_density not in ('AUTO','COARSE','STANDARD','FINE'):
+    if pattern.mesh_density not in ('AUTO','COARSE','STANDARD','FINE','ULTRA'):
         raise ValueError('Unknown mesh density.')
-    multiplier={'AUTO':1.0,'COARSE':2.0,'STANDARD':1.0,'FINE':.5}[pattern.mesh_density]
+    multiplier={'AUTO':1.0,'COARSE':2.0,'STANDARD':1.0,'FINE':.5,'ULTRA':.25}[pattern.mesh_density]
     return max(.003,min(.2,default_spacing*multiplier))
 
 

@@ -52,7 +52,7 @@ def check_interaction_regressions(workspace, event, point, check):
         check(not workspace.session.document.patterns, 'one Undo removes the complete starter panel')
         workspace.perform_action('REDO')
         check(len(workspace.session.document.patterns) == 1, 'Redo restores the editable starter panel')
-        workspace.show_card('PIECE')
+        workspace.show_card('PIECE_CLONE')
         controls={row[0] for rect,row in workspace.minimal_card()[2]}
         check({'CLONE_LINKED','TOGGLE_LINKED'}<=controls and 'CLONE_BACK' not in controls,
               'piece menu offers explicit linked clone and toggle without an unarranged Back action')
@@ -175,6 +175,8 @@ def check_interaction_regressions(workspace, event, point, check):
         seam = workspace.session.document.seams[0]
         workspace.persist()
         workspace.choose_tool('SELECT')
+        check(not workspace.seam_badges(), 'Select hides seam badges until a seam is hovered')
+        workspace.seam_hover = seam.id
         badge = workspace.seam_badges()[0][0]
         workspace.selected_anchor = 'old-anchor'
         workspace.card_kind = None
@@ -314,11 +316,11 @@ def check_interaction_regressions(workspace, event, point, check):
         workspace.session=Session()
         workspace.session.add([(0,0),(1,0),(1,1),(0,1)])
         workspace.persist();workspace.fit()
-        workspace.show_card('INTERNAL_CHOOSER')
-        knife_rows=[row[0] for rect,row in workspace.minimal_card()[2]]
-        check(knife_rows.index('SET_INTERNAL_KNIFE')==knife_rows.index('SET_INTERNAL_DART')+1,
+        workspace.choose_tool('INTERNAL')
+        knife_rows=[item[0] for item in workspace.tool_strip()]
+        check(knife_rows.index('KNIFE_MODE_SEW')==knife_rows.index('SET_INTERNAL_DART')+1,
               'Cut sits beside Dart in the existing Internal tool choices')
-        workspace.minimal_action('SET_INTERNAL_KNIFE')
+        workspace.minimal_action('KNIFE_MODE_SEW')
         check(workspace.tool=='KNIFE' and workspace.knife_sew and workspace.card_kind is None,
               'Cut starts in Cut and Sew mode and dismisses the menu')
         workspace.choose_tool('SELECT')
@@ -416,7 +418,7 @@ def check_interaction_regressions(workspace, event, point, check):
             workspace.handle_event(bpy.context, event('RIGHTMOUSE', edge_point))
             check(workspace.card_kind == 'INTERNAL_EDGE' and workspace.session.path == internal_path.id,
                   'right click preserves the selected ' + ('closed' if internal_path.closed else 'open') + ' internal edge path')
-            controls = {row[0] for rect, row in workspace.minimal_card()[2]}
+            controls = {key for rect, row in workspace.minimal_card()[2] for key in (row[:3] if row[0] == 'PAIR_ACTIONS' else row[:1])}
             check({'SPLIT', 'CUT'} <= controls and ('TRACE' in controls) == internal_path.closed,
                   'internal edge context exposes cut and split with Trace only for a closed shape')
         workspace.perform_action('TRACE')
@@ -497,7 +499,7 @@ def check_interaction_regressions(workspace, event, point, check):
             workspace.session.corner = corner
             workspace.session.point_selection = [0, 1]
             workspace.show_card('PIECE', point)
-            check(any(row[0] == 'PAIR_ACTIONS' and 'DELETE_PIECE' in row[1:3] for rect, row in workspace.minimal_card()[2]),
+            check(any(row[0] == 'DELETE_PIECE' for rect, row in workspace.minimal_card()[2]),
                   'the piece card exposes an explicit whole-piece deletion action')
             before_delete = workspace.session.document.dumps()
             workspace.minimal_action('DELETE_PIECE')
@@ -557,8 +559,8 @@ def check_interaction_regressions(workspace, event, point, check):
             workspace.show_card('PIECE')
             menu_rect = next(rect for rect, row in workspace.minimal_card()[2] if row[0] == 'MENU' and row[1] == 'PIECE_SIMULATION_MENU')
             workspace.handle_event(bpy.context, event('LEFTMOUSE', (menu_rect.x + menu_rect.w / 2, menu_rect.y + menu_rect.h / 2)))
-            check(workspace.card_kind == 'PIECE_SIMULATION', 'piece simulation submenu remains open after its cursor-anchored menu click')
-            action_rect = next(rect for rect, row in workspace.minimal_card()[2] if row[0] == 'TOGGLE_STATE_' + flag)
+            check(workspace.sub_card == 'PIECE_SIMULATION', 'piece simulation submenu remains open after its cursor-anchored menu click')
+            action_rect = next(rect for rect, row in workspace.visible_cards()[-1][2] if row[0] == 'TOGGLE_STATE_' + flag)
             workspace.handle_event(bpy.context, event('LEFTMOUSE', (action_rect.x + action_rect.w / 2, action_rect.y + action_rect.h / 2)))
             check(workspace.card_kind is None and getattr(workspace.session.document.patterns[0], flag), flag + ' is undoable and dismisses directly to the canvas')
         for index in range(3):
@@ -606,8 +608,10 @@ def check_interaction_regressions(workspace, event, point, check):
         workspace.renderer.draw(workspace)
         check(not workspace.error_message,
               'canvas draw with unselected twin renders without KeyError a and preserves pattern rendering')
+        workspace.seam_hover = workspace.session.document.seams[0].id
         check(len(workspace.seam_badges()) > 0,
               'seam badges and paired pills render alongside pattern pieces')
+        workspace.seam_hover = None
         check_seam_focus(workspace, check)
 
         edge1_other = workspace.session.document.edges(p1.id)[1]
@@ -627,7 +631,7 @@ def check_interaction_regressions(workspace, event, point, check):
             workspace.renderer.draw(workspace)
             check(not workspace.error_message, f'{tool} tool draw path renders without error')
 
-        for card in ('PIECE', 'SEAM', 'BODY', 'SETTINGS', 'LIBRARY'):
+        for card in ('PIECE', 'PIECE_CLONE', 'PIECE_PLACEMENT', 'STARTERS', 'SEAM', 'BODY', 'SETTINGS', 'LIBRARY'):
             workspace.show_card(card)
             workspace.error_message = ''
             workspace.renderer.draw(workspace)
@@ -695,7 +699,7 @@ def check_interaction_regressions(workspace, event, point, check):
         check(workspace.card_kind == 'SEAM_WARNING',
               'draw coverage opens the real pre-commit seam warning')
         draw_selection_state('Seam warning before confirmation')
-        for card in ('SELECT_MENU', 'TRANSFORM_MENU'):
+        for card in ('TRANSFORM_MENU',):
             workspace.show_card(card)
             draw_selection_state(card)
         workspace.cancel_transform()
@@ -886,7 +890,7 @@ def check_arrangement_controls(workspace,event,check):
             return next(panel for panel in garment.generated(scene,'panel') if panel['dd_pattern_id']==identity)
         live().location.x+=.02;bpy.context.view_layer.update();live_panels.capture(bpy.context)
         before=dict(workspace.session.document.find(identity).arrangement)
-        workspace.show_card('PIECE')
+        workspace.show_card('PIECE_PLACEMENT')
         offered={row[2][0] if row[0]=='CHOICES' else row[0] for rect,row in workspace.minimal_card()[2]}
         check({'PLACE_SHAPE','PLACE_DISTANCE','PLACE_OVERLAP'}<=offered,'piece menu offers Wrap / Flat, distance and overwrap for an arranged piece')
         workspace.error_message='';workspace.renderer.draw(workspace)
@@ -954,7 +958,7 @@ def check_arrangement_controls(workspace,event,check):
         def downgrade():
             workspace.session.document.find(identity).arrangement=legacy
         workspace.run_edit(lambda:workspace.session.commit(downgrade),'Older arrangement restored for upgrade check.')
-        workspace.show_card('PIECE')
+        workspace.show_card('PIECE_PLACEMENT')
         check(any(row[0]=='PLACE_UPGRADE' for rect,row in workspace.minimal_card()[2]),'older arrangements offer an explicit body-checked wrap upgrade')
         workspace.minimal_action('PLACE_UPGRADE')
         upgraded=workspace.session.document.find(identity).arrangement
@@ -1132,8 +1136,8 @@ def run():
                   'a local numeric design edit is one undoable operation')
 
             button('KEEP_OPTIONS')
-            check(len(workspace.minimal_card()[2]) == 2 and not any(row[0] == 'SLIDER' for rect, row in workspace.minimal_card()[2]),
-                  'Keep uses Auto weld and named thickness, without a premature manual tolerance')
+            check(len(workspace.minimal_card()[2]) == 3 and not any(row[0] == 'SLIDER' for rect, row in workspace.minimal_card()[2]),
+                  'Keep uses Auto weld, named thickness and faces, without a premature manual tolerance')
             thickness_rect = workspace.minimal_card()[2][1][0]
             click((thickness_rect.x + thickness_rect.w / 6, thickness_rect.y + 16))
             check(scene.dd_thickness == THICKNESS['None'], 'None thickness is a named finalize choice')

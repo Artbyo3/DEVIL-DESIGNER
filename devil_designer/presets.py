@@ -1,3 +1,6 @@
+import math
+
+
 PRESETS = {
     'SILK': dict(structural=12.3, bending=0.55, density=0.07),
     'KNIT': dict(structural=7.1, bending=0.95, density=0.17),
@@ -8,7 +11,23 @@ PRESETS = {
 }
 
 
+FABRIC_DEFAULTS = dict(weft=1.0, bias=1.0, shrink_warp=0.0, shrink_weft=0.0)
+REQUIRED = {'structural', 'bending', 'density'}
+SHRINK_LIMIT = .3
+
+
+def valid_fabric(values):
+    if not isinstance(values, dict) or not REQUIRED <= set(values) <= REQUIRED | set(FABRIC_DEFAULTS):
+        return False
+    for key, value in values.items():
+        if type(value) not in (int, float) or not math.isfinite(value):
+            return False
+        if key.startswith('shrink_') and abs(value) > SHRINK_LIMIT or not key.startswith('shrink_') and value <= 0:
+            return False
+    return True
+
+
 def resolve_preset(name, custom_presets=None):
     if custom_presets and name in custom_presets:
-        return dict(custom_presets[name])
-    return dict(PRESETS.get(name, PRESETS['COTTON']))
+        return {**FABRIC_DEFAULTS, **custom_presets[name]}
+    return {**FABRIC_DEFAULTS, **PRESETS.get(name, PRESETS['COTTON'])}

@@ -111,6 +111,29 @@ def transfer(rest, positions, faces, target):
     return mapped
 
 
+def carry(rest, positions, faces, target):
+    from mathutils import Vector
+    from mathutils.bvhtree import BVHTree
+    from mathutils.geometry import barycentric_transform
+    triangles = [face for face in faces if len(face) == 3]
+    low = [min(point[axis] for point in rest) for axis in (0, 1)]
+    high = [max(point[axis] for point in rest) for axis in (0, 1)]
+    target_low = [min(point[axis] for point in target) for axis in (0, 1)]
+    target_high = [max(point[axis] for point in target) for axis in (0, 1)]
+    moved = all(abs((high[axis] - low[axis]) - (target_high[axis] - target_low[axis])) < 1e-4 for axis in (0, 1))
+    shift = Vector((low[0] - target_low[0], low[1] - target_low[1], 0)) if moved else Vector((0, 0, 0))
+    ratios = [(high[axis] - low[axis]) / max(1e-6, target_high[axis] - target_low[axis]) for axis in (0, 1)]
+    if all(abs(ratio - 1) > .03 for ratio in ratios):
+        target = [(low[0] + (point[0] - target_low[0]) * ratios[0], low[1] + (point[1] - target_low[1]) * ratios[1], 0.0) for point in target]
+    tree = BVHTree.FromPolygons([Vector(point) for point in rest], triangles)
+    mapped = []
+    for point in target:
+        source = Vector(point) + shift
+        face = triangles[tree.find_nearest(source)[2]]
+        mapped.append(tuple(barycentric_transform(source, *(Vector(rest[index]) for index in face), *(Vector(positions[index]) for index in face))))
+    return mapped
+
+
 def apply_states(document, simulation):
     from . import xpbd
     indices = piece_indices(simulation)

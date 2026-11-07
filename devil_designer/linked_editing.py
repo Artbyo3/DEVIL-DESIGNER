@@ -117,6 +117,27 @@ def split_partner(document,edge,fraction,vertex):
     else:pair['mapping'][created.id]=vertex.id
 
 
+def mirror_seam(document,seam):
+    from .core import EdgeRef,Seam
+    def twin_edge(edge):
+        pair=pair_for(document,edge.pattern)
+        if not pair or not pair['enabled']:return edge
+        first,second=pair['members'];forward=edge.pattern==first
+        mapping=pair['mapping'] if forward else {value:key for key,value in pair['mapping'].items()}
+        if edge.start not in mapping or edge.end not in mapping:return None
+        candidate=EdgeRef(second if forward else first,mapping[edge.start],mapping[edge.end],edge.t0,edge.t1,mapping.get(edge.path,edge.path))
+        try:document.edge_vertices(candidate);return candidate
+        except ValueError:
+            return EdgeRef(candidate.pattern,candidate.end,candidate.start,1-candidate.t0,1-candidate.t1,candidate.path)
+    sides=[[twin_edge(edge) for edge in seam.side(side)] for side in (0,1)]
+    if any(edge is None for side in sides for edge in side) or sides==[seam.side(0),seam.side(1)]:return None
+    try:
+        for side in sides:
+            for edge in side:document.edge_vertices(edge)
+    except ValueError:return None
+    return Seam(sides[0][0],sides[1][0],seam.reverse,chain_a=tuple(sides[0]),chain_b=tuple(sides[1]),shrink=seam.shrink)
+
+
 def _pair_transform(source,target):
     source_points=source.outline();target_points=target.outline()
     source_center=[(min(point[axis] for point in source_points)+max(point[axis] for point in source_points))/2 for axis in (0,1)]

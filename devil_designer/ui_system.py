@@ -23,6 +23,8 @@ except ImportError:
         def contains(self, x, y):
             return self.x <= x <= self.x + self.w and self.y <= y <= self.y + self.h
 
+MENU_CARDS = {'CANVAS_MENU', 'PIECE_SIMULATION', 'PIECE_DENSITY', 'PIECE_PLACEMENT', 'PIECE_CLONE', 'STARTERS', 'LIBRARY_TAGS',
+              'PIECE', 'EDGE', 'POINT', 'INTERNAL_EDGE', 'SEAM', 'ANCHOR', 'MULTI_SELECTION', 'FOLD', 'KEEP', 'SIMULATE'}
 BG_BASE = (0.098, 0.114, 0.133, 1.0)
 BG_ELEVATED = (0.188, 0.220, 0.251, 1.0)
 BG_WELL = (0.078, 0.094, 0.110, 1.0)
@@ -158,22 +160,20 @@ class ComponentRenderer:
         if blf:
             blf.size(0, 10 * s)
             tw = blf.dimensions(0, tooltip.text)[0]
-            sw = blf.dimensions(0, tooltip.shortcut)[0] + 12 * s if tooltip.shortcut else 0.0
+            kw = blf.dimensions(0, tooltip.shortcut)[0] if tooltip.shortcut else 0.0
         else:
             tw = len(tooltip.text) * 7 * s
-            sw = len(tooltip.shortcut) * 7 * s if tooltip.shortcut else 0.0
-        w = tw + sw + 18 * s
-        h = 24 * s
+            kw = len(tooltip.shortcut) * 7 * s if tooltip.shortcut else 0.0
+        w = tw + (kw + 14 * s if tooltip.shortcut else 0.0) + 24 * s
+        h = 30 * s
 
-        r = Rect(x + 10 * s, y - h / 2, w, h)
-        draw_ctx.round_rect(r, (0.08, 0.10, 0.12, 0.95), radius=metrics.tooltip if metrics else RADIUS_CONTROL)
-        draw_ctx.round_rect_outline(r, BORDER_SUBTLE, radius=metrics.tooltip if metrics else RADIUS_CONTROL, width=1.0)
-        draw_ctx.text(r.x + 8 * s, r.y + 6 * s, tooltip.text, 10, TEXT_PRIMARY)
-
+        r = Rect(x, y - h / 2, w, h)
+        radius = metrics.menu_back if metrics else RADIUS_CONTROL
+        draw_ctx.round_rect(r, SURFACE_FLOATING, radius=radius)
+        draw_ctx.round_rect_outline(r, SURFACE_OUTLINE, radius=radius)
+        draw_ctx.text(r.x + 12 * s, r.y + 11 * s, tooltip.text, 10, TEXT_PRIMARY)
         if tooltip.shortcut:
-            pill_r = Rect(r.x + r.w - sw - 4 * s, r.y + 3 * s, sw, 18 * s)
-            draw_ctx.round_rect(pill_r, BG_ELEVATED, radius=metrics.box if metrics else RADIUS_BADGE)
-            draw_ctx.text(pill_r.x + pill_r.w / 2, pill_r.y + 4 * s, tooltip.shortcut, 9, ACCENT, center=True)
+            draw_ctx.text(r.x + r.w - 12 * s - kw, r.y + 11 * s, tooltip.shortcut, 10, TEXT_MUTED)
 
 ARRANGEMENT_POINT_DIAMETER = 18.0
 ARRANGEMENT_POINT_BODY_FRACTION = .03

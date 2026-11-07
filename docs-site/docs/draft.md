@@ -21,13 +21,14 @@ Use these tools to create and edit garment pattern pieces. A Bezier curve is a s
 | **Cut Knife** | <kbd>N</kbd> | Cut a piece, with or without a seam along the cut. |
 | **Dart** | <kbd>D</kbd> | Add a tapered dart to a piece. |
 | **Sew** | <kbd>J</kbd> | Connect complete edges. |
-| **Free Sewing** | <kbd>Shift</kbd> + <kbd>J</kbd> in 3D | Connect part of an edge in the revealed 3D Viewport. |
+| **Free Sewing** | <kbd>Shift</kbd> + <kbd>J</kbd> | Connect part of an edge on the 2D canvas or in the revealed 3D Viewport. |
 | **Pin / Tack** | <kbd>K</kbd> / <kbd>T</kbd> | Hold a piece in place or attach it to the avatar. |
 | **Corner / Curve** | <kbd>C</kbd> | Cycle Corner, Smooth, and Auto. |
-| **Split Segment** | <kbd>Q</kbd> | Add a point on an edge. |
+| **Split Segment** | <kbd>Q</kbd> | Add a point on an edge. Right-click an edge and use **Split into** for 3 or 4 equal parts, or a point every 2 or 5 cm. |
 | **Merge Points** | <kbd>M</kbd> | Join two neighboring selected points. |
 | **Unfold** | <kbd>U</kbd> | Mirror a piece across a straight edge. |
 | **Mirror with Seam** | <kbd>Shift</kbd> + <kbd>U</kbd> | Make a separate mirrored piece and connect the edges. |
+| **Simulate / Pause** | <kbd>Space</kbd> | Start or pause the drape with the pointer over the editor. |
 | **Lengths Toggle** | <kbd>L</kbd> | Show or hide edge lengths in centimetres. |
 | **Duplicate** | <kbd>Shift</kbd> + <kbd>D</kbd> | Copy selected pieces or the active piece. |
 | **Delete** | <kbd>X</kbd> or <kbd>Del</kbd> | Remove the selected item. |
@@ -36,7 +37,7 @@ Use these tools to create and edit garment pattern pieces. A Bezier curve is a s
 | **Pan / Zoom** | <kbd>MMB</kbd> / Wheel | Move around or zoom the canvas. |
 | **Fit Design** | <kbd>Home</kbd> | Show all pattern pieces in the canvas. |
 | **Avatar Guide** | <kbd>H</kbd> | Show or hide the avatar guide. |
-| **Cancel / Exit** | <kbd>Escape</kbd> | Cancel the current action, close a menu, or exit the editor. |
+| **Cancel / Exit** | <kbd>Escape</kbd> | Cancel the current action, close a menu, or clear the selection. Use the X to close the editor. |
 
 ## Bezier Curve Editing & Numeric Accuracy
 
@@ -64,15 +65,27 @@ Select a straight edge and press <kbd>Shift</kbd> + <kbd>U</kbd> to make a separ
 
 ## Linked Editing
 
-Right-click a piece and choose **Clone as linked twin** to make a mirrored copy. Changes to either linked piece are reflected in the other. Turn **Linked twin** off when you want to edit the pieces separately.
+Right-click a piece and choose **Clone > Clone as linked twin** to make a mirrored copy. Changes to either linked piece are reflected in the other. Turn **Linked twin** off when you want to edit the pieces separately.
 
 ## Internal Lines, Cuts, Slits, & Darts
 
 Press <kbd>I</kbd> to draw inside a selected piece. Closed shapes can be cut out or traced as a separate piece. Use **Cut along path** on a line to split the piece or make a slit.
 
+### Offset, Rounded Corners & Layers
+
+Right-click an internal line for **Offset copy**. Open **Transform** on a piece for an offset copy of its outline. Right-click a corner for **Round corner**. Open **Clone** on a piece for **Layer over** or **Layer under**, which adds a copy sewn around its outline for linings and collars.
+
+### Slash and Spread
+
+Draw an internal line from one edge of a piece to the opposite edge. Right-click it and choose an angle under **Slash and spread** to open the piece into a flare from the line's first point.
+
+### Draw in 3D
+
+Click the Internal tool and choose **On garment**, click points on the draped cloth, then press <kbd>Enter</kbd> to add an internal line. Click the Draw tool and choose **On avatar**, click around an area of the body, then press <kbd>Enter</kbd> to make a new piece. It flattens the shape, so very curved areas come out approximate.
+
 ### Internal Shapes & Holes
 
-Draw a closed shape inside a piece. Right-click it and choose **Cut along path** to make a hole, or **Trace as piece** to make a separate piece.
+Draw a closed shape inside a piece. Right-click it and choose **Cut out hole** to make a hole, or **Trace as piece** to make a separate piece.
 
 ### Cut Knife (<kbd>N</kbd>)
 

@@ -56,7 +56,7 @@
 - Eliminates split-attention friction: the artist interacts directly where their cursor is positioned.
 - Pure canvas interaction: left-clicking or selecting any piece, seam badge, point, edge, or internal path highlights it cleanly without auto-opening popovers or card overlays.
 - Focused Right-Click Contextual Menus: right-clicking any entity opens a compact, contextual menu directly anchored at the cursor:
-  1. Piece right-click: piece dimensions, Fabric override submenu (Cotton, Linen, Denim, Silk, Leather, Knit), Mesh density override submenu (Coarse, Standard, Fine), Duplicate, Mirror, Unfold, Delete piece.
+  1. Piece right-click: piece dimensions, Fabric override submenu (Cotton, Linen, Denim, Silk, Leather, Knit), Mesh density override submenu (Coarse, Standard, Fine), Simulation submenu, Placement submenu, Clone submenu (Duplicate, Mirror, linked twin), Transform submenu, Delete piece. New piece features go inside these submenus.
   2. Seam badge right-click: length mismatch stats (cm & %), Reverse seam, Remove seam.
   3. Point right-click: corner/curve toggle, exact numeric X/Y coordinate sliders, Merge selected points (when multiple points selected).
   4. Edge right-click: exact length slider, Split edge, Unfold, Mirror.
@@ -64,7 +64,7 @@
   6. Pin/Tack right-click: attached pattern name, Remove tack / Remove pin.
   7. Empty canvas right-click: Body selector submenu, Garment default fabric chips, Garment mesh density chips, Simulation quality chips, Guide opacity chips, Fit design.
 - Quick auto-dismissal: executing any action in a contextual menu immediately completes the action and dismisses the menu back to pure canvas. Pressing Escape or clicking outside also instantly dismisses the menu.
-- Reduced left dock: 9 tools (Select, Draw, Internal, Sew, Pin, Grab, Undo, Redo, Library) with micro-toggles for Snapping [S], Body guide [H], and Lengths [L]. Shortcuts P, R, E, I, D, K, T, V, J, S, H, L remain fully functional.
+- Reduced left dock: 9 tools (Select, Draw, Internal, Sew, Pin, Grab, Undo, Redo, Library) with micro-toggles for Snapping [S], Body guide [H], and Lengths [L]. Tools with options show a corner mark; hovering it opens its flyout beside the dock after Blender's submenu delay, a click selects the tool, and the flyout closes after a choice, on a click elsewhere, or on Escape. New tool variants go in the flyout and the dock does not grow. The revealed editor panel moves by its top bar and resizes by its borders, with a minimum size. Shortcuts P, R, E, I, D, K, T, V, J, Shift+J, S, H, L remain fully functional.
 - Keep mesh retains its options menu (Auto weld and Thickness). Simulate directly starts drape.
 - Grab works on the draped cloth while it simulates, with a Pull/Push toggle and a radius control in its strip.
 

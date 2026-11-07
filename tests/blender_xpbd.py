@@ -153,8 +153,7 @@ def test_live_grab(scene):
     run_frames(scene, 20)
     check(all(math.isfinite(value) for value in points(simulation).ravel()), 'cloth keeps simulating after release')
     grab = xpbd_live.ClothGrab(simulation)
-    grab.toggle_mode()
-    check(grab.mode == xpbd_live.PUSH, 'mode toggles to Push')
+    grab.mode = xpbd_live.PUSH
     press = Vector(points(simulation)[index].tolist())
     grab.begin(bpy.context, index, press, Vector((0, -1, 0)), Vector((0, 1, 0)))
     grab.drag(press + Vector((.05, -2, 0)), Vector((0, 1, 0)))

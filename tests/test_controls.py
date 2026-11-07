@@ -34,6 +34,21 @@ class IconTests(unittest.TestCase):
             self.assertGreater(len(levels), 3)
             self.assertEqual(max(levels), 32)
 
+    def test_number_fields_accept_simple_math(self):
+        from devil_designer.controls import evaluate
+        for text, expected in (('12', 12), ('1,5', 1.5), ('007', 7), ('120/2', 60), ('10+2*3', 16), ('(10+2)*3', 36), ('-4+1', -3), ('1e2', 100), ('0.5*4', 2)):
+            self.assertEqual(evaluate(text), expected, text)
+        for text in ('', '1/0', '2**8', 'abc', '__import__("os")', '1+', '(1'):
+            with self.assertRaises((ValueError, SyntaxError, ZeroDivisionError), msg=text):
+                evaluate(text)
+
+    def test_vrchat_triangle_ranks_use_the_published_limits(self):
+        from devil_designer.budget import PC_RANKS, QUEST_RANKS, rank
+        for count, ranks, expected in ((32000, PC_RANKS, 'Excellent'), (32001, PC_RANKS, 'Good'), (70000, PC_RANKS, 'Good'),
+                                       (70001, PC_RANKS, 'Very Poor'), (7500, QUEST_RANKS, 'Excellent'), (10000, QUEST_RANKS, 'Good'),
+                                       (15000, QUEST_RANKS, 'Medium'), (20000, QUEST_RANKS, 'Poor'), (20001, QUEST_RANKS, 'Very Poor')):
+            self.assertEqual(rank(count, ranks), expected, count)
+
     def test_icon_data_is_cached(self):
         self.assertIs(icon_geometry(), icon_geometry())
 
