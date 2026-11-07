@@ -20,13 +20,14 @@ def on_load(_):
 
 classes = (DD_OT_pattern_editor,DD_OT_viewport_seam_action)+CLASSES
 PROPERTIES = ('dd_document','dd_history','dd_collection','dd_avatar','dd_spacing','dd_clearance',
-              'dd_quality','dd_self_collision','dd_pin_top','dd_weld_distance','dd_thickness',
+              'dd_quality','dd_self_collision','dd_pin_top','dd_weld_distance','dd_thickness','dd_skin_offset','dd_friction','dd_keep_quads',
               'dd_ui_rect','dd_reference_visible','dd_reference_view',
               'dd_reference_opacity','dd_reference_x','dd_reference_y','dd_reference_placed',
               'dd_point_x','dd_point_y','dd_segment_length',
               'dd_sew_a0','dd_sew_a1','dd_sew_b0','dd_sew_b1','dd_free_sewing','dd_sew_reverse','dd_internal_mode',
               'dd_lengths_visible','dd_measure_visible','dd_library_name','dd_library_dir','dd_library_selected','dd_library_refit','dd_fabric',
-              'dd_fabric_structural','dd_fabric_bending','dd_fabric_density')
+              'dd_fabric_structural','dd_fabric_bending','dd_fabric_density',
+              'dd_fabric_weft','dd_fabric_bias','dd_fabric_shrink_warp','dd_fabric_shrink_weft')
 
 
 def register():
@@ -59,6 +60,10 @@ def register():
     Scene.dd_fabric_structural = bpy.props.FloatProperty(name='Stretch stiffness',default=25.0,min=0.1,max=500.0,precision=2)
     Scene.dd_fabric_bending = bpy.props.FloatProperty(name='Bending stiffness',default=0.5,min=0.001,max=120.0,precision=3)
     Scene.dd_fabric_density = bpy.props.FloatProperty(name='Mass density',default=0.3,min=0.01,max=10.0,precision=3)
+    Scene.dd_fabric_weft = bpy.props.FloatProperty(name='Weft stretch',default=1.0,min=0.05,max=4.0,precision=2)
+    Scene.dd_fabric_bias = bpy.props.FloatProperty(name='Bias stiffness',default=1.0,min=0.05,max=4.0,precision=2)
+    Scene.dd_fabric_shrink_warp = bpy.props.FloatProperty(name='Shrink lengthwise',default=0.0,min=-0.3,max=0.3,precision=3)
+    Scene.dd_fabric_shrink_weft = bpy.props.FloatProperty(name='Shrink widthwise',default=0.0,min=-0.3,max=0.3,precision=3)
     Scene.dd_document = bpy.props.StringProperty(name='Pattern document',default='')
     Scene.dd_collection = bpy.props.PointerProperty(type=bpy.types.Collection)
     from . import live_panels,arrangement_controls
@@ -70,6 +75,9 @@ def register():
     Scene.dd_pin_top = bpy.props.BoolProperty(name='Pin highest panel points',default=False)
     Scene.dd_weld_distance = bpy.props.FloatProperty(name='Seam weld distance (m)',default=.01,min=.0001,max=.05,precision=4)
     Scene.dd_thickness = bpy.props.FloatProperty(name='Final thickness (m)',default=.001,min=0,max=.01,precision=4)
+    Scene.dd_skin_offset = bpy.props.FloatProperty(name='Skin offset (m)',default=.003,min=.0005,max=.02,precision=4)
+    Scene.dd_friction = bpy.props.FloatProperty(name='Body friction',default=.3,min=0,max=1,precision=2)
+    Scene.dd_keep_quads = bpy.props.BoolProperty(name='Keep as quads',default=False)
     for cls in classes:
         bpy.utils.register_class(cls)
     live_panels.register()

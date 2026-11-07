@@ -24,20 +24,30 @@ def entries(scene):
     return sorted(path.glob('*.garment.json'),key=lambda p:p.name.casefold()) if path.exists() else []
 
 
-def scale_document(doc,factor):
-    for pair in doc.linked_pairs:pair['transform']=[value*factor for value in pair['transform']]
+def body_girth(scene):
+    from .measurements import estimate_body_measurements
+    measurements=estimate_body_measurements(scene.dd_avatar,scene)
+    return measurements['chest']/100 if measurements else 0
+
+
+def scale_document(doc,factor,vertical=None):
+    vertical=factor if vertical is None else vertical
+    for pair in doc.linked_pairs:pair['transform']=[pair['transform'][0]*factor,pair['transform'][1]*vertical]
     for p in doc.patterns:
         for _,nodes,_,_ in p.loops():
             for v in nodes:
-                v.x*=factor;v.y*=factor
-                if v.incoming is not None:v.incoming=tuple(x*factor for x in v.incoming)
-                if v.outgoing is not None:v.outgoing=tuple(x*factor for x in v.outgoing)
+                v.x*=factor;v.y*=vertical
+                if v.incoming is not None:v.incoming=(v.incoming[0]*factor,v.incoming[1]*vertical)
+                if v.outgoing is not None:v.outgoing=(v.outgoing[0]*factor,v.outgoing[1]*vertical)
         p.wrap_radius*=factor
-        if p.panel_origin:p.panel_origin['bounds']=[value*factor for value in p.panel_origin['bounds']]
-    for a in doc.anchors:a.x*=factor;a.y*=factor
+        if p.panel_origin:
+            left,bottom,right,top=p.panel_origin['bounds']
+            p.panel_origin['bounds']=[left*factor,bottom*vertical,right*factor,top*vertical]
+    for a in doc.anchors:a.x*=factor;a.y*=vertical
+    for record in doc.steam:record.update(x=record['x']*factor,y=record['y']*vertical,radius=record['radius']*max(factor,vertical))
     if doc.uv_layout:
-        doc.uv_layout['origin']=[x*factor for x in doc.uv_layout['origin']]
-        doc.uv_layout['scale']*=factor
+        doc.uv_layout['origin']=[doc.uv_layout['origin'][0]*factor,doc.uv_layout['origin'][1]*vertical]
+        doc.uv_layout['scale']*=max(factor,vertical)
     doc.validate()
 
 
@@ -92,6 +102,7 @@ def save(context,name,tags=()):
     if scene.dd_avatar:
         low,high=garment.bounds(scene.dd_avatar)
         data['body_height_m']=(high.z-low.z)*garment.metres_per_unit(scene)
+        data['body_girth_m']=body_girth(scene)
         identities={pattern.id for pattern in doc.patterns}
         for panel in garment.generated(scene,'panel'):
             if panel.get('dd_pattern_id') not in identities:continue
@@ -99,7 +110,7 @@ def save(context,name,tags=()):
             point=panel.matrix_world.translation
             data['panels'].append(dict(pattern=panel['dd_pattern_id'],position=[(point[i]-low[i])/max(1e-6,high[i]-low[i]) for i in range(3)],
                 orientation=[list(row) for row in panel.matrix_world.to_3x3()]))
-    data['settings']={key:getattr(scene,key) for key in ('dd_spacing','dd_quality','dd_self_collision','dd_pin_top','dd_weld_distance','dd_thickness')}
+    data['settings']={key:getattr(scene,key) for key in ('dd_spacing','dd_quality','dd_self_collision','dd_pin_top','dd_weld_distance','dd_thickness','dd_friction','dd_keep_quads')}
     output=directory(scene,True)/(safe+'.garment.json')
     temporary=output.with_suffix('.tmp')
     temporary.write_text(json.dumps(data,indent=2,allow_nan=False),encoding='utf-8')
@@ -126,8 +137,8 @@ def load(context,index):
         if type(height) not in (int,float) or not math.isfinite(height) or height<0:raise ValueError('Invalid stored body height.')
         settings=data.get('settings',{})
         if not isinstance(settings,dict):raise ValueError('Invalid stored garment settings.')
-        supported=('dd_spacing','dd_quality','dd_self_collision','dd_pin_top','dd_weld_distance','dd_thickness')
-        float_bounds={'dd_spacing':(.003,.2),'dd_weld_distance':(.0001,.05),'dd_thickness':(0,.01)}
+        supported=('dd_spacing','dd_quality','dd_self_collision','dd_pin_top','dd_weld_distance','dd_thickness','dd_friction','dd_keep_quads')
+        float_bounds={'dd_spacing':(.003,.2),'dd_weld_distance':(.0001,.05),'dd_thickness':(0,.01),'dd_friction':(0,1)}
         settings={key:value for key,value in settings.items() if key in supported}
         for key,value in settings.items():
             prop=scene.bl_rna.properties[key]
@@ -160,7 +171,9 @@ def load(context,index):
             if scene.dd_library_refit and height>1e-6:
                 factor=(high.z-low.z)*garment.metres_per_unit(scene)/height
                 if not .05<factor<20:raise ValueError('Avatar scale differs too much. Correct the scene/body units before refitting.')
-                scale_document(doc,factor)
+                saved_girth=data.get('body_girth_m',0)
+                width=body_girth(scene)/saved_girth if type(saved_girth) in (int,float) and saved_girth>1e-6 else factor
+                scale_document(doc,width if .05<width<20 and abs(width/factor-1)>.05 else factor,factor)
         placements={}
         if avatar:
             for pose in poses:

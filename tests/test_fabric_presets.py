@@ -1,7 +1,7 @@
 import json
 import unittest
 from devil_designer.core import Document, Session
-from devil_designer.presets import PRESETS, resolve_preset
+from devil_designer.presets import FABRIC_DEFAULTS, PRESETS, resolve_preset
 
 SQUARE = [(0, 0), (.3, 0), (.3, .4), (0, .4)]
 
@@ -9,12 +9,22 @@ SQUARE = [(0, 0), (.3, 0), (.3, .4), (0, .4)]
 class FabricPresetTests(unittest.TestCase):
     def test_resolve_preset_builtin(self):
         for name, expected in PRESETS.items():
-            self.assertEqual(resolve_preset(name), expected)
+            self.assertEqual(resolve_preset(name), {**FABRIC_DEFAULTS, **expected})
 
     def test_resolve_preset_custom(self):
         custom = {'Chiffon': dict(structural=5.0, bending=0.05, density=0.05)}
-        self.assertEqual(resolve_preset('Chiffon', custom), custom['Chiffon'])
-        self.assertEqual(resolve_preset('COTTON', custom), PRESETS['COTTON'])
+        self.assertEqual(resolve_preset('Chiffon', custom), {**FABRIC_DEFAULTS, **custom['Chiffon']})
+        self.assertEqual(resolve_preset('COTTON', custom), {**FABRIC_DEFAULTS, **PRESETS['COTTON']})
+
+    def test_custom_fabric_grain_values_round_trip_and_stay_bounded(self):
+        s = Session()
+        s.add(SQUARE)
+        knit = dict(structural=7.1, bending=0.95, density=0.17, weft=0.5, bias=0.8, shrink_warp=0.05, shrink_weft=-0.02)
+        s.set_custom_preset('Rib knit', knit)
+        self.assertEqual(Document.loads(s.document.dumps()).custom_presets['Rib knit'], knit)
+        for bad in (dict(knit, weft=0.0), dict(knit, shrink_warp=0.5), dict(knit, grain=1.0)):
+            with self.assertRaises(ValueError):
+                s.set_custom_preset('Bad', bad)
 
     def test_document_round_trip_with_custom_presets(self):
         s = Session()

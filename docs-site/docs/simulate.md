@@ -65,14 +65,29 @@ Press <kbd>F</kbd> to show or hide the **Fit Map**, a color guide that shows whe
 
 - Check that the correct avatar is selected and that the pieces are placed around it as expected.
 - Make sure at least one piece is active in **Simulation** settings.
-- If the fabric starts in the wrong place, use **Reset**, adjust the pieces, and simulate again.
+- If the fabric starts in the wrong place, use **Reset drape** in the **Simulate** arrow, adjust the pieces, and simulate again.
 - If the result looks rough, try **Standard** or **High** quality, or use **Fine** mesh detail on small pieces.
+- If cloth slides off the shoulders or hips, right-click the empty canvas and set **Friction** to **Grippy**. Use **Slippery** for loose cloth that should fall freely.
+
+## Pin the Draped Cloth
+
+Click the Grab tool and choose **Pin**. Drag the cloth where you want it and release. The point stays pinned there and the drape carries on.
+
+## Pinch, Steam and Puff
+
+Click the Grab tool, choose **Pinch** or **Steam**, and click or drag across the cloth as many times as you like, then press <kbd>Space</kbd> to apply the strokes. Pinch gathers a small area into a fold. Steam shrinks a wider area, and <kbd>Shift</kbd> + drag stretches it instead. Grab's radius sets the size. For padded pieces, right-click a piece and open **Simulation > Puff**. **Clear puff and steam** removes them from a piece.
+
+## Edit After Draping
+
+Change a pattern, fabric or mesh density at any time. The cloth returns to its panels and **Simulate** changes to **Re-drape**. Click it, or press <kbd>Space</kbd>, and the garment starts again from the drape it had, with your change applied. To start from the flat panels instead, use **Reset drape** first.
 
 ## Keep the Finished Mesh
 
 1. Pause on the frame you want.
-2. Use the **Keep mesh** arrow for **Weld: Auto/Manual** and **Thickness**.
+2. Use the **Keep mesh** arrow for **Weld: Auto/Manual**, **Thickness** and **Faces**.
 3. Click **Keep mesh**.
+
+**Faces: Triangles** is the default. **Quads** joins triangle pairs into quads after the seams are welded, which is easier to edit and retopologize in Blender. Most of the mesh becomes quads, not a clean grid, and the triangle count for VRChat stays the same.
 
 Keep takes a second or two to finish the cloth, then checks it against your avatar. It clears small contacts for you. If cloth is too far inside the body, Keep stops and tells you where, so you can let it settle or pull it clear.
 

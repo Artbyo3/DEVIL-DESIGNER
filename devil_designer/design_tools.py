@@ -15,6 +15,13 @@ class DesignTools:
         self.library_items=[]
         self.cut_preview=None
         self.trace_points=None
+        self.mn_sewing=False
+        self.mn_chain=[]
+        self.mn_first=None
+        self.pending_join=None
+        self.pen_mode=None
+        self.error_rect=None
+        self.pen_points=[]
 
     def design_hit(self):
         self.hit_path='OUTER';self.hit_segment=None;self.hit_handle=None
@@ -113,7 +120,7 @@ class DesignTools:
     def design_action(self,action):
         scene=self._scene;doc=self.session.document;p=doc.find(self.session.selected)
         def operation():
-            if action in {'STARTER_TEE', 'STARTER_TANK', 'STARTER_SKIRT'}:
+            if action.startswith('STARTER_'):
                 from .starters import STARTER_GENERATORS
                 label,generator=STARTER_GENERATORS[action][:2]
                 measurements = None
@@ -138,6 +145,7 @@ class DesignTools:
                     self.reveal_3d()
                 self.update_reference(bpy.context, align=False)
                 self.fit()
+                self.choose_tool('SELECT')
                 self.message = f"{label} starter created. Pre-sewn and placed on avatar."
                 return
             elif action == 'DEMO_PANEL':
@@ -270,7 +278,7 @@ class DesignTools:
                 if anchor is None:raise ValueError('Select a pin or tack using K or T.')
                 self.session.commit(lambda:doc.anchors.remove(anchor));self.selected_anchor=None
             elif action=='CHAIN_CLEAR':
-                self.free_clicks=[];self.pending_edge=None
+                self.free_clicks=[];self.pending_edge=None;self.mn_chain=[];self.mn_first=None
             elif action.startswith('LIBRARY_'):
                 from . import library
                 self.refresh_library()
@@ -317,9 +325,17 @@ class DesignTools:
         edge=viewport_hit[0] if viewport_hit is not None else self.design_hit_edge()
         if edge is None:self.message='Click near an outer or internal segment.';return
         scene=self._scene;doc=self.session.document
+        if self.mn_sewing:
+            full=edge.full()
+            if full in self.mn_chain:self.mn_chain.remove(full)
+            else:self.mn_chain.append(full)
+            self.message=f"{len(self.mn_chain)} edge(s) on this side. Enter "+('sews.' if self.mn_first else 'ends the side.')
+            return
         if scene.dd_free_sewing:
             point=doc.edge_point(edge,viewport_hit[1]) if viewport_hit is not None else self.view.world(self.pointer,self.canvas_layout.canvas)
             t,_=curves.closest_fraction(doc.edge_curve(edge),point)
+            length=doc.edge_length(edge.full())
+            t=next((guide for guide in self.free_guides(edge) if abs(guide-t)*length<.01),t)
             self.free_clicks.append((edge,t))
             if len(self.free_clicks)==4:
                 try:
@@ -345,8 +361,129 @@ class DesignTools:
             self.pending_edge=None;self.seam_selected=doc.seams[-1].id;self.message=self.sewing_message(doc.seams[-1])
         except ValueError as exc:self.message=str(exc)
 
+    def seam_end_points(self):
+        doc=self.session.document
+        seam=next((item for item in doc.seams if item.id==self.seam_selected),None)
+        if seam is None or self.tool not in {'SEW','SELECT'}:return []
+        canvas=self.canvas_layout.canvas;gesture=self.gesture if self.gesture and self.gesture.get('mode')=='SEAM_END' else {}
+        points=[]
+        for side in (0,1):
+            chain=seam.side(side)
+            for last,edge,fraction in ((False,chain[0],chain[0].t0),(True,chain[-1],chain[-1].t1)):
+                if gesture.get('side')==side and gesture.get('last')==last and gesture.get('fraction') is not None:fraction=gesture['fraction']
+                points.append((self.view.screen(doc.edge_point(edge.full(),fraction),canvas),side,last,edge))
+        return points
+
+    def seam_end_hit(self):
+        return next((item for item in self.seam_end_points() if math.dist(item[0],self.pointer)<9*self.canvas_layout.scale),None)
+
+    def free_guides(self,edge):
+        if edge is None or not self._scene.dd_free_sewing or len(self.free_clicks)!=3 or self.free_clicks[2][0].full()!=edge.full():return []
+        doc=self.session.document
+        try:span=doc.chain_length(path_range(doc,*self.free_clicks[:2]))/doc.edge_length(edge.full())
+        except ValueError:return []
+        start=self.free_clicks[2][1]
+        return [fraction for fraction in (start-span,start+span) if 0<=fraction<=1]
+
+    def mn_commit(self):
+        if not self.mn_chain:
+            self.message='Click at least one edge first.'
+        elif self.mn_first is None:
+            self.mn_first=self.mn_chain;self.mn_chain=[]
+            self.message='Now click the partner edges, then press Enter.'
+        else:
+            doc=self.session.document
+            try:
+                a=chain_range(doc,self.mn_first,0,1);b=chain_range(doc,self.mn_chain,0,1)
+                self.session.sew_chains(a,b,sew_reverse(doc,a,b,self._scene.dd_sew_reverse));self.persist()
+                self.seam_selected=doc.seams[-1].id;self.message=self.sewing_message(doc.seams[-1])
+            except ValueError as exc:self.message=str(exc)
+            self.mn_first=None;self.mn_chain=[]
+
+    def pen_event(self,context,event):
+        from bpy_extras import view3d_utils
+        press=event.value=='PRESS'
+        if not press:return None
+        if event.type in {'ESC','RIGHTMOUSE'}:
+            self.pen_points=[];self.pen_mode=None;self.choose_tool('SELECT');self.message='Drawing cancelled.'
+            return {'RUNNING_MODAL'}
+        if event.type in {'RET','NUMPAD_ENTER'}:
+            finish=self.pen_finish_avatar if self.pen_mode=='AVATAR' else self.pen_finish_garment
+            try:finish(context)
+            except ValueError as exc:self.message=str(exc);return {'RUNNING_MODAL'}
+            self.pen_points=[];self.pen_mode=None;self.choose_tool('SELECT')
+            return {'RUNNING_MODAL'}
+        if event.type!='LEFTMOUSE':return None
+        space=self._area.spaces.active
+        if self.pen_mode=='AVATAR':
+            from . import placement
+            try:point,normal,_=placement.ray_body(context,self._region,space,self.pointer)
+            except ValueError as exc:self.message=str(exc);return {'RUNNING_MODAL'}
+            self.pen_points.append(dict(world=tuple(point),normal=tuple(normal)))
+        else:
+            from . import garment
+            from .xpbd_live import ClothGrab
+            simulations=garment.generated(self._scene,'simulation')
+            if not simulations:
+                self.message='Start a drape before drawing on the garment.';return {'RUNNING_MODAL'}
+            origin=view3d_utils.region_2d_to_origin_3d(self._region,space.region_3d,self.pointer)
+            direction=view3d_utils.region_2d_to_vector_3d(self._region,space.region_3d,self.pointer)
+            hit=ClothGrab(simulations[0]).pick(context,origin,direction)
+            if hit is None:
+                self.message='Click on the cloth.';return {'RUNNING_MODAL'}
+            identity,point=self.cloth_point(simulations[0],hit[0])
+            if self.pen_points and self.pen_points[0]['pattern']!=identity:
+                self.message='Keep the line on one piece.';return {'RUNNING_MODAL'}
+            self.pen_points.append(dict(world=tuple(hit[1]),pattern=identity,point=point))
+        self.message=f'{len(self.pen_points)} point(s). Enter finishes.'
+        self._area.tag_redraw()
+        return {'RUNNING_MODAL'}
+
+    def pen_finish_garment(self,context):
+        if len(self.pen_points)<2:raise ValueError('Click at least two points on the cloth.')
+        self.session.selected=self.pen_points[0]['pattern']
+        self.run_edit(lambda:self.session.add_path([item['point'] for item in self.pen_points],False),'Line added to the pattern. Right-click it for Cut or Fold.')
+
+    def pen_finish_avatar(self,context):
+        from mathutils import Vector
+        from . import garment,placement
+        if len(self.pen_points)<3:raise ValueError('Click at least three points on the avatar.')
+        unit=garment.metres_per_unit(self._scene)
+        world=[Vector(item['world']) for item in self.pen_points]
+        center=sum(world,Vector())/len(world)
+        normal=sum((Vector(item['normal']) for item in self.pen_points),Vector()).normalized()
+        across=Vector((0,0,1)).cross(normal).normalized() if abs(normal.z)<.95 else Vector((1,0,0))
+        up=normal.cross(across).normalized()
+        flat=[((point-center).dot(across)*unit,(point-center).dot(up)*unit) for point in world]
+        area=sum(a[0]*b[1]-b[0]*a[1] for a,b in zip(flat,flat[1:]+flat[:1]))
+        if area<0:flat.reverse()
+        patterns=self.session.document.patterns
+        right=max((p[0] for piece in patterns for p in piece.outline()),default=0)
+        left=min(p[0] for p in flat)
+        self.run_edit(lambda:self.session.add([(x-left+right+.1,y) for x,y in flat]),'Pattern made from the avatar outline.')
+        piece=self.session.document.find(self.session.selected)
+        piece.placement_mode='LEGACY'
+        self.persist()
+        placement.place(context,piece.id,center,normal)
+
+    def cloth_point(self,source,vertex):
+        import json
+        from .piece_states import piece_indices
+        saved=json.loads(source['dd_run_rest'])
+        identity,position=next((key,indices.index(vertex)) for key,indices in piece_indices(source).items() if vertex in indices)
+        point=saved[identity][position][:2]
+        pattern=self.session.document.find(identity)
+        outline=pattern.outline()
+        center=(sum(item[0] for item in outline)/len(outline),sum(item[1] for item in outline)/len(outline))
+        placed=next((candidate for candidate in (curves.mix(point,center,share) for share in (0,.01,.03,.06)) if pattern.contains(candidate)),None)
+        if placed is None:raise ValueError('That point is too close to the edge.')
+        return identity,placed
+
     def design_pending_event(self,context,event,panel):
         press=event.value=='PRESS'
+        if self.pen_mode and not panel:
+            result=self.pen_event(context,event)
+            if result is not None:return result
         if self.pending_place or self.pending_tack:
             if press and event.type in {'ESC','RIGHTMOUSE'}:
                 self.pending_place=self.pending_tack=None;self.message='Placement cancelled.';return {'RUNNING_MODAL'}
@@ -390,7 +527,26 @@ class DesignTools:
     def design_canvas_click(self,event):
         doc=self.session.document
         point=self.world_pointer(event)
-        if self.tool in {'PIN','TACK'}:
+        if self.tool=='TACK_FABRIC':
+            p,_=self.design_hit()
+            if p is None or not p.contains(point):raise ValueError('Click inside the fabric.')
+            if self.pending_join is None:
+                self.pending_join=(p.id,*point);self.message='Now click the point to tie it to.'
+            else:
+                self.session.add_join(self.pending_join,(p.id,*point));self.pending_join=None
+                self.persist();self.message='Fabric tacked.'
+        elif self.tool=='PIN_EDGE':
+            edge=self.design_hit_edge()
+            if edge is None:raise ValueError('Click an edge to pin along it.')
+            steps=max(2,round(doc.edge_length(edge)/.02))
+            owner=doc.find(edge.pattern);items=[]
+            for index in range(steps+1):
+                x,y=doc.edge_point(edge,index/steps)
+                inside=next((candidate for candidate in ((x+dx,y+dy) for dx,dy in ((.002,0),(-.002,0),(0,.002),(0,-.002),(.002,.002),(-.002,-.002),(.002,-.002),(-.002,.002))) if owner.contains(candidate)),None)
+                if inside:items.append((edge.pattern,*inside))
+            self.session.add_pins(items)
+            self.persist();self.message=f'{len(items)} pins added along the edge.'
+        elif self.tool in {'PIN','TACK'}:
             for anchor in doc.anchors:
                 if math.dist(self.view.screen((anchor.x,anchor.y),self.canvas_layout.canvas),self.pointer)<10*self.canvas_layout.scale:
                     self.select_anchor(anchor);self.message='Anchor selected. Delete removes this pin or tack.';return
@@ -519,7 +675,7 @@ class DesignTools:
         self.message=f"Transform {kind.title()}: drag cursor or enter value. Enter commits, Esc cancels."
 
     def transform_frame(self):
-        if self.tool!='SELECT' or self.gesture or getattr(self,'pending_transform',None) or not self.session.has_selection():return None
+        if self.tool!='SELECT' or self.seam_selected or self.gesture or getattr(self,'pending_transform',None) or not self.session.has_selection():return None
         bounds=self.session.selection_bounds()
         if bounds is None:return None
         c=self.canvas_layout.canvas;scale=self.canvas_layout.scale

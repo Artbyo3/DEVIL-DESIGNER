@@ -1311,8 +1311,77 @@ def run_selection_native(op, passed):
         yield
         check(op.session.document.dumps() == original and not op.pending_transform, 'frame seam warning cancels exactly')
 
+    def strip_click(action, owner):
+        op.open_flyout(owner)
+        rect = op.canvas_layout.buttons['STRIP_' + action][0]
+        point = rect.x + rect.w / 2, rect.y + rect.h / 2
+        post('LEFTMOUSE', local=point)
+        post('LEFTMOUSE', 'RELEASE', local=point)
+
+    def menu_rows():
+        first, second = fixture()
+        anchor = op.view.screen((.1, .15), op.canvas_layout.canvas)
+        for row, opened in (('TRANSFORM_MENU', 'TRANSFORM_MENU'),
+                            ('PIECE_CLONE_MENU', 'PIECE_CLONE'), ('PIECE_PLACEMENT_MENU', 'PIECE_PLACEMENT')):
+            op.session.select_piece(first.id)
+            op.show_card('PIECE', anchor)
+            click_action(row)
+            yield
+            check(op.sub_card == opened, row + ' row opens its submenu beside the card')
+            draw(opened + ' opened from the piece menu')
+        op.choose_tool('SELECT')
+        op.canvas_layout = op.make_layout()
+        strip_click('SET_SELECT_TARGET_Points', 'SELECT')
+        yield
+        check(op.session.acquisition_target == 'POINTS', 'Area target row changes what box select picks')
+        op.session.acquisition_target = 'PIECES'
+        op.session.clear_selection()
+        strip_click('SELECT_LASSO', 'SELECT')
+        yield
+        check(op.armed_selection == 'SELECT_LASSO' and op.gesture is None, 'Lasso row waits for the next canvas drag')
+        start = (-.05, -.05)
+        post('MOUSEMOVE', 'NOTHING', world=start)
+        post('LEFTMOUSE', world=start)
+        yield
+        for point in ((.25, -.05), (.25, .35), (-.05, .35), start):
+            post('MOUSEMOVE', 'NOTHING', world=point)
+            yield
+        post('LEFTMOUSE', 'RELEASE', world=start)
+        yield
+        check(first.id in op.session.selected_patterns and second.id not in op.session.selected_patterns,
+              'Lasso row selects the enclosed piece on the next drag')
+        op.session.select_piece(second.id, toggle=True)
+        op.show_card('MULTI_SELECTION', anchor)
+        click_action('DELETE')
+        yield
+        check(not op.session.document.patterns, 'multi-selection Delete row removes the selected pieces')
+        fixture()
+        sew = op.canvas_layout.buttons['SEW'][0]
+        point = sew.x + sew.w / 2, sew.y + sew.h / 2
+        post('LEFTMOUSE', local=point)
+        post('LEFTMOUSE', 'RELEASE', local=point)
+        yield
+        check(op.tool == 'SEW' and op.card_kind is None, 'first dock click chooses the Sew tool')
+        op.canvas_layout = op.make_layout()
+        strip_click('SET_SEW_FREE', 'SEW')
+        yield
+        check(op.tool == 'SEW' and op._scene.dd_free_sewing, 'the strip switches to Free sewing on the 2D canvas')
+        op.choose_tool('SELECT')
+        post('LEFTMOUSE', local=point)
+        post('LEFTMOUSE', 'RELEASE', local=point)
+        yield
+        check(op.tool == 'SEW' and op._scene.dd_free_sewing, 'dock Sew remembers Free sewing')
+        op.choose_tool('SEW')
+        check(not op._scene.dd_free_sewing, 'Segment sewing clears Free sewing')
+        key('J', shift=True)
+        yield
+        check(op._scene.dd_free_sewing, 'Shift J chooses Free sewing over the 2D canvas')
+        op.choose_tool('SEW')
+        op.choose_tool('SELECT')
+
     def sequence():
-        for name, procedure in (('Warning before seam damage', sewn_endpoint),
+        for name, procedure in (('Menu rows open and act when clicked', menu_rows),
+                                ('Warning before seam damage', sewn_endpoint),
                                 ('Nudge steps and transaction safety', nudge_steps),
                                 ('Warning pauses repeat', paused_nudge),
                                 ('Mixed rotation', mixed_rotation),
@@ -1388,6 +1457,7 @@ def run():
         bpy.context.view_layer.update()
         with bpy.context.temp_override(area=area,region=region):
             bpy.ops.devil_designer.pattern_editor('INVOKE_DEFAULT');op=editor._active
+            op.free_window=None
             scene.dd_reference_visible = True
             op.reveal_3d()
             op.canvas_layout = op.make_layout()

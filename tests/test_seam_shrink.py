@@ -50,6 +50,31 @@ class SeamShrinkTests(unittest.TestCase):
             self.assertEqual(loaded.dumps(), session.document.dumps())
         self.assertEqual(session.document.dumps(), baseline)
 
+    def test_seam_can_be_left_open_and_survives_save_split_and_undo(self):
+        session = self.fixture()
+        identity = session.document.seams[0].id
+        baseline = session.document.dumps()
+        session.set_seam_active(identity, False)
+        self.assertFalse(Document.loads(session.document.dumps()).seams[0].active)
+        session.split_segment(session.document.seams[0].side(0)[0].full())
+        self.assertFalse(session.document.seams[0].active)
+        session.history()
+        session.history()
+        self.assertEqual(session.document.dumps(), baseline)
+
+    def test_split_into_equal_parts_measures_along_the_edge(self):
+        session = Session()
+        session.add([(0, 0), (.3, 0), (.3, .4), (0, .4)])
+        pattern = session.document.patterns[0]
+        edge = session.document.edges(pattern.id)[0]
+        session.split_segment_into(edge, 3)
+        lengths = [session.document.edge_length(item) for item in session.document.edges(pattern.id)[:3]]
+        self.assertEqual(len(session.document.patterns[0].vertices), 6)
+        for length in lengths:
+            self.assertAlmostEqual(length, .1)
+        with self.assertRaises(ValueError):
+            session.split_segment_into(edge, 1)
+
     def test_invalid_values_do_not_modify_document_or_history(self):
         session = self.fixture()
         identity = session.document.seams[0].id
@@ -123,7 +148,7 @@ class SeamShrinkTests(unittest.TestCase):
         edge = SimpleNamespace(pattern="piece", start="edge")
         maps = {"piece": {"edge": [(0, 4), (1, 9)]}}
         pairs = [((edge, 0), (edge, 1))]
-        seams = [SimpleNamespace(id="low", shrink=10), SimpleNamespace(id="high", shrink=30), SimpleNamespace(id="zero", shrink=0)]
+        seams = [SimpleNamespace(id="low", shrink=10, ease_side=0), SimpleNamespace(id="high", shrink=30, ease_side=0), SimpleNamespace(id="zero", shrink=0, ease_side=0)]
         for order in (seams, seams[::-1]):
             plan = SimpleNamespace(seam_pairs=[(seam.id, pairs) for seam in order])
             self.assertEqual(boundary_weights(order, maps, plan), {4: .3, 9: .3})

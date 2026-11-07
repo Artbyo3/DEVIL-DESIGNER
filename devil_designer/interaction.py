@@ -37,7 +37,7 @@ class OverlayControls:
             return False
         if not confirmed:
             prompt = ''
-            if action in {'STARTER_TEE', 'STARTER_TANK', 'STARTER_SKIRT'} and self.session.document.patterns:
+            if action.startswith('STARTER_') and self.session.document.patterns:
                 prompt = 'Replace current garment with this starter? You can undo this change.'
             elif action == 'LIBRARY_LOAD' and self.session.document.patterns:
                 prompt = 'Replace this garment with the library item? You can undo the source change.'
@@ -187,7 +187,7 @@ class OverlayControls:
             state.update(text=text, cursor=cursor, selected=False)
             return RUNNING
         char = getattr(event, 'unicode', '')
-        if press and char and (not hasattr(SETTINGS[state['key']], 'factor') or all(c in '0123456789.,eE+-' for c in char)):
+        if press and char and (not hasattr(SETTINGS[state['key']], 'factor') or all(c in '0123456789.,eE+-*/() ' for c in char)):
             text, cursor = state['text'], state['cursor']
             if state['selected']:
                 text, cursor = '', 0

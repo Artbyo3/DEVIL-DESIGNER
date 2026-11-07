@@ -1,6 +1,6 @@
 # Frequently Asked Questions & Troubleshooting
 
-This page answers common questions about using Devil Designer v0.11.0.
+This page answers common questions about using Devil Designer.
 
 ## Sewing & Seam Questions
 
@@ -14,7 +14,7 @@ Zoom in or orbit so the edge is clear. Edges hidden behind the body or another p
 
 ### Why didn't my linked twin receive my new sewing seam?
 
-Linked twins copy pattern edits, not seams. Sew the matching edges on each piece yourself.
+New seams on a linked twin are copied to its partner. Seams made before the pieces were linked are not.
 
 ### Why does Seam Shrink change folds elsewhere on my garment?
 
@@ -58,13 +58,13 @@ UVs are the flat map used to place a texture on the garment. Their layout follow
 
 ### What do the fabric presets do?
 
-The fabric presets are calibrated against real fabric so each choice gives the garment a different drape.
+Each preset gives the garment a different stiffness, weight and drape. They are starting points, not measured real fabric. In a fabric menu you can also set **Weft stretch** (how much easier the fabric stretches across than along the piece), **Bias stiffness** (stretch on the diagonal), and **Shrink lengthwise** or **Shrink widthwise**. The piece's vertical direction on the canvas is the lengthwise grain.
 
 ## Installation and Startup Problems
 
 ### Devil Designer is missing from the add-on list. What should I do?
 
-Install the v0.11.0 download from **Preferences > Add-ons > Install from Disk...**, then enable it in the add-on list.
+Install the latest download from **Preferences > Add-ons > Install from Disk...**, then enable it in the add-on list.
 
 ### The editor will not open. What should I try?
 

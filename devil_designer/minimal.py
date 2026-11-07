@@ -1,12 +1,13 @@
 import math
+import time
 try:
     import blf
 except ImportError:
     blf = None
 import bpy
 from .canvas import Rect
-from . import layering
-from .ui_system import MinimalMetrics
+from . import budget, layering
+from .ui_system import MENU_CARDS, MinimalMetrics
 from .controls import CONTROL_SETTINGS
 from .avatar_field import AvatarField, LABEL
 
@@ -26,7 +27,27 @@ def text_unscaled_width(text, size=11):
     return len(str(text)) * (size * 0.6)
 
 
-DENSITY = {'Coarse': .04, 'Standard': .02, 'Fine': .01}
+DENSITY = {'Coarse': .04, 'Standard': .02, 'Fine': .01, 'Ultra': .005}
+def heading_to(start, point, rect, margin):
+    edge = rect.x if rect.x >= start[0] else rect.x + rect.w
+    run, step = edge - start[0], point[0] - start[0]
+    if run * step <= 0:
+        return False
+    reach = start[1] + (point[1] - start[1]) * run / step
+    return rect.y - margin <= reach <= rect.y + rect.h + margin
+
+
+HOVER_MENUS = {'PIECE_FABRIC_MENU': 'PIECE_FABRIC', 'PIECE_DENSITY_MENU': 'PIECE_DENSITY', 'PIECE_SIMULATION_MENU': 'PIECE_SIMULATION',
+               'PIECE_PLACEMENT_MENU': 'PIECE_PLACEMENT', 'PIECE_CLONE_MENU': 'PIECE_CLONE', 'TRANSFORM_MENU': 'TRANSFORM_MENU',
+               'STARTERS_MENU': 'STARTERS', 'FOLD_MENU': 'FOLD', 'GARMENT_FABRIC_MENU': 'GARMENT_FABRIC'}
+STRIP_KEYS = {'SELECT': 'V', 'SELECT_ALL': 'A', 'SELECT_INVERT': 'Ctrl I', 'SET_DRAW_RECTANGLE': 'R', 'SET_DRAW_POLYGON': 'P', 'SET_DRAW_ELLIPSE': 'E',
+              'SET_INTERNAL_PATH': 'I', 'SET_INTERNAL_DART': 'D', 'KNIFE_MODE_SEW': 'N', 'SET_SEW_SEGMENT': 'J', 'SET_SEW_FREE': 'Shift J',
+              'SET_PIN_FABRIC': 'K', 'SET_PIN_BODY': 'T'}
+FLYOUT_TOOLS = ('SELECT', 'DRAW', 'INTERNAL', 'SEW', 'PIN', 'SHAPE')
+SKIN_OFFSET = {'1 mm': .001, '3 mm': .003, '6 mm': .006}
+FRICTION = {'Slippery': .1, 'Normal': .3, 'Grippy': .6}
+SPLIT_PARTS = ('3 parts', '4 parts', 'Every 2 cm', 'Every 5 cm')
+GRAIN_SETTINGS = {'dd_fabric_weft': 'weft', 'dd_fabric_bias': 'bias', 'dd_fabric_shrink_warp': 'shrink_warp', 'dd_fabric_shrink_weft': 'shrink_weft'}
 QUALITY = {'Draft': 12, 'Standard': 24, 'High': 36}
 THICKNESS = {'None': 0, 'Thin': .0005, 'Standard': .001}
 FABRICS = ('COTTON', 'LINEN', 'DENIM', 'SILK', 'LEATHER', 'KNIT')
@@ -34,38 +55,44 @@ GUIDE_OPACITY = {'Light': .15, 'Medium': .30, 'Strong': .50}
 PLACEMENT_DISTANCE = {'Body': None, '1 cm': .01, '2 cm': .02, '5 cm': .05}
 PLACEMENT_OVERLAP = {'Off': (False, 1), 'Right on top': (True, 1), 'Left on top': (True, -1)}
 IMAGE_OPACITY = {'Light': .2, 'Medium': .35, 'Strong': .6}
+SUBMENUS = {'TRANSFORM_MENU': 'TRANSFORM_MENU', 'PIECE_PLACEMENT_MENU': 'PIECE_PLACEMENT',
+            'PIECE_CLONE_MENU': 'PIECE_CLONE', 'STARTERS_MENU': 'STARTERS'}
 
 
-def minimal_layout(layout, pending=False, confirmation=False, playing=False, kept=False):
+def minimal_layout(layout, pending=False, confirmation=False, playing=False, kept=False, stale=False):
     scale = layout.scale
     panel = layout.panel
     layout.metrics = MinimalMetrics.resolve()
     tool_count = 9
-    tool_pitch = min(35, max(22, (panel.h / scale - 156) / tool_count))
-    dock_height = round((tool_count * tool_pitch + 50) * scale)
-    dock_width = round(56 * scale)
-    dock_x = round(panel.x + 6 * scale)
+    group_gap = round(6 * scale)
+    chip_h = round(19 * scale)
+    tool_pitch = min(35, max(20, (panel.h / scale - 120) / tool_count))
+    btn_h = round(tool_pitch * scale)
+    dock_width = round(40 * scale)
+    dock_height = tool_count * btn_h + 4 * group_gap + group_gap + 2 * chip_h + round(2 * scale)
+    dock_x = round(panel.x + 8 * scale)
     dock_y = round(panel.y + (panel.h - dock_height) / 2)
     layout.rail = Rect(dock_x, dock_y, dock_width, dock_height)
     layout.buttons = {}
-    tools = [('SELECT', 'Select'), ('DRAW', 'Draw'), ('INTERNAL', 'Internal'), ('SEW', 'Sew'),
-             ('PIN', 'Pin'), ('SHAPE', 'Grab'), ('UNDO', 'Undo'), ('REDO', 'Redo'), ('LIBRARY', 'Library')]
-    col_w = round(40 * scale)
-    col_pad = round(8 * scale)
-    tool_x = round(layout.rail.x + col_pad)
-    ind_w = round((col_w - 2 * scale) / 2)
-    ind_h = round(16 * scale)
-    cluster_gap = round(6 * scale)
-    top_pad = round(4 * scale)
-    bottom_pad = round(4 * scale)
-    btn_h = round(tool_pitch * scale)
-    tools_top = layout.rail.y + dock_height - top_pad
-    for index, (key, label) in enumerate(tools):
-        gap_offset = cluster_gap if index >= 6 else 0
-        btn_y = round(tools_top - (index + 1) * btn_h - gap_offset)
-        layout.buttons[key] = (Rect(tool_x, btn_y, col_w, round(btn_h - 2 * scale)), label)
-    chip_y1 = round(layout.rail.y + bottom_pad + ind_h + 2 * scale)
-    chip_y0 = round(layout.rail.y + bottom_pad)
+    groups = ((('SELECT', 'Select'),),
+              (('DRAW', 'Draw'), ('INTERNAL', 'Internal'), ('SEW', 'Sew'), ('PIN', 'Pin')),
+              (('SHAPE', 'Grab'),),
+              (('UNDO', 'Undo'), ('REDO', 'Redo')),
+              (('LIBRARY', 'Library'),))
+    layout.tool_groups = []
+    tool_x = dock_x
+    y = dock_y + dock_height
+    for group in groups:
+        top = y
+        for key, label in group:
+            y -= btn_h
+            layout.buttons[key] = (Rect(tool_x, y, dock_width, btn_h), label)
+        layout.tool_groups.append(Rect(tool_x, y, dock_width, top - y))
+        y -= group_gap
+    ind_w = round((dock_width - 2 * scale) / 2)
+    ind_h = chip_h
+    chip_y1 = round(dock_y + ind_h + 2 * scale)
+    chip_y0 = dock_y
     layout.buttons['TOGGLE_SNAP'] = (Rect(tool_x, chip_y1, ind_w, ind_h), 'Snap')
     layout.buttons['TOGGLE_GUIDE'] = (Rect(round(tool_x + ind_w + 2 * scale), chip_y1, ind_w, ind_h), 'Guide')
     layout.buttons['TOGGLE_LENGTHS'] = (Rect(tool_x, chip_y0, ind_w, ind_h), 'Lengths')
@@ -73,29 +100,31 @@ def minimal_layout(layout, pending=False, confirmation=False, playing=False, kep
     right = round(panel.x + panel.w - 14 * scale)
     layout.buttons['CLOSE'] = (Rect(round(right - 24 * scale), round(panel.y + panel.h - 30 * scale), round(24 * scale), round(24 * scale)), 'Close')
     right -= round(28 * scale)
-    if not layout.full:
-        right -= round(88 * scale)
+    right -= round(88 * scale)
+    if layout.full:
+        layout.buttons['SHOW_3D'] = (Rect(right, round(panel.y + panel.h - 30 * scale), round(82 * scale), round(24 * scale)), '3D view')
+    else:
         layout.buttons['RESTORE_CANVAS'] = (Rect(right, round(panel.y + panel.h - 30 * scale), round(82 * scale), round(24 * scale)), 'Full canvas')
-    layout.buttons['GARMENT'] = (Rect(tool_x, round(panel.y + panel.h - 36 * scale), col_w, round(30 * scale)), 'Garment')
+    layout.buttons['GARMENT'] = (Rect(tool_x, round(panel.y + panel.h - 38 * scale), dock_width, round(30 * scale)), 'Garment')
     layout.canvas = Rect(round(panel.x + 4 * scale), round(panel.y + 4 * scale), round(panel.w - 8 * scale), round(panel.h - 8 * scale))
     bottom = round(panel.y + 14 * scale)
     right = round(panel.x + panel.w - 14 * scale)
-    specs = [('SIMULATE', 'Pause' if playing else 'Simulate'), ('KEEP', 'Keep mesh')]
+    specs = [('SIMULATE', 'Pause' if playing else 'Re-drape' if stale else 'Simulate'), ('KEEP', 'Keep mesh')]
     if pending:
         specs = [('FINISH_DRAFT', 'Finish'), ('CANCEL_DRAFT', 'Cancel')]
     if confirmation:
         specs = [('CONFIRM_ACTION', 'Confirm'), ('CANCEL_ACTION', 'Cancel')]
     for key, label in specs:
-        width = round(142 * scale)
+        width = round(128 * scale)
         right -= width
-        layout.buttons[key] = (Rect(right, bottom, width, round(28 * scale)), label)
+        layout.buttons[key] = (Rect(right, bottom, width, round(24 * scale)), label)
         if key == 'KEEP':
-            layout.buttons['KEEP_OPTIONS'] = (Rect(right + 112 * scale, bottom, 30 * scale, 28 * scale), 'Options')
-            layout.buttons['KEEP'] = (Rect(right, bottom, 112 * scale, 28 * scale), label)
+            layout.buttons['KEEP_OPTIONS'] = (Rect(right + 104 * scale, bottom, 24 * scale, 24 * scale), 'Options')
+            layout.buttons['KEEP'] = (Rect(right, bottom, 104 * scale, 24 * scale), label)
         elif key == 'SIMULATE' and kept:
-            layout.buttons['SIMULATE_OPTIONS'] = (Rect(right + 112 * scale, bottom, 30 * scale, 28 * scale), 'Wear over')
-            layout.buttons['SIMULATE'] = (Rect(right, bottom, 112 * scale, 28 * scale), label)
-        right -= 8 * scale
+            layout.buttons['SIMULATE_OPTIONS'] = (Rect(right + 104 * scale, bottom, 24 * scale, 24 * scale), 'Wear over')
+            layout.buttons['SIMULATE'] = (Rect(right, bottom, 104 * scale, 24 * scale), label)
+        right -= 4 * scale
 
 
 class MinimalCards:
@@ -125,6 +154,21 @@ class MinimalCards:
         self.internal_tool = 'INTERNAL'
         self.knife_sew = True
         self.pin_tool = 'PIN'
+        self.sew_tool = 'SEW'
+        self.armed_selection = None
+        self.flyout = None
+        self.flyout_dismissed = None
+        self.sub_card = None
+        self.sub_owner = None
+        self.sub_parent = None
+        self.sub_anchor = None
+        self.sub_pending = None
+        self.sub_timer = None
+        self.sub_origin = None
+        self.pending_strokes = []
+        self.brush_stretch = None
+        self.drape_document = None
+        self._scene.dd_internal_mode = False
 
     def named_choice(self, value, choices):
         return min(choices, key=lambda name: abs(choices[name] - value))
@@ -170,6 +214,8 @@ class MinimalCards:
         doc = self.session.document
         canvas = self.canvas_layout.canvas
         for index, seam in enumerate(doc.seams):
+            if self.tool != 'SEW' and seam.id not in (self.seam_selected, self.seam_hover):
+                continue
             middles = []
             for side in (0, 1):
                 edge, fraction = doc.chain_position(seam.side(side), .5)
@@ -193,6 +239,7 @@ class MinimalCards:
         return badges
 
     def show_card(self, kind, anchor=None):
+        self.close_sub()
         self.library_edit = None
         self.card_kind = kind
         self.card_anchor = anchor or self.pointer
@@ -245,8 +292,96 @@ class MinimalCards:
 
     def minimal_card(self):
         kind = self.card_kind
-        if not kind:
+        content = self.card_rows(kind) if kind else None
+        if content is None:
             return None
+        title, rows = content
+        return self.card_layout(kind, title, rows)
+
+    def close_sub(self):
+        self.sub_card = self.sub_owner = self.sub_parent = self.sub_anchor = None
+        self.cancel_pending_sub()
+
+    def cancel_pending_sub(self):
+        self.sub_pending = None
+        if self.sub_timer is not None:
+            bpy.context.window_manager.event_timer_remove(self.sub_timer)
+            self.sub_timer = None
+
+    def settle_sub(self, key, rect, parent):
+        if key in FLYOUT_TOOLS:
+            self.cancel_pending_sub()
+            self.open_flyout(key)
+        elif key:
+            self.open_sub(key, rect, parent)
+        else:
+            self.close_sub()
+
+    def schedule_sub(self, key, rect, parent):
+        if self.sub_pending and self.sub_pending['key'] == key:
+            return
+        delay = bpy.context.preferences.view.open_sublevel_delay / 10
+        if delay <= 0:
+            self.settle_sub(key, rect, parent)
+            return
+        self.sub_pending = dict(key=key, rect=rect, parent=parent, due=time.monotonic() + delay)
+        if self.sub_timer is None:
+            self.sub_timer = bpy.context.window_manager.event_timer_add(.02, window=self._window)
+
+    def tick_sub(self):
+        pending = self.sub_pending
+        if pending and time.monotonic() >= pending['due']:
+            self.settle_sub(pending['key'], pending['rect'], pending['parent'])
+            self._area.tag_redraw()
+
+    def open_sub(self, key, rect, parent):
+        target = HOVER_MENUS[key]
+        if target in {'PIECE_FABRIC', 'GARMENT_FABRIC'}:
+            pattern = self.session.document.find(self.session.selected)
+            preset = pattern.preset if target == 'PIECE_FABRIC' and pattern and getattr(pattern, 'fabric_override', False) else getattr(self.session.document, 'preset', 'COTTON')
+            self.sync_fabric_settings(preset)
+        self.cancel_pending_sub()
+        content = self.card_rows(target)
+        if content is None:
+            return
+        scale = self.canvas_layout.scale
+        bounds = self.canvas_layout.panel
+        room = self.canvas_layout.available
+        gap = 2 * scale
+        width = self.card_layout(target, *content, anchor=(bounds.x, bounds.y + bounds.h))[0].w
+        right = parent.x + parent.w + gap
+        left = parent.x - gap - width
+        inside = right + width <= bounds.x + bounds.w
+        x = right if inside or (left < bounds.x and right + width <= room.x + room.w) else left
+        self.sub_card, self.sub_owner, self.sub_parent = target, key, self.card_kind
+        self.sub_anchor = (x, rect.y + rect.h + 30 * scale)
+        self.sub_origin = self.pointer
+
+    def update_submenu(self, point):
+        cards = self.visible_cards()
+        if not cards:
+            return
+        parent = cards[0]
+        if not parent[0].contains(*point) or (len(cards) > 1 and cards[1][0].contains(*point)):
+            self.cancel_pending_sub()
+            return
+        hovered = next(((rect, row) for rect, row in parent[2] if rect.contains(*point)), None)
+        if hovered is None:
+            return
+        rect, row = hovered
+        key = row[1] if row[0] == 'MENU' and row[1] in HOVER_MENUS else None
+        if key == self.sub_owner:
+            self.sub_origin = point
+            self.cancel_pending_sub()
+        elif len(cards) > 1 and heading_to(self.sub_origin, point, cards[1][0], 20 * self.canvas_layout.scale):
+            self.sub_pending = None
+            self.schedule_sub(key, rect, parent[0])
+        else:
+            self.close_sub()
+            if key:
+                self.schedule_sub(key, rect, parent[0])
+
+    def card_rows(self, kind):
         scene = self._scene
         doc = self.session.document
         pattern = doc.find(self.session.selected)
@@ -333,38 +468,27 @@ class MinimalCards:
             else:rows=[('INFO','Garment no longer available','Choose another design')]
             rows.append(('MENU_LIBRARY','Back to library',''))
         elif kind == 'SIMULATE':
-            title = 'Wear over'
+            title = 'Simulate'
             self.card_models = layering.kept_garments(scene)
-            if not self.card_models:
-                return None
             self.wear_over_offset = max(0,min(self.wear_over_offset,len(self.card_models)-5))
-            rows = [('WEAR_OVER_' + str(index), obj.name, 'On' if obj.get('dd_wear_over',True) else 'Off')
-                    for index,obj in enumerate(self.card_models) if self.wear_over_offset <= index < self.wear_over_offset+5]
+            rows = [('RESET', 'Reset drape', 'Back to panels')]
+            rows += [('WEAR_OVER_' + str(index), obj.name, 'On' if obj.get('dd_wear_over',True) else 'Off')
+                     for index,obj in enumerate(self.card_models) if self.wear_over_offset <= index < self.wear_over_offset+5]
             if len(self.card_models)>5:
                 rows.append(('SCROLL_WEAR_OVER',f'{self.wear_over_offset+1}-{min(self.wear_over_offset+5,len(self.card_models))} of {len(self.card_models)} garments','Next'))
         elif kind == 'KEEP':
             title = 'Keep mesh'
-            rows = [('WELD_AUTO', 'Weld', 'Manual' if self.weld_manual else 'Auto'),
-                    ('CHOICES', 'Thickness', ('THICKNESS', THICKNESS, self.named_choice(scene.dd_thickness, THICKNESS)))]
+            info = self.triangle_budget()
+            rows = []
+            if info:
+                rows.append(('INFO', 'Triangles', f"{'~' if info['estimated'] else ''}{info['garment']:,}"))
+                if info['body']:
+                    rows += [('INFO', 'With avatar', f"{info['total']:,}"), ('INFO', 'VRChat PC', info['pc']), ('INFO', 'VRChat Quest', info['quest'])]
+            rows += [('WELD_AUTO', 'Weld', 'Manual' if self.weld_manual else 'Auto'),
+                    ('CHOICES', 'Thickness', ('THICKNESS', THICKNESS, self.named_choice(scene.dd_thickness, THICKNESS))),
+                    ('CHOICES', 'Faces', ('KEEP_FACES', ('Triangles', 'Quads'), 'Quads' if scene.dd_keep_quads else 'Triangles'))]
             if scene.get('dd_unwelded_seams', 0) > 0:
                 rows += [('SLIDER', 'dd_weld_distance', 'Weld tolerance'), ('KEEP_RETRY', 'Retry keep', f"{scene['dd_unwelded_seams']} unwelded pairs")]
-        elif kind == 'DRAW_CHOOSER':
-            title = 'Draw shape'
-            rows = [('SET_DRAW_POLYGON', 'Polygon', 'P'),
-                    ('SET_DRAW_RECTANGLE', 'Rectangle', 'R'),
-                    ('SET_DRAW_ELLIPSE', 'Ellipse', 'E')]
-        elif kind == 'INTERNAL_CHOOSER':
-            title = 'Internal'
-            rows = [('SET_INTERNAL_PATH', 'Internal path', 'I'),
-                    ('SET_INTERNAL_DART', 'Dart', 'D'),
-                    ('SET_INTERNAL_KNIFE', 'Cut', 'N'),
-                    ('KNIFE_MODE_SEW', 'Cut & Sew' + (' (active)' if self.knife_sew else ''), ''),
-                    ('KNIFE_MODE_CUT', 'Cut only' + (' (active)' if not self.knife_sew else ''), ''),
-                    ('CUT', 'Cut along path', '')]
-        elif kind == 'PIN_CHOOSER':
-            title = 'Pin or tack'
-            rows = [('SET_PIN_FABRIC', 'Pin on fabric', 'K'),
-                    ('SET_PIN_BODY', 'Attach to body', 'T')]
         elif kind == 'PIECE_FABRIC':
             if pattern is None:
                 return None
@@ -377,6 +501,10 @@ class MinimalCards:
             rows.append(('SLIDER', 'dd_fabric_structural', 'Stretch stiffness'))
             rows.append(('SLIDER', 'dd_fabric_bending', 'Bending stiffness'))
             rows.append(('SLIDER', 'dd_fabric_density', 'Mass density'))
+            rows.append(('SLIDER', 'dd_fabric_weft', 'Weft stretch'))
+            rows.append(('SLIDER', 'dd_fabric_bias', 'Bias stiffness'))
+            rows.append(('SLIDER', 'dd_fabric_shrink_warp', 'Shrink lengthwise'))
+            rows.append(('SLIDER', 'dd_fabric_shrink_weft', 'Shrink widthwise'))
             rows.append(('SAVE_PIECE_CUSTOM_PRESET', 'Save as custom preset', ''))
             if getattr(pattern, 'fabric_override', False) and pattern.preset in getattr(doc, 'custom_presets', {}):
                 rows.append(('DELETE_CUSTOM_PRESET', 'Delete preset', ''))
@@ -387,6 +515,10 @@ class MinimalCards:
             rows.append(('SLIDER', 'dd_fabric_structural', 'Stretch stiffness'))
             rows.append(('SLIDER', 'dd_fabric_bending', 'Bending stiffness'))
             rows.append(('SLIDER', 'dd_fabric_density', 'Mass density'))
+            rows.append(('SLIDER', 'dd_fabric_weft', 'Weft stretch'))
+            rows.append(('SLIDER', 'dd_fabric_bias', 'Bias stiffness'))
+            rows.append(('SLIDER', 'dd_fabric_shrink_warp', 'Shrink lengthwise'))
+            rows.append(('SLIDER', 'dd_fabric_shrink_weft', 'Shrink widthwise'))
             rows.append(('SAVE_GARMENT_CUSTOM_PRESET', 'Save as custom preset', ''))
             if active in getattr(doc, 'custom_presets', {}):
                 rows.append(('DELETE_CUSTOM_PRESET', 'Delete preset', ''))
@@ -395,14 +527,17 @@ class MinimalCards:
             rows = [('SET_DENSITY_AUTO', 'Garment default', ''),
                     ('SET_DENSITY_COARSE', 'Coarse', ''),
                     ('SET_DENSITY_STANDARD', 'Standard', ''),
-                    ('SET_DENSITY_FINE', 'Fine', '')]
+                    ('SET_DENSITY_FINE', 'Fine', ''),
+                    ('SET_DENSITY_ULTRA', 'Ultra', '')]
         elif kind == 'PIECE_SIMULATION':
             if pattern is None:
                 return None
             title = 'Piece simulation'
             rows = [('TOGGLE_STATE_frozen', 'Unfreeze' if pattern.frozen else 'Freeze', 'Hold 3D shape'),
                     ('TOGGLE_STATE_deactivated', 'Activate' if pattern.deactivated else 'Deactivate', 'Skip simulation'),
-                    ('TOGGLE_STATE_strengthened', 'Remove strengthen' if pattern.strengthened else 'Strengthen', '4× fabric stiffness')]
+                    ('TOGGLE_STATE_strengthened', 'Remove strengthen' if pattern.strengthened else 'Strengthen', '4× fabric stiffness'),
+                    ('PAIR_ACTIONS', 'PUFF_10', 'PUFF_20', 'Puff 10%', 'Puff 20%'),
+                    ('CLEAR_STEAM', 'Clear puff and steam', '')]
         elif kind == 'PIECE':
             if pattern is None:
                 return None
@@ -415,11 +550,19 @@ class MinimalCards:
             rows.append(('INFO', 'Size', f'{pw:.1f} × {ph:.1f} cm'))
             fabric_override = pattern.preset.title() if getattr(pattern, 'fabric_override', False) else 'Garment default'
             rows.append(('MENU', 'PIECE_FABRIC_MENU', 'Fabric', fabric_override))
-            density_label = {'AUTO': 'Garment default', 'COARSE': 'Coarse', 'STANDARD': 'Standard', 'FINE': 'Fine'}.get(pattern.mesh_density, pattern.mesh_density.title())
+            density_label = {'AUTO': 'Garment default', 'COARSE': 'Coarse', 'STANDARD': 'Standard', 'FINE': 'Fine', 'ULTRA': 'Ultra'}.get(pattern.mesh_density, pattern.mesh_density.title())
             rows.append(('MENU', 'PIECE_DENSITY_MENU', 'Mesh density', density_label))
             from .piece_states import label
             simulation_label = label(pattern).replace(' · Strengthened ×4', ' +4×')
             rows.append(('MENU', 'PIECE_SIMULATION_MENU', 'Simulation', simulation_label or 'Normal'))
+            rows.append(('MENU', 'PIECE_PLACEMENT_MENU', 'Placement', ('Flat' if pattern.arrangement['flat'] else 'Wrap') if pattern.arrangement else '2D layout'))
+            rows.append(('MENU', 'PIECE_CLONE_MENU', 'Clone', ''))
+            rows.append(('MENU', 'TRANSFORM_MENU', 'Transform', ''))
+            rows.append(('DELETE_PIECE', 'Delete', 'Del'))
+        elif kind == 'PIECE_PLACEMENT':
+            if pattern is None:
+                return None
+            title = 'Placement'
             record = pattern.arrangement
             if record:
                 rows.append(('CHOICES', 'Placement', ('PLACE_SHAPE', ('Wrap', 'Flat'), 'Flat' if record['flat'] else 'Wrap')))
@@ -430,29 +573,37 @@ class MinimalCards:
                     rows.append(('CHOICES', 'Distance from body', ('PLACE_DISTANCE', tuple(PLACEMENT_DISTANCE), distance)))
                     overlap = next(name for name, value in PLACEMENT_OVERLAP.items() if value == (record['overwrap'], record['direction']) or (not record['overwrap'] and not value[0]))
                     rows.append(('CHOICES', 'Overwrap', ('PLACE_OVERLAP', tuple(PLACEMENT_OVERLAP), overlap)))
-            rows.append(('PAIR_ACTIONS', 'DUPLICATE', 'MIRROR_SEW', 'Duplicate', 'Mirror'))
+            rows.append(('PAIR_ACTIONS', 'SUPERIMPOSE_OVER', 'SUPERIMPOSE_UNDER', 'Over sewn piece', 'Under sewn piece'))
+            rows.append(('RESET_LAYOUT', 'Reset to 2D layout', ''))
+        elif kind == 'PIECE_CLONE':
+            if pattern is None:
+                return None
+            title = 'Clone'
+            rows.append(('PAIR_ACTIONS', 'DUPLICATE', 'MIRROR_PICK', 'Duplicate', 'Mirror'))
+            rows.append(('PAIR_ACTIONS', 'LAYER_OVER', 'LAYER_UNDER', 'Layer over', 'Layer under'))
             rows.append(('CLONE_LINKED', 'Clone as linked twin', ''))
             if pattern.arrangement and pattern.arrangement['point']=='front':
                 rows.append(('CLONE_BACK', 'Clone as Back', ''))
             from .linked_editing import pair_for
             linked=pair_for(doc,pattern.id)
             rows.append(('TOGGLE_LINKED', 'Linked twin', 'On' if linked and linked['enabled'] else 'Off'))
-            rows.append(('PAIR_ACTIONS', 'FLIP_H', 'FLIP_V', 'Flip H', 'Flip V'))
-            rows.append(('PAIR_ACTIONS', 'UNFOLD', 'DELETE_PIECE', 'Unfold', 'Delete'))
-            rows.append(('MENU', 'TRANSFORM_MENU', 'Transform', ''))
-            rows.append(('MENU', 'SELECT_MENU', 'Select', ''))
-            rows.append(('RESET_LAYOUT', 'Reset to 2D layout', ''))
         elif kind == 'CANVAS_MENU':
             title = 'Garment & View'
             if not doc.patterns:
-                rows.append(('PAIR_ACTIONS', 'STARTER_TEE', 'STARTER_TANK', 'Tee starter', 'Tank starter'))
-                rows.append(('PAIR_ACTIONS', 'STARTER_SKIRT', 'DEMO_PANEL', 'Skirt starter', 'Create panel'))
-                rows.append(('PAIR_ACTIONS', 'SET_DRAW_POLYGON', 'MENU_LIBRARY', 'Draw your own', 'Open library'))
+                rows.append(('MENU', 'STARTERS_MENU', 'Starters', ''))
             rows.append(('MENU', 'MENU_GARMENT', 'Garment settings', getattr(doc, 'preset', 'COTTON').title()))
             rows.append(('CHOICES', 'Mesh density', ('INSP_GARMENT_DENSITY', DENSITY, self.named_choice(scene.dd_spacing, DENSITY))))
             rows.append(('CHOICES', 'Quality', ('INSP_QUALITY', QUALITY, self.named_choice(scene.dd_quality, QUALITY))))
-            rows.append(('MENU', 'SELECT_MENU', 'Select', ''))
+            rows.append(('CHOICES', 'Skin offset', ('INSP_SKIN', SKIN_OFFSET, self.named_choice(scene.dd_skin_offset, SKIN_OFFSET))))
+            rows.append(('CHOICES', 'Friction', ('INSP_FRICTION', FRICTION, self.named_choice(scene.dd_friction, FRICTION))))
             rows.append(('INSP_FIT', 'Fit design', 'Home'))
+        elif kind == 'STARTERS':
+            title = 'Starters'
+            rows = [('PAIR_ACTIONS', 'STARTER_TEE', 'STARTER_TANK', 'Tee', 'Tank'),
+                    ('PAIR_ACTIONS', 'STARTER_LONG_SLEEVE', 'STARTER_HOODIE', 'Long sleeve', 'Hoodie'),
+                    ('PAIR_ACTIONS', 'STARTER_JACKET', 'STARTER_DRESS', 'Jacket', 'Dress'),
+                    ('PAIR_ACTIONS', 'STARTER_SKIRT', 'STARTER_PANTS', 'Skirt', 'Pants'),
+                    ('DEMO_PANEL', 'Create panel', '')]
         elif kind == 'POINT':
             title = 'Point'
             v = None
@@ -465,24 +616,33 @@ class MinimalCards:
             rows = [('CHOICES', 'Point type', ('POINT_TYPE', ('Corner', 'Smooth', 'Auto'), active_type)),
                     ('SLIDER', 'dd_point_x', 'X position'),
                     ('SLIDER', 'dd_point_y', 'Y position'),
-                    ('PAIR_ACTIONS', 'TRANSFORM_MENU', 'SELECT_MENU', 'Transform', 'Select')]
+                    ('CHOICES', 'Round corner', ('ROUND_CORNER', ('1 cm', '2 cm', '5 cm'), '')),
+                    ('MENU', 'TRANSFORM_MENU', 'Transform', '')]
             if len(self.session.point_selection) > 1:
                 rows.append(('MERGE', 'Merge selected points', ''))
         elif kind == 'EDGE':
             title = 'Edge'
+            edge = self.session.segment
+            elastic = next((record['shrink'] for record in doc.elastics if edge and (record['pattern'], record['start'], record['end']) == (edge.pattern, edge.start, edge.end)), 0)
             rows = [('SLIDER', 'dd_segment_length', 'Exact length'),
+                    ('CHOICES', 'Elastic', ('EDGE_ELASTIC', ('0%', '10%', '20%', '30%'), f'{elastic}%')),
                     ('PAIR_ACTIONS', 'BEND_EDGE', 'SPLIT', 'Bend', 'Split'),
-                    ('PAIR_ACTIONS', 'UNFOLD', 'MIRROR_SEW', 'Unfold', 'Mirror'),
-                    ('PAIR_ACTIONS', 'TRANSFORM_MENU', 'SELECT_MENU', 'Transform', 'Select')]
+                    ('CHOICES', 'Split into', ('SPLIT_INTO', SPLIT_PARTS, '')),
+                    ('PAIR_ACTIONS', 'UNFOLD', 'MIRROR_SEW', 'Unfold', 'Mirror')]
+            if edge and any(item.full() == edge.full() for seam in doc.seams for side in (0, 1) for item in seam.side(side)):
+                rows.append(('MERGE_PIECES', 'Merge sewn pieces', ''))
+            if pattern and any(feature.get('type') == 'FOLD' for feature in pattern.features):
+                rows.append(('PLEAT_SEW', 'Sew pleats closed', ''))
         elif kind == 'INTERNAL_EDGE':
             title = 'Internal edge'
             rows = [('SLIDER', 'dd_segment_length', 'Exact length'),
-                    ('BEND_EDGE', 'Bend edge', ''),
-                    ('SPLIT', 'Split edge', ''),
+                    ('PAIR_ACTIONS', 'BEND_EDGE', 'SPLIT', 'Bend', 'Split'),
+                    ('CHOICES', 'Split into', ('SPLIT_INTO', SPLIT_PARTS, '')),
                     ('MENU', 'FOLD_MENU', 'Fold or pleat', 'Straight boundary-to-boundary path'),
-                    ('CUT', 'Cut along path', ''),
-                    ('MENU', 'TRANSFORM_MENU', 'Transform', ''),
-                    ('MENU', 'SELECT_MENU', 'Select', '')]
+                    ('CHOICES', 'Offset copy', ('OFFSET_PATH', ('-2 cm', '-1 cm', '+1 cm', '+2 cm'), '')),
+                    ('CHOICES', 'Slash and spread', ('SLASH_SPREAD', ('5 deg', '10 deg', '15 deg', '30 deg'), '')),
+                    ('CUT', 'Cut out hole' if pattern and pattern.path(self.session.path).closed else 'Cut along path', ''),
+                    ('MENU', 'TRANSFORM_MENU', 'Transform', '')]
             if pattern and pattern.path(self.session.path).closed:
                 rows.append(('TRACE', 'Trace as piece', ''))
         elif kind == 'FOLD':
@@ -493,6 +653,7 @@ class MinimalCards:
             if feature:
                 rows = [('INFO', 'Direction', 'Mountain' if feature['angle'] > 0 else 'Valley'),
                         ('FOLD_EDIT_REVERSE', 'Reverse direction', 'Entire pleat'),
+                        ('PAIR_ACTIONS', 'FOLD_EDIT_30', 'FOLD_EDIT_90', '30 degrees', '90 degrees'),
                         ('PAIR_ACTIONS', 'FOLD_EDIT_60', 'FOLD_EDIT_120', '60 degrees', '120 degrees'),
                         ('FOLD_EDIT_150', 'Sharp fold', '150 degrees'),
                         ('FOLD_EDIT_REMOVE', 'Remove fold or pleat', 'Keep internal paths')]
@@ -502,20 +663,26 @@ class MinimalCards:
                         ('PAIR_ACTIONS', 'FOLD_ADD_KNIFE_1', 'FOLD_ADD_BOX_1', 'Knife 1 cm', 'Box 1 cm'),
                         ('PAIR_ACTIONS', 'FOLD_ADD_KNIFE_2', 'FOLD_ADD_BOX_2', 'Knife 2 cm', 'Box 2 cm'),
                         ('PAIR_ACTIONS', 'FOLD_ADD_KNIFE_4', 'FOLD_ADD_BOX_4', 'Knife 4 cm', 'Box 4 cm'),
+                        ('PAIR_ACTIONS', 'FOLD_ADD_ACCORDION_1', 'FOLD_ADD_ACCORDION_2', 'Accordion 1 cm', 'Accordion 2 cm'),
                         ('INFO', 'Straight lines across fabric', 'Parallel folds per piece')]
         elif kind == 'ANCHOR':
             if anchor is None:
                 return None
-            title = 'Body tack' if anchor.kind == 'TACK' else 'Pin'
+            title = {'TACK': 'Body tack', 'JOIN': 'Fabric tack'}.get(anchor.kind, 'Pin')
             rows = [('INFO', 'Attached to', pattern.name if pattern else 'Pattern'),
-                    ('REMOVE_ANCHOR', 'Remove tack' if anchor.kind == 'TACK' else 'Remove pin', 'Delete')]
+                    ('REMOVE_ANCHOR', 'Remove pin' if anchor.kind == 'PIN' else 'Remove tack', 'Delete')]
         elif kind == 'SEAM':
             seam = next((s for s in doc.seams if s.id == self.seam_selected), None)
             title = 'Selected seam'
             if seam:
                 _, _, diff, pct = doc.seam_stats(seam)
                 rows.append(('INFO', 'Mismatch', f'{diff * 100:.1f} cm ({pct:.1f}%)'))
+                rows.append(('CHOICES', 'Sewing', ('SEAM_ACTIVE', ('On', 'Off'), 'On' if seam.active else 'Off')))
                 rows.append(('CHOICES', 'Shrink', ('SEAM_SHRINK', ('0%', '10%', '20%', '30%'), f'{seam.shrink}%')))
+                if seam.shrink:
+                    rows.append(('CHOICES', 'Shrink on', ('SEAM_EASE', ('Both', 'First edge', 'Second edge'), ('Both', 'First edge', 'Second edge')[seam.ease_side])))
+                names = [doc.find(seam.side(side)[0].pattern).name[:14] for side in (0, 1)]
+                rows.append(('PAIR_ACTIONS', 'SEAM_LENGTH_0', 'SEAM_LENGTH_1', 'Length: ' + names[0], 'Length: ' + names[1]))
             rows.append(('PAIR_ACTIONS', 'FLIP_SEAM', 'REMOVE_SEAM', 'Reverse', 'Remove'))
         elif kind == 'REFERENCE_IMAGE':
             title = 'Reference image'
@@ -541,14 +708,12 @@ class MinimalCards:
             if pieces > 0 and points > 0:
                 title = f'{pieces} pieces, {points} points'
                 rows = [('MENU', 'TRANSFORM_MENU', 'Transform', ''),
-                        ('MENU', 'SELECT_MENU', 'Select', ''),
                         ('DELETE', 'Delete', 'Del')]
             elif pieces > 0:
                 title = f'{pieces} pieces'
                 rows = [('DUPLICATE', 'Duplicate', 'Shift+D'),
                         ('PAIR_ACTIONS', 'FLIP_H', 'FLIP_V', 'Flip H', 'Flip V'),
                         ('MENU', 'TRANSFORM_MENU', 'Transform', ''),
-                        ('MENU', 'SELECT_MENU', 'Select', ''),
                         ('MENU', 'PIECE_FABRIC_MENU', 'Fabric', ''),
                         ('MENU', 'PIECE_DENSITY_MENU', 'Mesh density', ''),
                         ('DELETE', 'Delete', 'Del')]
@@ -573,7 +738,6 @@ class MinimalCards:
                     rows.append(('MERGE', 'Merge points', 'M'))
                 rows.append(('PAIR_ACTIONS', 'FLIP_H', 'FLIP_V', 'Flip H', 'Flip V'))
                 rows.append(('MENU', 'TRANSFORM_MENU', 'Transform', ''))
-                rows.append(('MENU', 'SELECT_MENU', 'Select', ''))
                 rows.append(('DELETE', 'Delete', 'Del'))
         elif kind == 'CUT_RECOVERY':
             title = 'Crossing cut'
@@ -584,18 +748,6 @@ class MinimalCards:
             if preview['can_retry']:
                 rows.append(('CUT_RETRY', 'Split and retry', f"{preview['split_count']} splits"))
             rows.append(('CANCEL_CUT', 'Back to editing', ''))
-        elif kind == 'SELECT_MENU':
-            title = 'Select'
-            cur_target = getattr(self.session, 'acquisition_target', 'PIECES').title()
-            tgt_display = 'Internal paths' if cur_target in {'Paths', 'Internal Paths'} else cur_target
-            rows = [('CHOICES', 'Area target', ('SET_SELECT_TARGET', ('Pieces', 'Points', 'Edges', 'Internal paths'), tgt_display)),
-                    ('SELECT_BOX', 'Box select', 'Drag'),
-                    ('SELECT_LASSO', 'Lasso select', 'Loop'),
-                    ('SELECT_CONNECTED_PATH', 'Connected path', 'Ctrl+L'),
-                    ('SELECT_CONNECTED_SEWN', 'Sewn pieces', 'Topology'),
-                    ('SELECT_INVERT', 'Invert selection', 'Ctrl+I'),
-                    ('SELECT_ALL', 'Select all', 'A'),
-                    ('SELECT_CLEAR', 'Clear selection', 'Alt+A')]
         elif kind == 'TRANSFORM_MENU':
             title = 'Transform'
             rows = [('TRANSFORM_MOVE', 'Move', 'Arrows'),
@@ -604,6 +756,8 @@ class MinimalCards:
                     ('TRANSFORM_SET_PIVOT', 'Set pivot', 'Cursor click'),
                     ('TRANSFORM_RESET_PIVOT', 'Reset pivot', 'Center'),
                     ('PAIR_ACTIONS', 'FLIP_H', 'FLIP_V', 'Flip H', 'Flip V')]
+            if pattern and self.session.corner is None and not self.session.selected_points:
+                rows.append(('CHOICES', 'Offset copy', ('OFFSET_OUTLINE', ('-1 cm', '+1 cm', '+2 cm', '+5 cm'), '')))
         elif kind == 'SEAM_WARNING':
             pre = getattr(self, 'pending_transform', None) or {}
             report = pre.get('report') if isinstance(pre, dict) and 'report' in pre else pre
@@ -622,11 +776,12 @@ class MinimalCards:
                 rows.append(('INCLUDE_SEWN', 'Include sewn pieces', 'Closure'))
         else:
             return None
+        return title, rows
 
+    def card_layout(self, kind, title, rows, anchor=None):
+        scene = self._scene
         scale = self.canvas_layout.scale
-        is_menu = kind in {'CANVAS_MENU', 'DRAW_CHOOSER', 'INTERNAL_CHOOSER', 'PIN_CHOOSER',
-                           'PIECE_SIMULATION', 'PIECE_DENSITY', 'LIBRARY_TAGS',
-                           'SELECT_MENU', 'TRANSFORM_MENU', 'SEAM_WARNING'} or kind.endswith('_MENU')
+        is_menu = kind in MENU_CARDS or kind == 'SEAM_WARNING' or kind.endswith('_MENU')
         row_widths = []
         for r in rows:
             r_key = r[0]
@@ -669,11 +824,11 @@ class MinimalCards:
         width = round(min(target_w * scale, self.canvas_layout.panel.w - 24 * scale))
         bounds = self.canvas_layout.panel
         max_card_h = max(1, math.floor(bounds.h - 16 * scale))
-        anchor_pt = self.card_anchor or (bounds.x + 80 * scale, bounds.y + bounds.h - 100 * scale)
+        anchor_pt = anchor or self.card_anchor or (bounds.x + 80 * scale, bounds.y + bounds.h - 100 * scale)
 
         def card_bounds(height):
             bottom_pad, top_pad = (58, 34) if height <= bounds.h - 92 * scale else (8, 8)
-            card_x = round(max(bounds.x + 8 * scale, min(anchor_pt[0], bounds.x + bounds.w - width - 8 * scale)))
+            card_x = round(anchor[0] if anchor else max(bounds.x + 8 * scale, min(anchor_pt[0], bounds.x + bounds.w - width - 8 * scale)))
             card_y = round(max(bounds.y + bottom_pad * scale, min(anchor_pt[1] - height, bounds.y + bounds.h - height - top_pad * scale)))
             return Rect(card_x, card_y, width, height)
 
@@ -729,7 +884,7 @@ class MinimalCards:
                 controls.append((Rect(round(card_x + 10 * scale), top_other, inner_w, round((row_pitch - 4) * scale)), r))
             return rect, title, controls
         if is_menu:
-            menu_heights = [48 if row[0] == 'CHOICES' else 24 if row[0] == 'PAIR_ACTIONS' else 20 for row in rows]
+            menu_heights = [48 if row[0] == 'CHOICES' else 34 if row[0] == 'SLIDER' else 22 for row in rows]
             gap = 2
             inner_pad = round(4 * scale)
             item_w = round(width - 2 * inner_pad)
@@ -792,11 +947,14 @@ class MinimalCards:
 
     def visible_cards(self):
         card = self.minimal_card()
-        return [card] if card is not None else []
+        if card is None:
+            return []
+        content = self.card_rows(self.sub_card) if self.sub_card and self.sub_parent == self.card_kind else None
+        return [card] if content is None else [card, self.card_layout(self.sub_card, *content, anchor=self.sub_anchor)]
 
     def card_close_rect(self, rect):
         scale = self.canvas_layout.scale
-        is_menu = self.card_kind in {'CANVAS_MENU', 'DRAW_CHOOSER', 'INTERNAL_CHOOSER', 'PIN_CHOOSER', 'PIECE_SIMULATION', 'PIECE_DENSITY', 'LIBRARY_TAGS'} or (bool(self.card_kind) and self.card_kind.endswith('_MENU'))
+        is_menu = self.card_kind in MENU_CARDS or (bool(self.card_kind) and self.card_kind.endswith('_MENU'))
         if is_menu:
             return Rect(round(rect.x + rect.w - 24 * scale), round(rect.y + rect.h - 24 * scale), round(18 * scale), round(18 * scale))
         return Rect(round(rect.x + rect.w - 30 * scale), round(rect.y + rect.h - 30 * scale), round(22 * scale), round(22 * scale))
@@ -815,12 +973,139 @@ class MinimalCards:
             'BODY': Rect(x_body, y, w, h),
         }
 
+    def tool_owner(self):
+        tool = self.tool
+        if self._scene.dd_internal_mode or tool in {'INTERNAL', 'DART', 'KNIFE'} or (tool == 'PEN' and self.pen_mode == 'GARMENT'):
+            return 'INTERNAL'
+        if tool in {'RECTANGLE', 'POLYGON', 'ELLIPSE', 'PEN'}:
+            return 'DRAW'
+        if tool in {'PIN', 'PIN_BOX', 'PIN_EDGE', 'TACK', 'TACK_FABRIC'}:
+            return 'PIN'
+        return {'SELECT': 'SELECT', 'SEW': 'SEW', 'SHAPE': 'SHAPE'}.get(tool)
+
+    def tool_strip(self, owner=None):
+        owner = owner or self.tool_owner()
+        tool = self.tool
+        if owner == 'SELECT':
+            target = self.session.acquisition_target
+            items = [('SET_SELECT_TARGET_Pieces', 'Pieces', target == 'PIECES'), ('SET_SELECT_TARGET_Points', 'Points', target == 'POINTS'),
+                     ('SET_SELECT_TARGET_Edges', 'Edges', target == 'EDGES'), ('SET_SELECT_TARGET_Internal paths', 'Paths', target == 'PATHS'),
+                     ('SELECT_LASSO', 'Lasso', self.armed_selection == 'SELECT_LASSO')]
+            if self.session.document.patterns:
+                items += [('SELECT_ALL', 'All', False), ('SELECT_INVERT', 'Invert', False),
+                          ('SELECT_CONNECTED_SEWN', 'Sewn', False)]
+            return items
+        if owner == 'INTERNAL':
+            shape = self._scene.dd_internal_mode and tool
+            return [('SET_INTERNAL_PATH', 'Line', tool == 'INTERNAL'), ('SET_INTERNAL_RECT', 'Rectangle', shape == 'RECTANGLE'),
+                    ('SET_INTERNAL_ELLIPSE', 'Ellipse', shape == 'ELLIPSE'), ('SET_INTERNAL_DART', 'Dart', tool == 'DART'),
+                    ('KNIFE_MODE_SEW', 'Cut and sew', tool == 'KNIFE' and self.knife_sew),
+                    ('KNIFE_MODE_CUT', 'Cut', tool == 'KNIFE' and not self.knife_sew), ('PEN_GARMENT', 'On garment', tool == 'PEN')]
+        if owner == 'DRAW':
+            return [('SET_DRAW_RECTANGLE', 'Rectangle', tool == 'RECTANGLE'), ('SET_DRAW_POLYGON', 'Polygon', tool == 'POLYGON'),
+                    ('SET_DRAW_ELLIPSE', 'Ellipse', tool == 'ELLIPSE'), ('PEN_AVATAR', 'On avatar', tool == 'PEN')]
+        if owner == 'SEW':
+            free = self._scene.dd_free_sewing
+            return [('SET_SEW_SEGMENT', 'Segment', not free and not self.mn_sewing), ('SET_SEW_FREE', 'Free', free),
+                    ('SET_SEW_MN', 'M:N', self.mn_sewing), ('SET_SEW_AUTO', 'Auto sew', False)]
+        if owner == 'SHAPE' and self.shaping is not None:
+            return [('GRAB_' + mode, mode.title(), self.shaping.mode == mode) for mode in ('PULL', 'PUSH', 'PIN', 'PINCH', 'STEAM')]
+        if owner == 'PIN':
+            return [('SET_PIN_FABRIC', 'Pin', tool == 'PIN'), ('SET_PIN_BOX', 'Box', tool == 'PIN_BOX'), ('SET_PIN_EDGE', 'Edge', tool == 'PIN_EDGE'),
+                    ('SET_PIN_BODY', 'Tack to body', tool == 'TACK'), ('SET_PIN_JOIN', 'Tack fabric', tool == 'TACK_FABRIC')]
+        return []
+
+    def triangle_budget(self):
+        from . import garment
+        scene = self._scene
+        objects = garment.generated(scene, 'final') + [obj for obj in garment.generated(scene, 'simulation') if not obj.hide_get()]
+        return budget.summary(scene, objects) if objects else None
+
+    def triangle_note(self):
+        info = self.triangle_budget()
+        if info is None:
+            return ''
+        note = f"{'About ' if info['estimated'] else ''}{info['garment']:,} triangles."
+        return note + (f" With avatar: PC {info['pc']}, Quest {info['quest']}." if info['body'] else '')
+
+    def in_flyout(self, point, layout):
+        strip = layout.strip_panel
+        if strip is None:
+            return False
+        margin = 12 * layout.scale
+        left = layout.rail.x + layout.rail.w
+        return Rect(left, strip.y - margin, strip.x + strip.w + margin - left, strip.h + 2 * margin).contains(*point)
+
+    def update_flyout(self, point):
+        layout = self.canvas_layout
+        button = layout.button(*point)
+        if button != self.flyout_dismissed:
+            self.flyout_dismissed = None
+        if self.card_kind or self.gesture or self.setting_drag:
+            return
+        if self.in_flyout(point, layout):
+            self.cancel_pending_sub()
+        elif button in FLYOUT_TOOLS and self.tool_strip(button):
+            if button == self.flyout:
+                self.cancel_pending_sub()
+            elif button != self.flyout_dismissed:
+                self.schedule_sub(button, None, None)
+        else:
+            self.cancel_pending_sub()
+            if self.flyout:
+                self.flyout = None
+                self._area.tag_redraw()
+
+    def open_flyout(self, owner):
+        if self.tool_strip(owner):
+            self.flyout = owner
+            self.canvas_layout = self.make_layout()
+            self._area.tag_redraw()
+
+    def place_tool_strip(self, layout):
+        if not self.flyout:
+            return
+        items = self.tool_strip(self.flyout)
+        if not items:
+            return
+        scale = layout.scale
+        anchor = layout.buttons[self.flyout][0]
+        row = round(22 * scale)
+        gap = round(2 * scale)
+        pad = round(4 * scale)
+        title = layout.buttons[self.flyout][1]
+        entries = [(title, STRIP_KEYS.get(self.flyout))] + [(label, STRIP_KEYS.get(key)) for key, label, _ in items]
+        width = round(max(text_unscaled_width(label, 10) + (text_unscaled_width(shortcut, 10) + 14 if shortcut else 0) for label, shortcut in entries) * scale + 24 * scale)
+        height = (len(items) + 1) * (row + gap) - gap + 2 * pad
+        left = layout.rail.x + layout.rail.w + round(4 * scale)
+        bottom = max(layout.panel.y + round(60 * scale), anchor.y + anchor.h - height)
+        layout.strip_panel = Rect(left, bottom, width + 2 * pad, height)
+        y = bottom + height - pad - row
+        layout.strip_title = (Rect(left + pad, y, width, row), title, STRIP_KEYS.get(self.flyout))
+        y -= row + gap
+        for key, label, active in items:
+            layout.buttons['STRIP_' + key] = (Rect(left + pad, y, width, row), label)
+            if active:
+                layout.strip_active.add('STRIP_' + key)
+            y -= row + gap
+
+    def status_hint(self):
+        if not self.draft and not self.gesture and self.drape_document is not None and self.drape_document != self._scene.dd_document:
+            return 'Pattern changed. Re-drape or Space continues from the last drape.'
+        if self.draft or self.gesture or self.free_clicks or self.mn_chain or self.mn_first or self.pen_mode or self.armed_selection:
+            return self.tool_hint()
+        return ''
+
     def tool_hint(self):
         if self.tool == 'KNIFE':
             return ('Cut & Sew' if self.knife_sew else 'Cut') + ' / Click points / Enter or double-click finishes / Shift locks axis / Esc cancels'
         if self.draft:
             return 'Click to add points / Enter to finish / Esc to cancel'
         if self.tool == 'SEW':
+            if self.mn_sewing:
+                return ('Click the partner edges / Enter sews' if self.mn_first else 'Click the first side edges / Enter ends the side') + ' / Esc cancels'
+            if self._scene.dd_free_sewing:
+                return 'Click start and end on the first edge, then on its partner / Esc cancels'
             return 'Pick the matching edge' if self.pending_edge else 'Click two edges to sew'
         if self.tool == 'SELECT':
             tgt = getattr(self.session, 'acquisition_target', 'PIECES').title()
@@ -859,6 +1144,10 @@ class MinimalCards:
                 'POLYGON': 'Click to draw / Click the first point or Enter to finish',
                 'INTERNAL': 'Click to draw an internal path / Enter to finish',
                 'PIN': 'Click a pattern point to pin or unpin',
+                'PIN_BOX': 'Drag over fabric to pin an area',
+                'PIN_EDGE': 'Click an edge to pin along it',
+                'TACK_FABRIC': 'Click two points on the fabric to tie them together',
+                'PEN': 'Click in the 3D view / Enter finishes / Esc cancels',
                 'DART': 'Pick two base points, then the dart tip',
                 'TACK': 'Pick a pattern point, then a point on the body',
                 'PLACE': 'Pick a piece, then a point on the body'}.get(self.tool, '')
@@ -869,13 +1158,15 @@ class MinimalCards:
         self._scene.dd_fabric_structural = vals['structural']
         self._scene.dd_fabric_bending = vals['bending']
         self._scene.dd_fabric_density = vals['density']
+        for prop, name in GRAIN_SETTINGS.items():
+            setattr(self._scene, prop, vals[name])
 
     def apply_local_setting(self, key):
         if key == 'dd_weld_distance':
             self.weld_manual = True
-        if key in {'dd_fabric_structural', 'dd_fabric_bending', 'dd_fabric_density'}:
+        if key in {'dd_fabric_structural', 'dd_fabric_bending', 'dd_fabric_density'} | set(GRAIN_SETTINGS):
             prop_map = {'dd_fabric_structural': 'structural',
-                        'dd_fabric_bending': 'bending', 'dd_fabric_density': 'density'}
+                        'dd_fabric_bending': 'bending', 'dd_fabric_density': 'density', **GRAIN_SETTINGS}
             prop = prop_map[key]
             val = getattr(self._scene, key)
             doc = self.session.document
@@ -931,6 +1222,101 @@ class MinimalCards:
             return
         if key == 'FOLD_MENU':
             self.card_kind = 'FOLD'
+        elif key in SUBMENUS:
+            self.card_kind = SUBMENUS[key]
+        elif key in {'TRACE_CALIBRATION', 'TRACE_POSITION'}:
+            self.show_card(key, self.card_anchor)
+        elif key == 'DELETE':
+            self.perform_action('DELETE')
+            self.card_kind = None
+        elif key in {'PEN_AVATAR', 'PEN_GARMENT'}:
+            self.choose_tool('PEN')
+            self.pen_mode = key.removeprefix('PEN_')
+            self.pen_points = []
+            if self.full:
+                self.reveal_3d()
+            self.message = 'Click points in the 3D view. Enter finishes, Esc cancels.'
+            self.card_kind = None
+        elif key.startswith('PUFF_'):
+            pattern = self.session.document.find(self.session.selected)
+            outline = pattern.outline()
+            center = (sum(point[0] for point in outline) / len(outline), sum(point[1] for point in outline) / len(outline))
+            reach = max(math.dist(point, center) for point in outline) * 1.2
+            self.run_edit(lambda: self.session.add_steam([dict(pattern=pattern.id, x=center[0], y=center[1], radius=reach, amount=-int(key.removeprefix('PUFF_')) / 100)]), 'Puff added. It shows on the next Simulate.')
+            self.card_kind = None
+        elif key == 'CLEAR_STEAM':
+            self.run_edit(lambda: self.session.clear_steam(self.session.selected), 'Puff and steam cleared.')
+            self.card_kind = None
+        elif key.startswith('SLASH_SPREAD_'):
+            angle = float(key.removeprefix('SLASH_SPREAD_').split()[0])
+            self.run_edit(lambda: self.session.slash_spread(angle), 'Pattern spread.')
+            self.card_kind = None
+        elif key.startswith('GRAB_'):
+            self.shaping.mode = key.removeprefix('GRAB_')
+            self.message = {'PIN': 'Drag the cloth and release to pin it there.', 'PINCH': 'Click or drag along the cloth to gather a fold. Space applies.',
+                            'STEAM': 'Drag to shrink, Shift+drag to stretch. Space applies.'}.get(self.shaping.mode, f'Grab mode {self.shaping.mode.title()}')
+        elif key == 'SET_SEW_AUTO':
+            self.run_edit(self.session.auto_sew, 'Matching edges sewn. Check the seams, Undo removes them.')
+            self.card_kind = None
+        elif key.startswith('SET_SEW_'):
+            self.choose_tool({'SET_SEW_FREE': 'FREE_SEW', 'SET_SEW_MN': 'MN_SEW'}.get(key, 'SEW'))
+            self.card_kind = None
+        elif key.startswith('EDGE_ELASTIC_'):
+            shrink = int(key.removeprefix('EDGE_ELASTIC_').removesuffix('%'))
+            self.run_edit(lambda: self.session.set_elastic(self.session.segment, shrink), f'Elastic set to {shrink}%.')
+            self.card_kind = None
+        elif key == 'MERGE_PIECES':
+            self.run_edit(lambda: self.session.merge_pieces(self.session.segment), 'Pieces merged.')
+            self.card_kind = None
+        elif key == 'PLEAT_SEW':
+            from .folding import sew_pleats
+            self.run_edit(lambda: sew_pleats(self.session), 'Pleats sewn closed along this edge.')
+            self.card_kind = None
+        elif key in {'SUPERIMPOSE_OVER', 'SUPERIMPOSE_UNDER'}:
+            self.run_edit(lambda: self.session.superimpose(key == 'SUPERIMPOSE_OVER'), 'Placed on the sewn piece. Move it with Blender G if needed.')
+            self.card_kind = None
+        elif key.startswith('SEAM_EASE_'):
+            choice = key.removeprefix('SEAM_EASE_')
+            self.run_edit(lambda: self.session.set_seam_ease(self.seam_selected, ('Both', 'First edge', 'Second edge').index(choice)), 'Seam shrink side updated.')
+            self.card_kind = None
+        elif key.startswith('SEAM_LENGTH_'):
+            bpy.ops.devil_designer.seam_length('INVOKE_DEFAULT', side=int(key.removeprefix('SEAM_LENGTH_')))
+            self.card_kind = None
+        elif key.startswith('INSP_SKIN_'):
+            scene.dd_skin_offset = SKIN_OFFSET[key.removeprefix('INSP_SKIN_')]
+        elif key.startswith('INSP_FRICTION_'):
+            scene.dd_friction = FRICTION[key.removeprefix('INSP_FRICTION_')]
+        elif key.startswith('KEEP_FACES_'):
+            scene.dd_keep_quads = key == 'KEEP_FACES_Quads'
+        elif key.startswith('SEAM_ACTIVE_'):
+            active = key == 'SEAM_ACTIVE_On'
+            self.run_edit(lambda: self.session.set_seam_active(self.seam_selected, active), 'Seam sewn.' if active else 'Seam left open. It stays in the pattern.')
+            self.card_kind = None
+        elif key == 'MIRROR_PICK':
+            self.choose_tool('SELECT')
+            self.armed_selection = 'MIRROR_SEW'
+            self.message = 'Click the straight edge to mirror across. Escape cancels.'
+            self.card_kind = None
+        elif key in {'LAYER_OVER', 'LAYER_UNDER'}:
+            self.run_edit(lambda: self.session.layer_clone(key == 'LAYER_OVER'), 'Layer added and sewn around its outline.')
+            self.card_kind = None
+        elif key.startswith('ROUND_CORNER_'):
+            radius = float(key.removeprefix('ROUND_CORNER_').split()[0]) / 100
+            self.run_edit(lambda: self.session.round_corner(radius), 'Corner rounded.')
+            self.card_kind = None
+        elif key.startswith('OFFSET_PATH_'):
+            distance = float(key.removeprefix('OFFSET_PATH_').split()[0]) / 100
+            self.run_edit(lambda: self.session.offset_path(distance), 'Offset line added.')
+            self.card_kind = None
+        elif key.startswith('OFFSET_OUTLINE_'):
+            distance = float(key.removeprefix('OFFSET_OUTLINE_').split()[0]) / 100
+            self.run_edit(lambda: self.session.offset(distance), 'Offset copy added.')
+            self.card_kind = None
+        elif key in {'SELECT_BOX', 'SELECT_LASSO'}:
+            self.choose_tool('SELECT')
+            self.armed_selection = key
+            self.message = 'Drag on the canvas to select. Escape cancels.'
+            self.card_kind = None
         elif key.startswith('FOLD_ADD_'):
             from .folding import author_fold
             style, depth = key.removeprefix('FOLD_ADD_').rsplit('_', 1)
@@ -1004,7 +1390,7 @@ class MinimalCards:
         elif key.startswith('INSP_OPACITY_'):
             choice = key.removeprefix('INSP_OPACITY_')
             scene.dd_reference_opacity = GUIDE_OPACITY[choice]
-        elif key in {'STARTER_TEE', 'STARTER_TANK', 'STARTER_SKIRT'}:
+        elif key.startswith('STARTER_'):
             self.perform_action(key)
             self.card_kind = None
         elif key == 'DEMO_PANEL':
@@ -1082,13 +1468,18 @@ class MinimalCards:
             self.card_kind = None
         elif key.startswith('SET_INTERNAL_'):
             sub = key.removeprefix('SET_INTERNAL_')
-            tool_name = {'PATH': 'INTERNAL', 'DART': 'DART', 'KNIFE': 'KNIFE'}[sub]
-            self.internal_tool = tool_name
-            self.choose_tool(tool_name)
+            if sub in {'RECT', 'ELLIPSE'}:
+                self.choose_tool('RECTANGLE' if sub == 'RECT' else 'ELLIPSE')
+                self._scene.dd_internal_mode = True
+                self.message = 'Drag inside a piece to add an internal shape.'
+            else:
+                tool_name = {'PATH': 'INTERNAL', 'DART': 'DART'}[sub]
+                self.internal_tool = tool_name
+                self.choose_tool(tool_name)
             self.card_kind = None
         elif key.startswith('SET_PIN_'):
             sub = key.removeprefix('SET_PIN_')
-            tool_name = 'PIN' if sub == 'FABRIC' else 'TACK'
+            tool_name = {'FABRIC': 'PIN', 'BOX': 'PIN_BOX', 'EDGE': 'PIN_EDGE', 'JOIN': 'TACK_FABRIC'}.get(sub, 'TACK')
             self.pin_tool = tool_name
             self.choose_tool(tool_name)
             self.card_kind = None
@@ -1132,6 +1523,17 @@ class MinimalCards:
         elif key == 'SPLIT':
             self.perform_action('SPLIT')
             self.card_kind = None
+        elif key.startswith('SPLIT_INTO_'):
+            choice = key.removeprefix('SPLIT_INTO_')
+            edge = self.session.segment
+            if edge is None:
+                self.message = 'Select a segment to split.'
+            else:
+                number = int(choice.split()[1 if choice.startswith('Every') else 0])
+                parts = max(2, round(self.session.document.edge_length(edge.full()) / (number / 100))) if choice.startswith('Every') else number
+                self.run_edit(lambda: self.session.split_segment_into(edge, parts), f'Split into {parts} equal parts.')
+                self.session.segment = None
+            self.card_kind = None
         elif key == 'MERGE':
             self.perform_action('MERGE')
             self.card_kind = None
@@ -1157,7 +1559,7 @@ class MinimalCards:
             self.session.acquisition_target = tgt
             self.message = f'Selection target: {choice}.'
             self.card_kind = None
-        elif key in {'SELECT_BOX', 'SELECT_LASSO', 'SELECT_CONNECTED_PATH', 'SELECT_CONNECTED_SEWN',
+        elif key in {'SELECT_CONNECTED_PATH', 'SELECT_CONNECTED_SEWN',
                      'SELECT_INVERT', 'SELECT_ALL', 'SELECT_CLEAR',
                      'TRANSFORM_MOVE', 'TRANSFORM_ROTATE', 'TRANSFORM_SCALE',
                      'TRANSFORM_SET_PIVOT', 'TRANSFORM_RESET_PIVOT', 'BEND_EDGE',
@@ -1244,6 +1646,13 @@ class MinimalCards:
             return self.setting_drag_event(event)
         card = next((c for c in self.visible_cards() if c[0].contains(*point)), None)
         press = event.value == 'PRESS'
+        if event.type == 'MOUSEMOVE':
+            self.update_submenu(point)
+        if card and press and event.type == 'LEFTMOUSE' and self.sub_card and card[0] != self.visible_cards()[0][0]:
+            self.card_kind = self.sub_card
+            self.card_anchor = self.sub_anchor
+            self.close_sub()
+            card = self.visible_cards()[0]
         if self.gesture or (press and event.type == 'ESC' and (self.draft or self.free_clicks)):
             return None
         if press and event.type in {'ESC', 'RIGHTMOUSE'} and self.pending_edge:
@@ -1256,6 +1665,10 @@ class MinimalCards:
             redo = event.type == 'Y' or event.shift
             self.perform_action('REDO' if redo else 'UNDO')
             return {'RUNNING_MODAL'}
+        if press and event.type == 'ESC' and self.flyout:
+            self.flyout_dismissed = self.flyout
+            self.flyout = None
+            return {'RUNNING_MODAL'}
         if press and event.type == 'ESC' and self.card_kind:
             if self.card_kind == 'SEAM_WARNING' or getattr(self, 'pending_transform', None):
                 self.cancel_transform()
@@ -1264,7 +1677,7 @@ class MinimalCards:
             return {'RUNNING_MODAL'}
         pointer_event = event.type in {'LEFTMOUSE', 'RIGHTMOUSE', 'MIDDLEMOUSE', 'MOUSEMOVE',
                                        'WHEELUPMOUSE', 'WHEELDOWNMOUSE'}
-        if not pointer_event or not layout.panel.contains(*point):
+        if not pointer_event or not (card or layout.panel.contains(*point)):
             return None
         if card and self.card_kind=='SIMULATE' and event.type in {'WHEELUPMOUSE','WHEELDOWNMOUSE'}:
             delta=-1 if event.type=='WHEELUPMOUSE' else 1
@@ -1281,6 +1694,8 @@ class MinimalCards:
             return {'RUNNING_MODAL'}
         button = layout.button(*point)
         scale = layout.scale
+        if self.flyout and press and event.type in {'LEFTMOUSE', 'RIGHTMOUSE'} and not (button or '').startswith('STRIP_'):
+            self.flyout = None
         if button and not card and press and event.type in {'LEFTMOUSE', 'RIGHTMOUSE'}:
             if self.card_kind:
                 self.card_kind = None
@@ -1288,6 +1703,9 @@ class MinimalCards:
             btn_rect = layout.buttons[button][0]
             if button == 'SELECT':
                 self.choose_tool('SELECT')
+            elif button == 'SHOW_3D':
+                self.reveal_3d()
+                return {'RUNNING_MODAL'}
             elif button == 'TOGGLE_SNAP':
                 self.snap = not self.snap
             elif button == 'TOGGLE_GUIDE':
@@ -1299,7 +1717,7 @@ class MinimalCards:
             elif button in {'UNDO', 'REDO'}:
                 self.perform_action(button)
             elif button == 'SEW':
-                self.choose_tool('SEW')
+                self.choose_tool(self.sew_tool)
             elif button == 'SHAPE':
                 try:
                     self.enable_shaping(context)
@@ -1316,20 +1734,11 @@ class MinimalCards:
                 self.restore_canvas()
                 return {'RUNNING_MODAL'}
             elif button == 'DRAW':
-                if event.type == 'RIGHTMOUSE' or self.tool in {'RECTANGLE', 'POLYGON', 'ELLIPSE'}:
-                    self.show_card('DRAW_CHOOSER', (btn_rect.x + btn_rect.w + 10 * scale, btn_rect.y + btn_rect.h / 2))
-                else:
-                    self.choose_tool(getattr(self, 'draw_shape', 'RECTANGLE'))
+                self.choose_tool(self.draw_shape)
             elif button == 'INTERNAL':
-                if event.type == 'RIGHTMOUSE' or self.tool in {'INTERNAL', 'DART', 'KNIFE'}:
-                    self.show_card('INTERNAL_CHOOSER', (btn_rect.x + btn_rect.w + 10 * scale, btn_rect.y + btn_rect.h / 2))
-                else:
-                    self.choose_tool(getattr(self, 'internal_tool', 'INTERNAL'))
+                self.choose_tool(self.internal_tool)
             elif button == 'PIN':
-                if event.type == 'RIGHTMOUSE' or self.tool in {'PIN', 'TACK'}:
-                    self.show_card('PIN_CHOOSER', (btn_rect.x + btn_rect.w + 10 * scale, btn_rect.y + btn_rect.h / 2))
-                else:
-                    self.choose_tool(getattr(self, 'pin_tool', 'PIN'))
+                self.choose_tool(self.pin_tool)
             elif button == 'GARMENT':
                 self.show_card('GARMENT', (btn_rect.x, btn_rect.y - 10 * scale))
             elif button in {'SIMULATE', 'KEEP'}:
@@ -1339,8 +1748,13 @@ class MinimalCards:
                 self.show_card('KEEP', (btn_rect.x, btn_rect.y + 45 * scale))
             elif button == 'SIMULATE_OPTIONS':
                 self.show_card('SIMULATE', (btn_rect.x, btn_rect.y + 45 * scale))
+            elif button.startswith('STRIP_'):
+                self.flyout = None
+                self.minimal_action(button.removeprefix('STRIP_'))
             else:
                 self.minimal_action(button)
+            if button in FLYOUT_TOOLS:
+                self.flyout_dismissed = button
             return {'FINISHED'} if self._closed else {'RUNNING_MODAL'}
         if card:
             if press and event.type == 'LEFTMOUSE':
@@ -1376,7 +1790,7 @@ class MinimalCards:
                         action1, action2 = row[1], row[2]
                         chosen = action1 if point[0] < rect.x + rect.w / 2 else action2
                         self.minimal_action(chosen)
-                        if chosen not in {'REFERENCE_IMAGE', 'MENU_LIBRARY', 'LIBRARY_SAVE'} and not getattr(self, 'pending_transform', None):
+                        if chosen not in {'REFERENCE_IMAGE', 'MENU_LIBRARY', 'LIBRARY_SAVE', *SUBMENUS} and not getattr(self, 'pending_transform', None):
                             self.card_kind = None
                     elif key == 'SLIDER':
                         label = row[1]
@@ -1384,14 +1798,23 @@ class MinimalCards:
                         if label == 'dd_weld_distance':
                             scale = layout.scale
                             self.setting_drag['absolute'] = Rect(rect.x + 6 * scale, rect.y, rect.w - 12 * scale, rect.h)
+                    elif key == 'MENU' and row[1] in HOVER_MENUS:
+                        self.open_sub(row[1], rect, card[0])
                     elif key not in {'INFO', 'AVATAR_FIELD'}:
                         action = row[1] if key == 'MENU' else key
                         self.minimal_action(action)
-                        if not action.startswith(('LOAD_','LIBRARY_','PAGE_LIBRARY')) and action not in {'GARMENT_FABRIC_MENU', 'PIECE_FABRIC_MENU', 'PIECE_DENSITY_MENU', 'PIECE_SIMULATION_MENU', 'SCROLL_WEAR_OVER', 'NAME', 'REFERENCE_IMAGE', 'MENU_LIBRARY', 'MENU_GARMENT'} and not getattr(self, 'pending_transform', None):
+                        if not action.startswith(('LOAD_','LIBRARY_','PAGE_LIBRARY')) and action not in {'GARMENT_FABRIC_MENU', 'PIECE_FABRIC_MENU', 'PIECE_DENSITY_MENU', 'PIECE_SIMULATION_MENU', 'SCROLL_WEAR_OVER', 'NAME', 'REFERENCE_IMAGE', 'MENU_LIBRARY', 'MENU_GARMENT', 'TRACE_CALIBRATION', 'TRACE_POSITION', *SUBMENUS} and not getattr(self, 'pending_transform', None):
                             self.card_kind = None
                     break
             return {'RUNNING_MODAL'}
         if self.gesture:
+            return None
+        if press and event.type == 'LEFTMOUSE' and self.error_rect is not None and self.error_message and self.error_rect.contains(*point):
+            context.window_manager.clipboard = self.error_message
+            self.message = 'Message copied.'
+            self.error_message = None
+            return {'RUNNING_MODAL'}
+        if press and event.type == 'LEFTMOUSE' and self.seam_end_hit():
             return None
         if press and event.type == 'LEFTMOUSE':
             self.card_kind = None

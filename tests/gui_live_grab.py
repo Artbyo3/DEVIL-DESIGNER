@@ -116,7 +116,7 @@ def advance():
             return .3
         if step == 2:
             strip = workspace.shaping_controls_layout()
-            check({'MODE_TOGGLE', 'RADIUS_MINUS', 'RADIUS_PLUS'} <= set(strip), 'Grab controls are laid out')
+            check({'RADIUS_MINUS', 'RADIUS_PLUS'} <= set(strip), 'Grab controls are laid out')
             workspace.handle_event(bpy.context, event('MOUSEMOVE', center(strip['RADIUS_VALUE']), 'NOTHING'))
             radius = workspace.shaping.radius
             click(center(strip['RADIUS_PLUS']))
@@ -131,10 +131,10 @@ def advance():
             check(zoomed == {'PASS_THROUGH'} and abs(workspace.shaping.radius - radius) < 1e-9, 'wheel zooms the 3D view')
             workspace.handle_event(bpy.context, event('WHEELUPMOUSE', cloth_pixel(), ctrl=True))
             check(workspace.shaping.radius > radius, 'Ctrl+wheel changes grab radius')
-            click(center(strip['MODE_TOGGLE']))
-            check(workspace.shaping.mode == 'PUSH', 'mode button selects Push')
-            click(center(strip['MODE_TOGGLE']))
-            check(workspace.shaping.mode == 'PULL', 'mode button returns to Pull')
+            for mode in ('PUSH', 'PIN', 'PINCH', 'STEAM', 'PULL'):
+                workspace.open_flyout('SHAPE')
+                click(center(workspace.canvas_layout.buttons['STRIP_GRAB_' + mode][0]))
+                check(workspace.shaping.mode == mode and workspace.tool == 'SHAPE' and workspace.flyout is None, 'flyout selects ' + mode.title() + ' and closes')
             return .2
         if step == 3:
             point = cloth_pixel()

@@ -1,5 +1,24 @@
+import ast
+import operator
+import re
 from dataclasses import dataclass
 import math
+
+OPERATORS = {ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul, ast.Div: operator.truediv}
+
+
+def evaluate(text):
+    def walk(node):
+        if isinstance(node, ast.Constant) and type(node.value) in (int, float):
+            return node.value
+        if isinstance(node, ast.BinOp) and type(node.op) in OPERATORS:
+            return OPERATORS[type(node.op)](walk(node.left), walk(node.right))
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
+            return walk(node.operand) if isinstance(node.op, ast.UAdd) else -walk(node.operand)
+        raise ValueError('Only numbers and + - * / are allowed.')
+    cleaned = re.sub(r'(?<![\d.])0+(?=\d)', '', text.replace(',', '.').strip())
+    return float(walk(ast.parse(cleaned, mode='eval').body))
+
 
 @dataclass(frozen=True)
 class Setting:
@@ -19,8 +38,8 @@ class Setting:
 
     def parse(self, text):
         try:
-            value = float(text.replace(',', '.'))
-        except ValueError as exc:
+            value = evaluate(text)
+        except (ValueError, SyntaxError, ZeroDivisionError, OverflowError, RecursionError) as exc:
             raise ValueError('Enter a number for ' + self.label.lower() + '.') from exc
         value /= self.factor
         if not math.isfinite(value) or not self.low <= value <= self.high:
@@ -45,6 +64,10 @@ LOCAL_SETTINGS = {
         Setting('dd_fabric_structural', 'Stretch stiffness', 1, '', 1, .1, 500),
         Setting('dd_fabric_bending', 'Bending stiffness', 1, '', .05, .001, 120),
         Setting('dd_fabric_density', 'Mass density', 1, '', .05, .01, 10),
+        Setting('dd_fabric_weft', 'Weft stretch', 100, '%', .05, .05, 4),
+        Setting('dd_fabric_bias', 'Bias stiffness', 100, '%', .05, .05, 4),
+        Setting('dd_fabric_shrink_warp', 'Shrink lengthwise', 100, '%', .01, -.3, .3),
+        Setting('dd_fabric_shrink_weft', 'Shrink widthwise', 100, '%', .01, -.3, .3),
     )
 }
 

@@ -27,7 +27,7 @@ If the body placement point you need is unavailable, choose another visible poin
 
 ### Fine-Tune Placement
 
-Use Blender's <kbd>G</kbd> to move a panel or <kbd>R</kbd> to rotate it. Right-click a placement point for **Arrange flat**, or a piece for **Reset to 2D layout**.
+Use Blender's <kbd>G</kbd> to move a panel or <kbd>R</kbd> to rotate it. Right-click a placement point for **Arrange flat**, or a piece for **Placement > Reset to 2D layout**.
 
 ## Pin Pieces in Place
 

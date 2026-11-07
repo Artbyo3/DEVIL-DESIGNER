@@ -19,7 +19,7 @@ On an empty canvas, choose **Create panel** for a starter rectangle. To draw you
 
 ### Creating a Mirrored Twin
 
-For a matching left and right piece, right-click a piece and choose **Clone as linked twin**. Changes to its outline and internal lines are copied to the twin.
+For a matching left and right piece, right-click a piece and choose **Clone > Clone as linked twin**. Changes to its outline and internal lines are copied to the twin.
 
 <figure class="dd-shot" id="shot-quickstart-mirrored-twin" data-shot='{"action":"Create a mirrored linked twin of a pattern piece","ui_state":"Two pattern pieces with linked twin on minimal canvas","framing":"full-editor","aspect_ratio":"16:9"}' data-shot-framing="full-editor" aria-labelledby="shot-quickstart-mirrored-twin-caption">
   <div class="dd-shot__frame"><span class="dd-shot__icon" aria-hidden="true"></span><span class="dd-shot__label">Screenshot coming soon</span></div>

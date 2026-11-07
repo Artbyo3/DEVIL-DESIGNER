@@ -99,13 +99,13 @@ def author_fold(session, style, depth=.02):
     _validate_line(pattern, path)
     if any(record[0].id == path.id for record in fold_records(pattern)):
         raise ValueError('Remove this fold before creating another fold or pleat from it.')
-    if style not in ('MOUNTAIN', 'VALLEY', 'KNIFE', 'BOX'):
-        raise ValueError('Choose Mountain, Valley, Knife pleat or Box pleat.')
+    if style not in ('MOUNTAIN', 'VALLEY', 'KNIFE', 'BOX', 'ACCORDION'):
+        raise ValueError('Choose Mountain, Valley, Knife, Box or Accordion pleat.')
     if not math.isfinite(depth) or not .01 <= depth <= .04:
         raise ValueError('Pleat depth must be between 1 and 4 cm.')
-    offsets = [0] if style in ('MOUNTAIN', 'VALLEY') else [0, depth] if style == 'KNIFE' else [-2 * depth, -depth, depth, 2 * depth]
+    offsets = [0] if style in ('MOUNTAIN', 'VALLEY') else [0, depth] if style == 'KNIFE' else [0, depth, 2 * depth, 3 * depth] if style == 'ACCORDION' else [-2 * depth, -depth, depth, 2 * depth]
     paths = [path if abs(offset) < 1e-10 else _parallel_path(pattern, path, offset) for offset in offsets]
-    angles = [-150] if style == 'VALLEY' else [150] if style == 'MOUNTAIN' else [150, -150] if style == 'KNIFE' else [150, -150, -150, 150]
+    angles = [-150] if style == 'VALLEY' else [150] if style == 'MOUNTAIN' else [150, -150] if style == 'KNIFE' else [150, -150, 150, -150] if style == 'ACCORDION' else [150, -150, -150, 150]
     group = uid()
     def apply():
         if path not in paths:
@@ -139,12 +139,42 @@ def edit_fold(session, action):
         elif action == 'REVERSE':
             for feature in group:
                 feature['angle'] = -feature['angle']
-        elif action in ('60', '120', '150'):
+        elif action in ('30', '60', '90', '120', '150'):
             for feature in group:
                 feature['angle'] = math.copysign(int(action), feature['angle'])
         else:
             raise ValueError('Unknown fold action.')
     return session.commit(apply)
+
+
+def sew_pleats(session):
+    from .core import EdgeRef
+    edge = session.segment
+    if edge is None:
+        raise ValueError('Select the edge the pleats reach.')
+    document = session.document
+    pattern = document.find(edge.pattern)
+    curve = document.edge_curve(edge.full())
+    groups = {}
+    for path, feature in fold_records(pattern):
+        hits = [curves.closest_fraction(curve, point) for point in (path.points[0], path.points[-1])]
+        for fraction, distance in hits:
+            if distance < 1e-4:
+                groups.setdefault(feature.get('group'), []).append(fraction)
+    spans = []
+    for values in groups.values():
+        lines = sorted(values)
+        if len(lines) == 2:
+            spans.append((lines[0], lines[1], min(1.0, 2 * lines[1] - lines[0])))
+        elif len(lines) == 4:
+            middle = (lines[1] + lines[2]) / 2
+            spans.extend(((lines[0], lines[1], middle), (lines[3], lines[2], middle)))
+    if not spans:
+        raise ValueError('No pleats reach this edge.')
+    for start, fold, end in spans:
+        session.sew_chains([EdgeRef(edge.pattern, edge.start, edge.end, start, fold, edge.path)],
+                           [EdgeRef(edge.pattern, edge.start, edge.end, fold, end, edge.path)], True)
+    return len(spans)
 
 
 def folded_positions(pattern, coords):
