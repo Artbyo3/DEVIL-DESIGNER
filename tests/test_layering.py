@@ -23,7 +23,7 @@ class LayeringTests(unittest.TestCase):
         body=SimpleNamespace(type='MESH',modifiers=[],get=lambda key,default=None:default)
         shirt=self.kept('Shirt')
         skipped=self.kept('Skirt',False)
-        with patch.object(layering,'kept_garments',return_value=[shirt,skipped]):
+        with patch.object(layering,'kept_garments',return_value=[shirt,skipped]),patch.object(layering,'current_pieces',return_value=set()):
             bodies=layering.collision_bodies(self.scene([body,shirt,skipped],body))
         self.assertEqual(bodies,[body,shirt])
 
@@ -60,7 +60,7 @@ class LayeringTests(unittest.TestCase):
         with patch.object(layering,'kept_garments',return_value=[]):
             self.assertEqual(namespace['signature'](scene,[]),namespace['signature'](scene,[]))
         shirt=self.kept('Shirt')
-        with patch.object(layering,'kept_garments',return_value=[shirt]):
+        with patch.object(layering,'kept_garments',return_value=[shirt]),patch.object(layering,'current_pieces',return_value=set()):
             enabled=namespace['signature'](scene,[])
             shirt.get=lambda key,default=None:False
             self.assertNotEqual(namespace['signature'](scene,[]),enabled)
