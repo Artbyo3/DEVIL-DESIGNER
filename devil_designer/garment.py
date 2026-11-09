@@ -366,6 +366,9 @@ def require_body(scene):
 
 def compile_garment(context):
     scene = context.scene
+    if scene.dd_avatar is not None:
+        from . import live_panels
+        live_panels.sync(context)
     lock_timeline(scene)
     try:
         return build_simulation(context)
@@ -375,6 +378,7 @@ def compile_garment(context):
         raise
 
 
+@build_guard
 def build_simulation(context):
     scene = context.scene
     doc = document(scene)

@@ -125,6 +125,28 @@ def test_frozen_redrape_carries_drape_and_pins(scene):
     check(shift < 1e-3, 'a Re-drape with a frozen piece starts from the previous drape')
 
 
+def test_reopened_file_signature_still_simulates(scene):
+    fresh(scene)
+    scene.dd_document = starters.create_tank_starter(None, 'COTTON').dumps()
+    first = garment.compile_garment(bpy.context)
+    run_frames(scene, 30)
+    draped = simulation_points(first).copy()
+    for panel in garment.generated(scene, 'panel'):
+        panel['dd_avatar_frame'] = 'signature from an earlier session'
+    document = Document.loads(scene.dd_document)
+    document.patterns[0].preset = 'DENIM'
+    document.patterns[0].fabric_override = True
+    scene.dd_document = document.dumps()
+    second = garment.compile_garment(bpy.context)
+    check(second is not None and second.name in bpy.data.objects and garment.generated(scene, 'simulation') == [second],
+          'Simulate survives panels whose avatar signature is from an earlier session')
+    start = np.array([tuple(vertex.co) for vertex in second.data.vertices])
+    shift = float(np.linalg.norm(start - draped, axis=1).mean()) if len(start) == len(draped) else float('inf')
+    check(shift < 1e-3, 'that Simulate starts from the previous drape')
+    run_frames(scene, 10)
+    check(np.isfinite(simulation_points(second)).all(), 'that drape keeps simulating')
+
+
 def test_reset_forgets_the_drape(scene):
     fresh(scene)
     scene.dd_document = starters.create_tank_starter(None, 'COTTON').dumps()
@@ -245,6 +267,7 @@ for obj in list(scene.objects):
 scene.dd_avatar = build_body()
 test_drape_carries_across_an_edit(scene)
 test_frozen_redrape_carries_drape_and_pins(scene)
+test_reopened_file_signature_still_simulates(scene)
 test_reset_forgets_the_drape(scene)
 test_elastic_narrows_the_edge(scene)
 test_fabric_tack_pulls_points_together(scene)

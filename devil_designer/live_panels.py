@@ -261,7 +261,7 @@ def avatar_signature(context):
     avatar=context.scene.dd_avatar
     if avatar is None:return ''
     evaluated=avatar.evaluated_get(context.evaluated_depsgraph_get())
-    return json.dumps([avatar.as_pointer(),[list(row) for row in evaluated.matrix_world],
+    return json.dumps([avatar.name_full,avatar.data.name_full if avatar.data else '',[list(row) for row in evaluated.matrix_world],
                        [list(point) for point in evaluated.bound_box],
                        context.scene.dd_clearance],separators=(',',':'))+chr(10)+avatar.get('dd_arrangement_volumes','')
 
