@@ -621,6 +621,8 @@ class MinimalCards:
                     ('MENU', 'TRANSFORM_MENU', 'Transform', '')]
             if len(self.session.point_selection) > 1:
                 rows.append(('MERGE', 'Merge selected points', ''))
+            if pattern and self.session.path != 'OUTER':
+                rows.append(('PATH_ACTIONS', 'Internal path actions', 'Cut, fold, offset'))
         elif kind == 'EDGE':
             title = 'Edge'
             edge = self.session.segment
@@ -1597,6 +1599,18 @@ class MinimalCards:
             self.perform_action(key)
             if not getattr(self, 'pending_transform', None):
                 self.card_kind = None
+        elif key == 'PATH_ACTIONS':
+            pattern = self.session.document.find(self.session.selected)
+            if pattern is not None and self.session.corner is not None:
+                vertex = pattern.path(self.session.path).vertices[self.session.corner].id
+                edge = next((edge for edge in self.session.document.edges(pattern.id, self.session.path)
+                             if vertex in (edge.start, edge.end)), None)
+                if edge is not None:
+                    self.session.segment = edge
+                    self.session.corner = None
+                    self.session.point_selection = []
+                    self.sync_selection()
+                    self.show_card('INTERNAL_EDGE', self.card_anchor)
         elif key.startswith('ALIGN_') or key in {'DISTRIBUTE_X', 'DISTRIBUTE_Y'}:
             mode = key.removeprefix('ALIGN_').upper()
             self.run_edit(lambda: self.session.align_pieces(mode), 'Pieces distributed.' if key.startswith('DISTRIBUTE') else 'Pieces aligned.')
@@ -1854,7 +1868,7 @@ class MinimalCards:
                     elif key != 'AVATAR_FIELD':
                         action = row[1] if key == 'MENU' else key
                         self.minimal_action(action)
-                        if not action.startswith(('LOAD_','LIBRARY_','PAGE_LIBRARY')) and action not in {'GARMENT_FABRIC_MENU', 'PIECE_FABRIC_MENU', 'PIECE_DENSITY_MENU', 'PIECE_SIMULATION_MENU', 'SCROLL_WEAR_OVER', 'NAME', 'REFERENCE_IMAGE', 'MENU_LIBRARY', 'MENU_GARMENT', 'TRACE_CALIBRATION', 'TRACE_POSITION', *SUBMENUS} and not getattr(self, 'pending_transform', None):
+                        if not action.startswith(('LOAD_','LIBRARY_','PAGE_LIBRARY')) and action not in {'GARMENT_FABRIC_MENU', 'PIECE_FABRIC_MENU', 'PIECE_DENSITY_MENU', 'PIECE_SIMULATION_MENU', 'SCROLL_WEAR_OVER', 'NAME', 'REFERENCE_IMAGE', 'MENU_LIBRARY', 'MENU_GARMENT', 'TRACE_CALIBRATION', 'TRACE_POSITION', 'PATH_ACTIONS', *SUBMENUS} and not getattr(self, 'pending_transform', None):
                             self.card_kind = None
                     break
             return {'RUNNING_MODAL'}
