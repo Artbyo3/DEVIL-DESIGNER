@@ -208,11 +208,17 @@ def strengthen(obj, vertices, multiplier):
     mesh.edges.foreach_get('vertices', edges)
     compliance = np.empty(len(mesh.edges), dtype=np.float32)
     mesh.attributes['dd_edge_compliance'].data.foreach_get('value', compliance)
-    compliance[chosen[edges.reshape(-1, 2)].any(axis=1)] /= multiplier
+    linked = np.zeros(len(mesh.edges), dtype=bool)
+    link_attribute = mesh.attributes.get('dd_bend_link')
+    if link_attribute is not None:
+        link_attribute.data.foreach_get('value', linked)
+    touched = chosen[edges.reshape(-1, 2)].any(axis=1)
+    compliance[touched & ~linked] /= multiplier
+    compliance[touched & linked] /= multiplier ** 2
     write(mesh, 'dd_edge_compliance', 'FLOAT', 'EDGE', compliance)
     bending = np.empty(len(mesh.vertices), dtype=np.float32)
     mesh.attributes['dd_bend_compliance'].data.foreach_get('value', bending)
-    bending[chosen] /= multiplier
+    bending[chosen] /= multiplier ** 2
     write(mesh, 'dd_bend_compliance', 'FLOAT', 'POINT', bending)
 
 
@@ -325,6 +331,7 @@ def attach(context, obj, doc, panels, pieces, maps, plan, pinned, tacks):
     write(mesh, 'rest_length', 'FLOAT', 'EDGE', length)
     write(mesh, 'dd_seam_start', 'FLOAT', 'EDGE', seam_start)
     write(mesh, 'dd_seam', 'BOOLEAN', 'EDGE', loose)
+    write(mesh, 'dd_bend_link', 'BOOLEAN', 'EDGE', linked)
     write(mesh, 'dd_edge_compliance', 'FLOAT', 'EDGE', compliance)
     write(mesh, 'dd_rest_position', 'FLOAT_VECTOR', 'POINT', rest)
     write(mesh, 'dd_bend_rest', 'FLOAT_VECTOR', 'POINT', bend_rest_positions(panels, doc, rest, unit))
