@@ -1800,7 +1800,10 @@ class MinimalCards:
                             self.setting_drag['absolute'] = Rect(rect.x + 6 * scale, rect.y, rect.w - 12 * scale, rect.h)
                     elif key == 'MENU' and row[1] in HOVER_MENUS:
                         self.open_sub(row[1], rect, card[0])
-                    elif key not in {'INFO', 'AVATAR_FIELD'}:
+                    elif key == 'INFO':
+                        context.window_manager.clipboard = f'{row[1]}: {row[2]}' if row[2] else str(row[1])
+                        self.message = 'Row text copied.'
+                    elif key != 'AVATAR_FIELD':
                         action = row[1] if key == 'MENU' else key
                         self.minimal_action(action)
                         if not action.startswith(('LOAD_','LIBRARY_','PAGE_LIBRARY')) and action not in {'GARMENT_FABRIC_MENU', 'PIECE_FABRIC_MENU', 'PIECE_DENSITY_MENU', 'PIECE_SIMULATION_MENU', 'SCROLL_WEAR_OVER', 'NAME', 'REFERENCE_IMAGE', 'MENU_LIBRARY', 'MENU_GARMENT', 'TRACE_CALIBRATION', 'TRACE_POSITION', *SUBMENUS} and not getattr(self, 'pending_transform', None):
@@ -1813,6 +1816,11 @@ class MinimalCards:
             context.window_manager.clipboard = self.error_message
             self.message = 'Message copied.'
             self.error_message = None
+            return {'RUNNING_MODAL'}
+        if (press and event.type == 'LEFTMOUSE' and self.message_rect is not None and self.message
+                and time.monotonic() < getattr(self, 'toast_until', 0) and self.message_rect.contains(*point)):
+            context.window_manager.clipboard = self.message
+            self.message = 'Message copied.'
             return {'RUNNING_MODAL'}
         if press and event.type == 'LEFTMOUSE' and self.seam_end_hit():
             return None

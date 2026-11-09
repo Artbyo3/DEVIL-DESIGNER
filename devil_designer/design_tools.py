@@ -21,6 +21,7 @@ class DesignTools:
         self.pending_join=None
         self.pen_mode=None
         self.error_rect=None
+        self.message_rect=None
         self.pen_points=[]
 
     def design_hit(self):
