@@ -61,6 +61,7 @@ LOCAL_SETTINGS = {
         Setting('dd_trace_width', 'Image width', 100, 'cm', 1, .000001, 1000),
         Setting('dd_trace_x', 'Image X', 100, 'cm', 1, -1000, 1000),
         Setting('dd_trace_y', 'Image Y', 100, 'cm', 1, -1000, 1000),
+        Setting('dd_trace_rotation', 'Image rotation', 1, 'deg', 1, -180, 180),
         Setting('dd_fabric_structural', 'Stretch stiffness', 1, '', 1, .1, 500),
         Setting('dd_fabric_bending', 'Bending stiffness', 1, '', .05, .001, 120),
         Setting('dd_fabric_density', 'Mass density', 1, '', .05, .01, 10),

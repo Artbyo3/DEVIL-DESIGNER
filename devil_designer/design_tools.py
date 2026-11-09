@@ -15,6 +15,7 @@ class DesignTools:
         self.library_items=[]
         self.cut_preview=None
         self.trace_points=None
+        self.trace_drag=None
         self.mn_sewing=False
         self.mn_chain=[]
         self.mn_first=None

@@ -687,12 +687,21 @@ class MinimalCards:
             rows.append(('PAIR_ACTIONS', 'FLIP_SEAM', 'REMOVE_SEAM', 'Reverse', 'Remove'))
         elif kind == 'REFERENCE_IMAGE':
             title = 'Reference image'
-            rows = [('TRACE_LOAD', 'Load image', 'Choose file')]
+            from .tracing import reference_count
+            count = reference_count(scene)
             if scene.dd_trace_path:
-                rows += [('TRACE_CALIBRATION', 'Set measured scale', ''),
-                         ('TRACE_POSITION', 'Image placement', ''),
-                         ('TRACE_VISIBLE', 'Visibility', 'Shown' if scene.dd_trace_visible else 'Hidden'),
-                         ('CHOICES', 'Image opacity', ('TRACE_OPACITY', IMAGE_OPACITY, self.named_choice(scene.dd_trace_opacity, IMAGE_OPACITY)))]
+                rows = [('PAIR_ACTIONS', 'TRACE_LOAD', 'TRACE_ADD', 'Replace image', 'Add image')]
+                if count > 1:
+                    rows.append(('TRACE_NEXT', f'Image 1 of {count}', 'Next image'))
+                if not scene.dd_trace_locked:
+                    rows += [('TRACE_CALIBRATION', 'Set measured scale', ''),
+                             ('TRACE_POSITION', 'Image placement', '')]
+                rows += [('PAIR_ACTIONS', 'TRACE_VISIBLE', 'TRACE_LOCK', 'Hide' if scene.dd_trace_visible else 'Show',
+                          'Unlock' if scene.dd_trace_locked else 'Lock'),
+                         ('CHOICES', 'Image opacity', ('TRACE_OPACITY', IMAGE_OPACITY, self.named_choice(scene.dd_trace_opacity, IMAGE_OPACITY))),
+                         ('TRACE_REMOVE', 'Remove image', '')]
+            else:
+                rows = [('TRACE_LOAD', 'Load image', 'Choose file')]
             if scene.dd_trace_error:
                 rows.append(('INFO', 'Image unavailable', scene.dd_trace_error))
         elif kind == 'TRACE_CALIBRATION':
@@ -702,8 +711,11 @@ class MinimalCards:
                     ('INFO', 'Scale only', 'Cannot correct photo distortion')]
         elif kind == 'TRACE_POSITION':
             title = 'Image placement'
-            rows = [('SLIDER', 'dd_trace_width', 'Width'), ('SLIDER', 'dd_trace_x', 'X position'),
-                    ('SLIDER', 'dd_trace_y', 'Y position'), ('TRACE_FIT', 'Fit image and pieces', '')]
+            rows = [('TRACE_DRAG', 'Move on canvas', 'Drag the image'),
+                    ('SLIDER', 'dd_trace_width', 'Width'), ('SLIDER', 'dd_trace_x', 'X position'),
+                    ('SLIDER', 'dd_trace_y', 'Y position'), ('SLIDER', 'dd_trace_rotation', 'Rotation'),
+                    ('PAIR_ACTIONS', 'TRACE_FLIP_X', 'TRACE_FLIP_Y', 'Mirror H', 'Mirror V'),
+                    ('TRACE_FIT', 'Fit image and pieces', '')]
         elif kind == 'MULTI_SELECTION':
             pieces, points = self.session.selection_counts()
             if pieces > 0 and points > 0:
@@ -1501,6 +1513,32 @@ class MinimalCards:
             self.fit()
         elif key == 'TRACE_LOAD':
             bpy.ops.devil.load_trace_image('INVOKE_DEFAULT')
+        elif key == 'TRACE_ADD':
+            bpy.ops.devil.load_trace_image('INVOKE_DEFAULT', add=True)
+        elif key == 'TRACE_NEXT':
+            from .tracing import cycle_reference
+            if cycle_reference(scene):
+                self.message = 'Next reference image selected for editing.'
+        elif key == 'TRACE_REMOVE':
+            from .tracing import remove_reference
+            remove_reference(scene)
+            self.trace_drag = None
+            self.message = 'Reference image removed.'
+        elif key == 'TRACE_LOCK':
+            scene.dd_trace_locked = not scene.dd_trace_locked
+            self.trace_drag = None
+            self.message = 'Reference image locked.' if scene.dd_trace_locked else 'Reference image unlocked.'
+        elif key in {'TRACE_FLIP_X', 'TRACE_FLIP_Y'}:
+            name = 'dd_trace_flip_x' if key == 'TRACE_FLIP_X' else 'dd_trace_flip_y'
+            setattr(scene, name, not getattr(scene, name))
+        elif key == 'TRACE_DRAG':
+            if self.draft or self.gesture:
+                self.message = 'Finish or cancel drafting before moving the image.'
+            else:
+                scene.dd_trace_visible = True
+                self.trace_drag = 'ARMED'
+                self.card_kind = None
+                self.message = 'Drag the image on the canvas. Escape or right-click finishes.'
         elif key == 'TRACE_VISIBLE':
             scene.dd_trace_visible = not scene.dd_trace_visible
         elif key.startswith('TRACE_OPACITY_'):

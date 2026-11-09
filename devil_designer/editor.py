@@ -261,8 +261,7 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         points = [p for pat in self.session.document.patterns for p in pat.points]
         points += self.reference_corners()
         from . import tracing
-        if self._scene.dd_trace_visible:
-            points += list(tracing.reference_corners(self._scene))
+        points += tracing.all_reference_corners(self._scene)
         layout = self.canvas_layout
         canvas = layout.canvas
         fit_rect = canvas
@@ -702,7 +701,7 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                 from . import tracing
                 point = self.view.world(self.pointer, self.canvas_layout.canvas)
                 corners = tracing.reference_corners(self._scene)
-                if not corners or not (corners[0][0] <= point[0] <= corners[2][0] and corners[0][1] <= point[1] <= corners[2][1]):
+                if not corners or not tracing.inside(corners, point):
                     self.message = 'Pick a point inside the reference image.'
                     return {'RUNNING_MODAL'}
                 self.trace_points.append(point)
@@ -719,6 +718,10 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                     self.message = 'Now click the other end of the measured length.'
                 return {'RUNNING_MODAL'}
             return {'PASS_THROUGH'} if not panel else {'RUNNING_MODAL'}
+        if self.trace_drag is not None:
+            result = self.trace_drag_event(event, canvas)
+            if result is not None:
+                return result
         if press and event.type in {'ESC', 'RIGHTMOUSE'} and (self.pending_place or self.pending_tack):
             return self.design_pending_event(context, event, panel)
         if self.confirm_action:
@@ -1457,11 +1460,37 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         origin = view3d_utils.region_2d_to_origin_3d(self._region, view, self.pointer)
         return origin, view3d_utils.region_2d_to_vector_3d(self._region, view, self.pointer)
 
+    def trace_drag_event(self, event, canvas):
+        scene = self._scene
+        if not scene.dd_trace_path or scene.dd_trace_locked:
+            self.trace_drag = None
+            return None
+        press = event.value == 'PRESS'
+        if press and event.type in {'ESC', 'RIGHTMOUSE'}:
+            self.trace_drag = None
+            self.message = 'Image placement finished.'
+            return {'RUNNING_MODAL'}
+        if press and event.type == 'LEFTMOUSE' and canvas and not any(card[0].contains(*self.pointer) for card in self.visible_cards()):
+            self.trace_drag = dict(start=self.view.world(self.pointer, self.canvas_layout.canvas),
+                                   origin=(scene.dd_trace_x, scene.dd_trace_y))
+            return {'RUNNING_MODAL'}
+        if isinstance(self.trace_drag, dict):
+            if event.type == 'MOUSEMOVE':
+                point = self.view.world(self.pointer, self.canvas_layout.canvas)
+                scene.dd_trace_x = self.trace_drag['origin'][0] + point[0] - self.trace_drag['start'][0]
+                scene.dd_trace_y = self.trace_drag['origin'][1] + point[1] - self.trace_drag['start'][1]
+                return {'RUNNING_MODAL'}
+            if event.type == 'LEFTMOUSE' and event.value == 'RELEASE':
+                self.trace_drag = 'ARMED'
+                self.message = 'Image moved. Drag again, or press Escape to finish.'
+                return {'RUNNING_MODAL'}
+        return None
+
     def shortcut_belongs_to_blender(self, event, panel):
         if panel or self.tool == 'SHAPE' or event.type == 'NONE' or any(token in event.type for token in NON_KEYBOARD_TOKENS):
             return False
         if (self.numeric or self.library_edit or self.setting_drag or self.gesture or self.draft or self.confirm_action
-                or self.trace_points is not None or getattr(self, 'pending_transform', None)):
+                or self.trace_points is not None or self.trace_drag is not None or getattr(self, 'pending_transform', None)):
             return False
         if event.ctrl and event.type in {'Z', 'Y'}:
             return False
