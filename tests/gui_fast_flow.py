@@ -848,9 +848,8 @@ def check_arrangement_controls(workspace,event,check):
         target=next(point for point in points if point['volume']=='chest' and point['point']=='front')
         screen=target['screen']
         check(0<screen[0]<region.width and 0<screen[1]<region.height,'chest point is visible outside the drawing window')
-        workspace.handle_event(bpy.context,event('H',screen))
-        check(not arrangement_controls.projected_points(bpy.context),'H hides arrangement dots along with the body guide')
-        workspace.handle_event(bpy.context,event('H',screen))
+        result=workspace.handle_event(bpy.context,event('H',screen))
+        check(result=={'PASS_THROUGH'} and arrangement_controls.projected_points(bpy.context),'H over the 3D view goes to Blender and leaves arrangement dots shown')
         workspace.handle_event(bpy.context,event('LEFTMOUSE',screen))
         check(workspace.session.document.find(workspace.session.selected).arrangement is None,'pressing a dot waits for release before placing')
         workspace.handle_event(bpy.context,event('LEFTMOUSE',screen,'RELEASE'))

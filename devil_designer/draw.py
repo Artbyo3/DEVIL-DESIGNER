@@ -1201,6 +1201,7 @@ class Renderer:
                 ink = (1.0, .85, .85, .6) if index == len(lines) - 1 else (1.0, .85, .85, 1.0)
                 self.text(toast.x + 12 * scale, toast.y + toast.h - (18 + 14 * index) * scale, line, 10, ink)
         elif ed.message and ed.tool != 'SHAPE':
+            ed.message_rect = None
             if getattr(ed, 'toast_text', None) != ed.message:
                 ed.toast_text = ed.message
                 ed.toast_until = time.monotonic() + 3
@@ -1208,7 +1209,8 @@ class Renderer:
                 panel = layout.panel
                 width = min(420 * scale, max(80 * scale, panel.w - 390 * scale))
                 toast = Rect(panel.x + 76 * scale, panel.y + 15 * scale, width, 30 * scale)
-                ed.message_rect = toast
+                blf.size(0, 10 * self.s)
+                ed.message_rect = toast if blf.dimensions(0, translate(ed.toast_text))[0] > toast.w - 24 * scale else None
                 self.round_rect(toast, SURFACE_FLOATING, radius=metrics.tooltip)
                 self.text(toast.x + 12 * scale, toast.y + 10 * scale, ed.toast_text, 10, TEXT_SUB, max_width=toast.w - 24 * scale)
         panel = layout.panel

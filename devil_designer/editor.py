@@ -1495,6 +1495,9 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         if (self.numeric or self.library_edit or self.setting_drag or self.gesture or self.draft or self.confirm_action
                 or self.trace_points is not None or self.trace_drag is not None or getattr(self, 'pending_transform', None)):
             return False
+        from .arrangement_controls import interaction_active
+        if interaction_active():
+            return False
         if event.ctrl and event.type in {'Z', 'Y'}:
             return False
         if event.type == 'ESC' and (self.card_kind or self.flyout or self.pending_edge or self.pending_place or self.pending_tack
