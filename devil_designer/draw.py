@@ -436,7 +436,9 @@ class Renderer:
                     centers=[view.screen(((min(point[0] for point in outline)+max(point[0] for point in outline))/2,
                                           (min(point[1] for point in outline)+max(point[1] for point in outline))/2),c) for outline in outlines]
                     ed.twin_tethers.append(centers)
-                    self.lines(centers,(*ACCENT[:3],.25),1/max(1,s))
+                    self.lines(centers,(*ACCENT[:3],.4),3.6)
+                    for center in centers:
+                        self.dot(center,4.5,(*ACCENT[:3],.85))
                 for index, source in enumerate(ed.session.document.patterns):
                     pat = ed.preview_pattern(source)
                     selected = (pat.id in ed.session.selected_patterns) if ed.session.selected_patterns else (ed.session.selected == pat.id)
