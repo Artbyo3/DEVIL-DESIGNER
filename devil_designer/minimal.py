@@ -758,6 +758,11 @@ class MinimalCards:
                     ('PAIR_ACTIONS', 'FLIP_H', 'FLIP_V', 'Flip H', 'Flip V')]
             if pattern and self.session.corner is None and not self.session.selected_points:
                 rows.append(('CHOICES', 'Offset copy', ('OFFSET_OUTLINE', ('-1 cm', '+1 cm', '+2 cm', '+5 cm'), '')))
+            if len(self.session.selected_patterns) > 1:
+                rows.append(('CHOICES', 'Align', ('ALIGN', ('Left', 'Center', 'Right'), '')))
+                rows.append(('CHOICES', 'Align vertically', ('ALIGN', ('Top', 'Middle', 'Bottom'), '')))
+                if len(self.session.selected_patterns) > 2:
+                    rows.append(('PAIR_ACTIONS', 'DISTRIBUTE_X', 'DISTRIBUTE_Y', 'Distribute H', 'Distribute V'))
         elif kind == 'SEAM_WARNING':
             pre = getattr(self, 'pending_transform', None) or {}
             report = pre.get('report') if isinstance(pre, dict) and 'report' in pre else pre
@@ -1553,6 +1558,10 @@ class MinimalCards:
             self.perform_action(key)
             if not getattr(self, 'pending_transform', None):
                 self.card_kind = None
+        elif key.startswith('ALIGN_') or key in {'DISTRIBUTE_X', 'DISTRIBUTE_Y'}:
+            mode = key.removeprefix('ALIGN_').upper()
+            self.run_edit(lambda: self.session.align_pieces(mode), 'Pieces distributed.' if key.startswith('DISTRIBUTE') else 'Pieces aligned.')
+            self.card_kind = None
         elif key.startswith('SET_SELECT_TARGET_'):
             choice = key.removeprefix('SET_SELECT_TARGET_')
             tgt = 'PATHS' if choice == 'Internal paths' else choice.upper()

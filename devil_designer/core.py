@@ -1547,6 +1547,43 @@ class Session(ConstructionMixin):
             self.remember_committed_selection()
         return res
 
+    def align_pieces(self,mode):
+        pats=[self.document.find(pid) for pid in sorted(self.selected_patterns) if self.document.find(pid)]
+        if mode in ('DISTRIBUTE_X','DISTRIBUTE_Y'):
+            if len(pats)<3:raise ValueError('Select three or more pieces to distribute.')
+        elif len(pats)<2:raise ValueError('Select two or more pieces to align.')
+        def bounds(pattern):
+            points=[(v.x,v.y) for _,nodes,_,_ in pattern.loops() for v in nodes]
+            return min(p[0] for p in points),min(p[1] for p in points),max(p[0] for p in points),max(p[1] for p in points)
+        boxes={p.id:bounds(p) for p in pats}
+        left=min(b[0] for b in boxes.values());bottom=min(b[1] for b in boxes.values())
+        right=max(b[2] for b in boxes.values());top=max(b[3] for b in boxes.values())
+        shifts={}
+        if mode=='DISTRIBUTE_X' or mode=='DISTRIBUTE_Y':
+            axis=0 if mode=='DISTRIBUTE_X' else 1
+            ordered=sorted(pats,key=lambda p:(boxes[p.id][axis]+boxes[p.id][axis+2])/2)
+            span=(right-left) if axis==0 else (top-bottom)
+            gap=(span-sum(boxes[p.id][axis+2]-boxes[p.id][axis] for p in ordered))/(len(ordered)-1)
+            cursor=left if axis==0 else bottom
+            for p in ordered:
+                low,high=boxes[p.id][axis],boxes[p.id][axis+2]
+                shifts[p.id]=((cursor-low,0.0) if axis==0 else (0.0,cursor-low))
+                cursor+=high-low+gap
+        else:
+            for p in pats:
+                x0,y0,x1,y1=boxes[p.id]
+                shifts[p.id]={'LEFT':(left-x0,0.0),'CENTER':((left+right)/2-(x0+x1)/2,0.0),'RIGHT':(right-x1,0.0),
+                              'TOP':(0.0,top-y1),'MIDDLE':(0.0,(bottom+top)/2-(y0+y1)/2),'BOTTOM':(0.0,bottom-y0)}[mode]
+        if all(abs(dx)<1e-9 and abs(dy)<1e-9 for dx,dy in shifts.values()):return False
+        def op():
+            for p in pats:
+                dx,dy=shifts[p.id]
+                for _,nodes,_,_ in p.loops():
+                    for v in nodes:v.x+=dx;v.y+=dy
+                for anchor in self.document.anchors:
+                    if anchor.pattern==p.id:anchor.x+=dx;anchor.y+=dy
+        return self.commit(op)
+
     def flip_horizontal(self):
         pats=[self.document.find(pid) for pid in self.selected_patterns if self.document.find(pid)]
         if not pats and not self.selected_points and self._selected and self._corner is None:
