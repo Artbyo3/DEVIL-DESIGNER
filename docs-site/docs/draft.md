@@ -46,7 +46,7 @@ These shortcuts work while the pointer is over the editor panel, its dock, or an
 - <kbd>Escape</kbd> closes an open menu or flyout, or cancels a sewing, placement, or tack step in progress.
 - <kbd>Enter</kbd> finishes a multi-pair seam in progress.
 - <kbd>Ctrl</kbd> + <kbd>Z</kbd> and <kbd>Ctrl</kbd> + <kbd>Y</kbd> undo and redo editor changes, so Blender's undo never rolls the editor back past its own history.
-- While drawing, dragging, typing a value, or using the Grab tool, the editor keeps every key until you finish.
+- While drawing, dragging, moving an arrangement point, typing a value, drawing a line on the cloth or avatar, or using the Grab tool, the editor keeps every key until you finish.
 
 ## Bezier Curve Editing & Numeric Accuracy
 

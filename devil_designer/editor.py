@@ -1490,7 +1490,7 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         return None
 
     def shortcut_belongs_to_blender(self, event, panel):
-        if panel or self.tool == 'SHAPE' or event.type == 'NONE' or any(token in event.type for token in NON_KEYBOARD_TOKENS):
+        if panel or self.tool in {'SHAPE', 'PEN'} or self.pen_mode or event.type == 'NONE' or any(token in event.type for token in NON_KEYBOARD_TOKENS):
             return False
         if (self.numeric or self.library_edit or self.setting_drag or self.gesture or self.draft or self.confirm_action
                 or self.trace_points is not None or self.trace_drag is not None or getattr(self, 'pending_transform', None)):
