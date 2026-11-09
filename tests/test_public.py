@@ -1,10 +1,12 @@
 import hashlib
 import struct
+import subprocess
+import tempfile
 import unittest
 import zlib
 from unittest.mock import patch
 
-from tools.check_public import ALIAS, EMAIL, ROOT, inspect_commit_metadata, inspect_payload, inspect_text
+from tools.check_public import ALIAS, EMAIL, PUBLISHED_REFS, ROOT, inspect_commit_metadata, inspect_payload, inspect_text
 
 
 def png_chunk(chunk_type, data):
@@ -107,3 +109,24 @@ class PublicationTests(unittest.TestCase):
         errors = []
         inspect_text('fixture', 't3code' + '@' + 'users.noreply.github.com', errors)
         self.assertEqual(errors, [])
+
+    def test_history_scan_covers_published_refs_and_skips_local_session_refs(self):
+        with tempfile.TemporaryDirectory() as folder:
+            def git(*arguments, data=None):
+                return subprocess.run(['git', *arguments], cwd=folder, input=data, capture_output=True, check=True).stdout.decode().strip()
+            git('init', '-q')
+            git('config', 'user.name', 'fixture')
+            git('config', 'user.email', 'fixture' + '@' + 'users.noreply.github.com')
+            git('config', 'commit.gpgsign', 'false')
+            published = git('hash-object', '-w', '--stdin', data=b'published')
+            local = git('hash-object', '-w', '--stdin', data=b'local session')
+            git('update-index', '--add', '--cacheinfo', '100644,' + published + ',published.txt')
+            git('commit', '-q', '-m', 'published')
+            git('tag', 'v0')
+            git('update-index', '--add', '--cacheinfo', '100644,' + local + ',local.txt')
+            session = git('commit-tree', git('write-tree'), '-p', 'HEAD', '-m', 'session')
+            git('update-ref', 'refs/t3/session', session)
+            listed = git('rev-list', '--objects', *PUBLISHED_REFS)
+            self.assertIn(published, listed)
+            self.assertNotIn(local, listed)
+            self.assertNotIn('--all', PUBLISHED_REFS)

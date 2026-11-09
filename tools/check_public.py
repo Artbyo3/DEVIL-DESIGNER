@@ -18,6 +18,9 @@ PUBLIC_COMMITTERS = PUBLIC_IDENTITIES | {('GitHub', 'noreply' + '@github.com')}
 APPROVED_AUTHOR_FINGERPRINTS = {'b18b665c5f6c803b9215ddde43d51f1d8c60927f051acaf08c2989da82883697'}
 
 
+PUBLISHED_REFS = ('--branches', '--tags', '--remotes')
+
+
 def inspect_commit_metadata(records, errors):
     acknowledged_authors = 0
     for record in records.splitlines():
@@ -118,12 +121,12 @@ def main():
                 before = len(errors)
                 inspect_payload('devil_designer/'+member, z.read(member), errors)
                 errors[before:] = ['extension archive/'+error for error in errors[before:]]
-    commits=subprocess.run(['git','log','--all','--format=%H%x00%an%x00%ae%x00%cn%x00%ce'],cwd=ROOT,capture_output=True,text=True,check=True)
+    commits=subprocess.run(['git','log',*PUBLISHED_REFS,'--format=%H%x00%an%x00%ae%x00%cn%x00%ce'],cwd=ROOT,capture_output=True,text=True,check=True)
     acknowledged_authors = inspect_commit_metadata(commits.stdout, errors)
-    messages=subprocess.run(['git','log','--all','--format=%B'],cwd=ROOT,capture_output=True,text=True)
+    messages=subprocess.run(['git','log',*PUBLISHED_REFS,'--format=%B'],cwd=ROOT,capture_output=True,text=True)
     if messages.returncode==0:
         inspect_text('commit messages',messages.stdout,errors)
-    objects = subprocess.run(['git', 'rev-list', '--objects', '--all'], cwd=ROOT, capture_output=True, text=True, check=True)
+    objects = subprocess.run(['git', 'rev-list', '--objects', *PUBLISHED_REFS], cwd=ROOT, capture_output=True, text=True, check=True)
     history_count = 0
     for entry in objects.stdout.splitlines():
         object_id, separator, name = entry.partition(' ')
