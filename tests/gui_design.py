@@ -524,10 +524,10 @@ def run_selection_native(op, passed):
         bpy.context.preferences.view.ui_scale = 1.0
         op.canvas_layout = op.make_layout()
         op.start_set_pivot()
-        post('MOUSEMOVE', 'NOTHING', world=(.17, .17))
+        post('MOUSEMOVE', 'NOTHING', world=(.25, .38))
         yield
-        check(op.gesture.get('label') == 'Free', 'free pivot is labeled before placement')
-        drag((.17, .17), (.17, .17))
+        check(op.gesture.get('label') == 'Free', 'free pivot is labeled before placement, got ' + repr(op.gesture.get('label')) + ' at zoom ' + str(op.view.zoom))
+        drag((.25, .38), (.25, .38))
         yield
         pivot = op.session.get_pivot()
         op.view.pan(35, -20)
