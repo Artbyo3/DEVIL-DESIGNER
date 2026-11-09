@@ -181,7 +181,9 @@ preserve valid pair membership. Designs without pair records remain unchanged.
 - Reset/rebuild without losing valid source relationships or arranged placements.
 - Finalize to editable garment meshes with the pattern UVs and piece identifiers.
 - Kept garments are collision layers for later simulations. A five-row scrollable
-  Wear over list in the Simulate arrow defaults all kept garments on. Add missing
+  Wear over list in the Simulate arrow defaults kept garments on, except a kept mesh
+  that shares pieces with the current design, which defaults off so a garment never
+  collides with its own re-drape. A manual choice always wins. Add missing
   Collision modifiers without changing existing ones. Filter only the current
   simulation: always retain the body and every pre-existing scene collider except
   unchecked kept garments. Preserve kept meshes on Reset and the original path

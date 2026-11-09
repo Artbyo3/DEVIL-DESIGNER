@@ -27,6 +27,17 @@ class LayeringTests(unittest.TestCase):
             bodies=layering.collision_bodies(self.scene([body,shirt,skipped],body))
         self.assertEqual(bodies,[body,shirt])
 
+    def test_kept_copy_of_the_current_design_defaults_off(self):
+        values=dict(dd_piece_ids='["a","b"]')
+        own=SimpleNamespace(get=lambda key,default=None:values.get(key,default))
+        self.assertFalse(layering.worn(own,{'b','c'}))
+        self.assertTrue(layering.worn(own,{'c'}))
+        self.assertTrue(layering.worn(own,set()))
+        values['dd_wear_over']=True
+        self.assertTrue(layering.worn(own,{'b'}))
+        values['dd_wear_over']=False
+        self.assertFalse(layering.worn(own,{'c'}))
+
     def test_artist_collision_objects_stay_in_the_simulation(self):
         body=SimpleNamespace(type='MESH',modifiers=[],get=lambda key,default=None:default)
         prop=SimpleNamespace(type='MESH',modifiers=[SimpleNamespace(type='COLLISION',show_viewport=True)],get=lambda key,default=None:default)

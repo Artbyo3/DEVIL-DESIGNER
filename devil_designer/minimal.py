@@ -470,11 +470,12 @@ class MinimalCards:
             rows.append(('MENU_LIBRARY','Back to library',''))
         elif kind == 'SIMULATE':
             title = 'Simulate'
-            self.card_models = layering.kept_garments(scene)
+            layers = layering.worn_garments(scene)
+            self.card_models = [obj for obj,enabled in layers]
             self.wear_over_offset = max(0,min(self.wear_over_offset,len(self.card_models)-5))
             rows = [('RESET', 'Reset drape', 'Back to panels')]
-            rows += [('WEAR_OVER_' + str(index), obj.name, 'On' if obj.get('dd_wear_over',True) else 'Off')
-                     for index,obj in enumerate(self.card_models) if self.wear_over_offset <= index < self.wear_over_offset+5]
+            rows += [('WEAR_OVER_' + str(index), obj.name, 'On' if enabled else 'Off')
+                     for index,(obj,enabled) in enumerate(layers) if self.wear_over_offset <= index < self.wear_over_offset+5]
             if len(self.card_models)>5:
                 rows.append(('SCROLL_WEAR_OVER',f'{self.wear_over_offset+1}-{min(self.wear_over_offset+5,len(self.card_models))} of {len(self.card_models)} garments','Next'))
         elif kind == 'KEEP':
@@ -1364,7 +1365,7 @@ class MinimalCards:
             if not obj.is_editable:
                 self.error_message=f'Make kept garment "{obj.name}" editable to change Wear over.'
                 return
-            obj['dd_wear_over']=not obj.get('dd_wear_over',True)
+            obj['dd_wear_over']=not layering.worn(obj,layering.current_pieces(self._scene))
         elif key=='SCROLL_WEAR_OVER':
             self.wear_over_offset=self.wear_over_offset+5 if self.wear_over_offset+5<len(self.card_models) else 0
         elif key in {'CLONE_LINKED','CLONE_BACK','TOGGLE_LINKED'}:

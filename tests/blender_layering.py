@@ -162,7 +162,12 @@ kept_view=simulation.evaluated_get(bpy.context.evaluated_depsgraph_get())
 shirt_pose=[kept_view.matrix_world @ vertex.co for vertex in kept_view.data.vertices]
 check(open_pairs==0,'kept shirt begins with every sewing pair welded')
 shirt_coords=[tuple(vertex.co) for vertex in shirt.data.vertices]
-check(shirt in layering.collision_bodies(scene),'kept shirt automatically collides with the next garment')
+check(shirt not in layering.collision_bodies(scene),'a kept garment does not collide with a re-drape of its own pieces')
+for panel in garment.generated(scene,'panel'):
+    panel['dd_pattern_id']+='-other'
+check(shirt in layering.collision_bodies(scene),'kept shirt automatically collides with a different garment')
+for panel in garment.generated(scene,'panel'):
+    panel['dd_pattern_id']=panel['dd_pattern_id'].removesuffix('-other')
 bpy.ops.mesh.primitive_cube_add(size=.1,location=(2,0,0))
 extra_collider=bpy.context.object
 extra_collider.name='Existing scene collider'

@@ -52,9 +52,11 @@ Press <kbd>F</kbd> to show or hide the **Fit Map**, a color guide that shows whe
 ## Simulate Clothing in Layers
 
 1. Keep the inner garment as a mesh.
-2. Open **Simulate**'s arrow; turn the inner garment **On** in **Wear over**.
+2. Open **Simulate**'s arrow and check the inner garment is **On** in **Wear over**.
 3. Position the outer garment around the inner garment.
 4. Choose **High** quality for layered clothing.
+
+Kept garments are **On** by default. The exception is a kept copy of the garment you are still working on: it starts **Off**, so simulating again after a change does not collide with your earlier result. Click its row to turn it **On** if you do want to drape over it.
 
 <figure class="dd-shot" id="shot-simulate-layer-settings" data-shot='{"action":"Enable a kept inner garment for layered draping","ui_state":"Simulate arrow menu open with a named kept inner garment listed under Wear over and set to On","framing":"close-up","aspect_ratio":"4:3"}' data-shot-framing="close-up" aria-labelledby="shot-simulate-layer-settings-caption">
   <div class="dd-shot__frame"><span class="dd-shot__icon" aria-hidden="true"></span><span class="dd-shot__label">Screenshot coming soon</span></div>
