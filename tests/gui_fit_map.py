@@ -69,8 +69,11 @@ def run():
             check(len(bpy.data.meshes) == original_mesh_count, 'drawing releases all temporary color meshes')
             bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=2)
             bpy.ops.screen.screenshot(filepath=str(ROOT / 'scratch' / 'fit-map-viewport.png'))
-            workspace.handle_event(bpy.context, SimpleNamespace(type='F', value='PRESS', mouse_x=region.x + 10,
-                                   mouse_y=region.y + region.height / 2, ctrl=False, alt=False, shift=False))
+            outside = workspace.handle_event(bpy.context, SimpleNamespace(type='F', value='PRESS', mouse_x=region.x + region.width - 4,
+                                             mouse_y=region.y + 4, ctrl=False, alt=False, shift=False))
+            check(outside == {'PASS_THROUGH'} and workspace.fit_overlay.enabled, 'F outside the editor goes to Blender')
+            workspace.handle_event(bpy.context, SimpleNamespace(type='F', value='PRESS', mouse_x=region.x + point.x + point.w / 2,
+                                   mouse_y=region.y + point.y + point.h / 2, ctrl=False, alt=False, shift=False))
             check(not workspace.fit_overlay.enabled and workspace.fit_overlay.handle is None, 'F shortcut removes the handler and disables the overlay')
             actual = (area.spaces.active.shading.type, area.spaces.active.shading.color_type,
                       area.spaces.active.overlay.show_overlays, source.hide_get(), source.hide_render,
