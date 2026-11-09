@@ -1472,7 +1472,8 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
             self.trace_drag = None
             self.message = 'Image placement finished.'
             return {'RUNNING_MODAL'}
-        if press and event.type == 'LEFTMOUSE' and canvas and not any(card[0].contains(*self.pointer) for card in self.visible_cards()):
+        if (press and event.type == 'LEFTMOUSE' and canvas and not self.canvas_layout.rail.contains(*self.pointer)
+                and not any(card[0].contains(*self.pointer) for card in self.visible_cards())):
             self.trace_drag = dict(start=self.view.world(self.pointer, self.canvas_layout.canvas),
                                    origin=(scene.dd_trace_x, scene.dd_trace_y))
             return {'RUNNING_MODAL'}
@@ -1517,13 +1518,15 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         if event.type == 'MOUSEMOVE':
             self._area.tag_redraw()
         if event.type == 'MIDDLEMOUSE' or event.alt:
-            grab.view_changed()
+            if grab is not None:
+                grab.view_changed()
             return {'PASS_THROUGH'}
         if event.type in {'WHEELUPMOUSE', 'WHEELDOWNMOUSE'}:
             if panel:
                 return None
             if not event.ctrl:
-                grab.view_changed()
+                if grab is not None:
+                    grab.view_changed()
                 return {'PASS_THROUGH'}
             if not grab.held:
                 grab.scale_radius(RADIUS_STEP if event.type == 'WHEELUPMOUSE' else 1 / RADIUS_STEP)
