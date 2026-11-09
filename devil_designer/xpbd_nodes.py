@@ -98,7 +98,7 @@ def load_stock_groups():
         raise ValueError('This Blender build has no XPBD dynamics assets. Devil Designer needs Blender 5.2 or newer.')
     with bpy.data.libraries.load(path, link=False) as (source, target):
         available = [name for name in missing if name in source.node_groups]
-        target.node_groups = available
+        target.node_groups = list(available)
     for name, group in zip(available, target.node_groups):
         if group is not None:
             group.name = STOCK_PREFIX + name
