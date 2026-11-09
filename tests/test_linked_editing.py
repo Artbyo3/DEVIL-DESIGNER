@@ -294,6 +294,44 @@ class LinkedEditingTests(unittest.TestCase):
         session=Session();session.add([(0,0),(.4,0),(.4,.5),(0,.5)])
         self.assertIsNone(clone_twin(session,True).arrangement)
 
+    def two_twin_pairs(self):
+        session=Session();session.add([(0,0),(.4,0),(.4,.5),(0,.5)]);first=session.selected
+        first_twin=clone_twin(session).id
+        session.add([(0,1),(.4,1),(.4,1.5),(0,1.5)]);second=session.selected
+        second_twin=clone_twin(session).id
+        session.sew(session.document.edge(first,0),session.document.edge(second,0))
+        return session,first,first_twin,second,second_twin
+
+    def test_seam_on_twin_is_mirrored_and_edits_follow(self):
+        session,first,first_twin,second,second_twin=self.two_twin_pairs()
+        self.assertEqual(len(session.document.seams),2)
+        original,mirrored=session.document.seams
+        self.assertEqual({edge.pattern for side in (0,1) for edge in mirrored.side(side)},{first_twin,second_twin})
+        session.reverse_seam(original.id)
+        self.assertEqual(mirrored.reverse,original.reverse)
+        session.set_seam_shrink(mirrored.id,20)
+        self.assertEqual([seam.shrink for seam in session.document.seams],[20,20])
+        session.set_seam_active(original.id,False)
+        self.assertEqual([seam.active for seam in session.document.seams],[False,False])
+        session.set_seam_end(original.id,0,True,.6)
+        self.assertEqual(len(session.document.seams),2)
+        self.assertAlmostEqual(abs(session.document.seams[1].side(0)[-1].t1-session.document.seams[1].side(0)[-1].t0),.6)
+        session.remove_seam(mirrored.id)
+        self.assertFalse(session.document.seams)
+
+    def test_seam_edits_on_unlinked_pieces_stay_single(self):
+        session=Session();session.add([(0,0),(.4,0),(.4,.5),(0,.5)]);first=session.selected
+        session.add([(0,1),(.4,1),(.4,1.5),(0,1.5)]);second=session.selected
+        session.sew(session.document.edge(first,0),session.document.edge(second,0))
+        session.add([(1,0),(1.4,0),(1.4,.5),(1,.5)]);third=session.selected
+        session.add([(1,1),(1.4,1),(1.4,1.5),(1,1.5)]);fourth=session.selected
+        session.sew(session.document.edge(third,0),session.document.edge(fourth,0))
+        first_seam,second_seam=session.document.seams
+        session.reverse_seam(first_seam.id)
+        self.assertNotEqual(first_seam.reverse,second_seam.reverse)
+        session.remove_seam(first_seam.id)
+        self.assertEqual(session.document.seams,[second_seam])
+
     def test_no_automatic_twins_or_cloned_sewing(self):
         session=Session();session.add([(0,0),(.4,0),(.4,.5),(0,.5)]);source=session.selected
         session.add([(1,0),(1.4,0),(1.4,.5),(1,.5)]);target=session.selected

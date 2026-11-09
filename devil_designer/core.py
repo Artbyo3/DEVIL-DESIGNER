@@ -1747,27 +1747,37 @@ class Session(ConstructionMixin):
                 except ValueError:self.document.seams.remove(twin)
         return self.commit(apply)
 
-    def remove_seam(self,identity):
+    def linked_seams(self,identity):
+        from .linked_editing import seam_twin
         seam=next((s for s in self.document.seams if s.id==identity),None)
         if seam is None:raise ValueError('That seam no longer exists.')
-        result=self.commit(lambda:self.document.seams.remove(seam));self.last_repairs=0;return result
+        twin=seam_twin(self.document,seam)
+        return seam,[item for item in (seam,twin) if item is not None]
+
+    def set_linked_seam(self,identity,name,value):
+        _,seams=self.linked_seams(identity)
+        def apply():
+            for item in seams:setattr(item,name,value)
+        return self.commit(apply)
+
+    def remove_seam(self,identity):
+        _,seams=self.linked_seams(identity)
+        def apply():
+            for item in seams:
+                if item in self.document.seams:self.document.seams.remove(item)
+        result=self.commit(apply);self.last_repairs=0;return result
 
     def reverse_seam(self,identity):
-        seam=next((s for s in self.document.seams if s.id==identity),None)
-        if seam is None:raise ValueError('That seam no longer exists.')
-        return self.commit(lambda:setattr(seam,'reverse',not seam.reverse))
+        seam,_=self.linked_seams(identity)
+        return self.set_linked_seam(identity,'reverse',not seam.reverse)
 
     def set_seam_shrink(self,identity,shrink):
         if type(shrink) is not int or shrink not in (0,10,20,30):
             raise ValueError("Seam Shrink must be 0, 10, 20 or 30 percent.")
-        seam=next((seam for seam in self.document.seams if seam.id==identity),None)
-        if seam is None:raise ValueError("That seam no longer exists.")
-        return self.commit(lambda:setattr(seam,'shrink',shrink))
+        return self.set_linked_seam(identity,'shrink',shrink)
 
     def set_seam_active(self,identity,active):
-        seam=next((seam for seam in self.document.seams if seam.id==identity),None)
-        if seam is None:raise ValueError("That seam no longer exists.")
-        return self.commit(lambda:setattr(seam,'active',bool(active)))
+        return self.set_linked_seam(identity,'active',bool(active))
 
     def split_segment(self,edge,fraction=.5):
         if not .0001<fraction<.9999:raise ValueError('Split inside the segment, away from its endpoints.')
@@ -1932,8 +1942,9 @@ class Session(ConstructionMixin):
         return result
 
     def set_seam_end(self,identity,side,last,fraction):
-        seam=next((s for s in self.document.seams if s.id==identity),None)
-        if seam is None:raise ValueError('That seam no longer exists.')
+        from .linked_editing import follow_seam_range
+        seam,seams=self.linked_seams(identity)
+        twin=seams[1] if len(seams)>1 else None
         chain=seam.side(side);index=-1 if last else 0;edge=chain[index]
         moved=EdgeRef(edge.pattern,edge.start,edge.end,edge.t0 if last else fraction,fraction if last else edge.t1,edge.path)
         if abs(moved.t1-moved.t0)<.005:raise ValueError('A sewn range needs some length.')
@@ -1941,6 +1952,7 @@ class Session(ConstructionMixin):
         def apply():
             if side:seam.chain_b=tuple(chain);seam.b=chain[0]
             else:seam.chain_a=tuple(chain);seam.a=chain[0]
+            follow_seam_range(self.document,seam,twin)
         return self.commit(apply)
 
     def set_seam_length(self,identity,side,target):
@@ -1954,9 +1966,7 @@ class Session(ConstructionMixin):
         return self.set_seam_end(identity,side,True,fraction)
 
     def set_seam_ease(self,identity,side):
-        seam=next((s for s in self.document.seams if s.id==identity),None)
-        if seam is None:raise ValueError('That seam no longer exists.')
-        return self.commit(lambda:setattr(seam,'ease_side',side))
+        return self.set_linked_seam(identity,'ease_side',side)
 
     def set_elastic(self,edge,shrink):
         def apply():

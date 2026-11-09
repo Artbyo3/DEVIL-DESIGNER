@@ -138,6 +138,23 @@ def mirror_seam(document,seam):
     return Seam(sides[0][0],sides[1][0],seam.reverse,chain_a=tuple(sides[0]),chain_b=tuple(sides[1]),shrink=seam.shrink)
 
 
+def _seam_key(seam):
+    return frozenset(tuple((edge.pattern,frozenset((edge.start,edge.end)),edge.path) for edge in seam.side(side)) for side in (0,1))
+
+
+def seam_twin(document,seam):
+    mirrored=mirror_seam(document,seam)
+    if mirrored is None:return None
+    key=_seam_key(mirrored)
+    return next((other for other in document.seams if other is not seam and _seam_key(other)==key),None)
+
+
+def follow_seam_range(document,seam,twin):
+    mirrored=mirror_seam(document,seam)
+    if twin is None or mirrored is None or twin not in document.seams:return
+    twin.a,twin.b,twin.chain_a,twin.chain_b=mirrored.a,mirrored.b,mirrored.chain_a,mirrored.chain_b
+
+
 def _pair_transform(source,target):
     source_points=source.outline();target_points=target.outline()
     source_center=[(min(point[axis] for point in source_points)+max(point[axis] for point in source_points))/2 for axis in (0,1)]

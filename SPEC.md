@@ -52,8 +52,12 @@ Outline and internal-path edits mirror bidirectionally within the same undo
 transaction. Whole-piece layout movement and 3D arrangement remain independent.
 Remove Linked Editing changes only the enabled state; Apply Linked Editing
 replaces the other outline from the active member. Two selected unpaired pieces
-can be linked explicitly. Linking refuses invalidation of existing sewing; it
-never creates, copies, or removes seams. Point topology edits retain the existing
+can be linked explicitly. Linking refuses invalidation of existing sewing, and
+turning a link on or off never creates, copies, or removes seams. Sewing on a
+linked twin is linked as well: a seam created on enabled twins gets the mirrored
+seam on the partners, and reversing, removing, switching on or off, changing
+shrink or shrink side, or moving a seam end applies to that mirrored seam in the
+same undo step. Seams on unlinked pieces are unchanged. Point topology edits retain the existing
 sewing remapping and repair contract. Deletion, paired/independent duplication,
 explicit Mirror with seam, document/library persistence, refits and history must
 preserve valid pair membership. Designs without pair records remain unchanged.
