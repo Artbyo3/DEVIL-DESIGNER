@@ -415,6 +415,11 @@ def build_simulation(context):
         if scene.dd_pin_top:
             highest = max(v.co.y for v in panel.data.vertices)
             pin.extend(offset+v.index for v in panel.data.vertices if highest-v.co.y<.002/metres_per_unit(scene))
+    scene.pop('dd_collision_warning',None)
+    count,depth=body_guard.embedded(context,layering.collision_bodies(scene),verts,metres_per_unit(scene))
+    if count:
+        scene['dd_collision_warning']=(f'{count} cloth points start inside the body, up to {depth*1000:.0f} mm deep. '
+                                       'If cloth snags, Reset and move those pieces out.')
     plan=boundary_plan(doc,scene.dd_spacing)
     springs,inspection=resolve_sewing(maps,plan)
     for seam in doc.seams:

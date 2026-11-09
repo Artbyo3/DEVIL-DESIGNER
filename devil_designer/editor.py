@@ -492,6 +492,8 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                     self.message += ' ' + self.triangle_note()
                 if button == 'SIMULATE' and self._scene.get('dd_arrangement_message'):
                     self.message+=' '+self._scene['dd_arrangement_message']
+                if button == 'SIMULATE' and self._scene.get('dd_collision_warning'):
+                    self.message+=' '+self._scene['dd_collision_warning']
                 return True
             err = self._scene.pop('dd_last_error', None)
             self.message = self.error_message = err or 'Action could not finish. Check the Blender report and try again.'

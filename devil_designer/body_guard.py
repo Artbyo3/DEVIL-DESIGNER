@@ -35,6 +35,22 @@ def clear_surface(tree, points, margin, reach):
     return blocked
 
 
+def embedded(context, bodies, coordinates, unit):
+    points = [Vector(point) for point in coordinates]
+    count, depth = 0, 0.0
+    for body in bodies:
+        tree = surface_tree(context, body)
+        for point in points:
+            nearest, normal, _, distance = tree.find_nearest(point)
+            if nearest is None or distance < NUDGE_REACH / unit:
+                continue
+            height = (point - nearest).dot(normal)
+            if height < 0 and -height > distance * ALIGNED:
+                count += 1
+                depth = max(depth, distance * unit)
+    return count, depth
+
+
 def check(context, bodies, coordinates, unit):
     points = [Vector(point) for point in np.asarray(coordinates).tolist()]
     lowest_body = min((body.matrix_world @ Vector(corner)).z for body in bodies for corner in body.bound_box)
