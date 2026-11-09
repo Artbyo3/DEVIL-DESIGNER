@@ -148,7 +148,7 @@ def apply_states(document, simulation):
 
 def compile_run(context, document):
     import bpy
-    from . import garment, ui, xpbd
+    from . import garment, ui, xpbd, xpbd_live
     scene = context.scene
     active = active_document(document)
     if not active.patterns:
@@ -162,8 +162,12 @@ def compile_run(context, document):
         active = active_document(document)
     marker = garment.signature(scene, panels)
     old = garment.generated(scene, 'simulation')
-    if old and old[0].get('dd_signature') == marker:
+    if old and old[0].get('dd_signature') == marker and xpbd.current(old[0]):
         return old[0]
+    pins = xpbd_live.pin_records(old[0]) if old and poses else {}
+    carried = garment.carried_drape(scene)
+    if not poses and carried is not None:
+        poses, pins = carried['poses'], carried['pins']
     garment.require_body(scene)
     temporary = bpy.data.scenes.new('DD State Compile')
     owned_collection = None
@@ -204,6 +208,7 @@ def compile_run(context, document):
                         for index, point in zip(indices, coordinates):
                             simulation.data.vertices[index].co = point
                 simulation.data.update()
+                xpbd_live.carry_pins(simulation, pins)
                 xpbd.restart_from_pose(simulation)
             apply_states(document, simulation)
             simulation['dd_run_rest'] = json.dumps(rest, separators=(',', ':'))

@@ -22,6 +22,11 @@ not replace the source patterns with their triangulated approximation.
 - Patterns represented by editable Bezier paths, including straight segments.
 - Convert points between corners and curve points, with editable handles.
 - Numeric drafting and editing in centimetres; retain metre-based internal units.
+- Snapping, on by default and reversed by Ctrl: drawing points, the rectangle and
+  ellipse corners, knife points, moves and the transform pivot snap to the points,
+  midpoints, edges and crossings of every piece within 10 pixels, with a marker that
+  names the target. A move snaps the moving point nearest the cursor, and geometry
+  that is itself moving is never a target. Otherwise positions snap to the 1 cm grid.
 - Display live segment lengths while drawing and editing, including curve arc
   lengths, so edges can be compared before sewing.
 - Keep measurement, displayed curves, sewing, and meshing consistent by sharing
@@ -160,19 +165,31 @@ preserve valid pair membership. Designs without pair records remain unchanged.
 - Simulate with the Geometry Nodes XPBD system in `xpbd.py` and `xpbd_nodes.py`.
   It is the only simulation engine. The zone runs in realtime mode at a fixed
   30 fps clock, so playback runs until stopped and accepts live input. The
-  artist's frame rate and timeline are restored on Keep and Reset.
+  artist's frame rate and timeline are restored on Keep and Reset, and when the
+  editor is closed. Simulate and Keep set the clock again after reopening.
 - Fabrics differ through bending stiffness. Linen, Denim and Leather add links across
   two cloth edges, because the solver's own bending saturates.
 - A piece with a partner on the opposite side of the same volume stops wrapping at
   the body side, and extra width stands out as a flap so the panels cannot cross.
 - Grab cloth while it simulates. Pull follows the hand in the view plane, Push
   presses along the surface normal, and radius is set by Ctrl+wheel or the strip. The wheel alone zooms the view.
+  Releasing eases the hand out over a quarter second instead of dropping the cloth in one frame.
+- Cloth pins hold the cloth where the artist put it while the simulation keeps running. W while holding
+  pins the cloth inside the ring, and Pin mode pins on release. Dragging a pinned spot moves it, Ctrl+click
+  frees the pins under the ring, and Remove pins in the Grab flyout frees all of them. Cloth pins are written
+  straight into the running solver, so no new drape starts. They are kept through Re-drape and Keep, and
+  Reset drape clears them. They never override pattern pins, tacks or frozen pieces. Pinned cloth shows as
+  dots over the 3D view in every tool, and Ctrl+Z in Grab undoes the last pin change.
+- Pressing the cloth holds the grabbed cloth point itself, so a still hand does not move it. The solver
+  substeps change once when the Grab tool opens, not at each press and release.
 - Keep runs a short high-substep refine, then checks the result against every
   collision body. Contacts within 12 mm are nudged clear and deeper ones refuse.
 - Reset/rebuild without losing valid source relationships or arranged placements.
 - Finalize to editable garment meshes with the pattern UVs and piece identifiers.
 - Kept garments are collision layers for later simulations. A five-row scrollable
-  Wear over list in the Simulate arrow defaults all kept garments on. Add missing
+  Wear over list in the Simulate arrow defaults kept garments on, except a kept mesh
+  that shares pieces with the current design, which defaults off so a garment never
+  collides with its own re-drape. A manual choice always wins. Add missing
   Collision modifiers without changing existing ones. Filter only the current
   simulation: always retain the body and every pre-existing scene collider except
   unchecked kept garments. Preserve kept meshes on Reset and the original path

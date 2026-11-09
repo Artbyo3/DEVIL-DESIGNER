@@ -4,6 +4,7 @@ import sys
 
 import bpy
 import numpy as np
+from mathutils import Vector
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.dont_write_bytecode = True
@@ -94,6 +95,56 @@ def test_drape_carries_across_an_edit(scene):
     print('FINER height range', round(float(start[:, 2].min()), 3), round(float(start[:, 2].max()), 3), flush=True)
     check(start[:, 1].std() > 1e-3, 'the denser mesh starts draped, not flat')
     scene.dd_spacing = .025
+
+
+def test_frozen_redrape_carries_drape_and_pins(scene):
+    fresh(scene)
+    scene.dd_document = starters.create_tee_starter(None, 'COTTON').dumps()
+    first = garment.compile_garment(bpy.context)
+    run_frames(scene, 60)
+    points = simulation_points(first)
+    index = int(np.argmin(points[:, 1]))
+    grab = xpbd_live.ClothGrab(first)
+    grab.radius = .05
+    grab.arm()
+    grab.begin(bpy.context, index, first.matrix_world @ Vector(points[index].tolist()), Vector((0, -1, 0)), Vector((0, 1, 0)))
+    pinned = grab.pin(bpy.context)
+    grab.disarm()
+    run_frames(scene, 2)
+    draped = simulation_points(first).copy()
+    document = Document.loads(scene.dd_document)
+    document.patterns[-1].frozen = True
+    scene.dd_document = document.dumps()
+    garment.build_panels(bpy.context)
+    second = garment.compile_garment(bpy.context)
+    check(second.get('dd_state_run'), 'a frozen piece re-drapes through the piece state path')
+    check(pinned > 0 and len(xpbd_live.pinned_vertices(second)) == pinned, 'cloth pins carry through a Re-drape with a frozen piece')
+    start = np.array([tuple(vertex.co) for vertex in second.data.vertices])
+    shift = float(np.linalg.norm(start - draped, axis=1).mean()) if len(start) == len(draped) else float('inf')
+    print('FROZEN CARRY', round(shift, 5), flush=True)
+    check(shift < 1e-3, 'a Re-drape with a frozen piece starts from the previous drape')
+
+
+def test_reopened_file_signature_still_simulates(scene):
+    fresh(scene)
+    scene.dd_document = starters.create_tank_starter(None, 'COTTON').dumps()
+    first = garment.compile_garment(bpy.context)
+    run_frames(scene, 30)
+    draped = simulation_points(first).copy()
+    for panel in garment.generated(scene, 'panel'):
+        panel['dd_avatar_frame'] = 'signature from an earlier session'
+    document = Document.loads(scene.dd_document)
+    document.patterns[0].preset = 'DENIM'
+    document.patterns[0].fabric_override = True
+    scene.dd_document = document.dumps()
+    second = garment.compile_garment(bpy.context)
+    check(second is not None and second.name in bpy.data.objects and garment.generated(scene, 'simulation') == [second],
+          'Simulate survives panels whose avatar signature is from an earlier session')
+    start = np.array([tuple(vertex.co) for vertex in second.data.vertices])
+    shift = float(np.linalg.norm(start - draped, axis=1).mean()) if len(start) == len(draped) else float('inf')
+    check(shift < 1e-3, 'that Simulate starts from the previous drape')
+    run_frames(scene, 10)
+    check(np.isfinite(simulation_points(second)).all(), 'that drape keeps simulating')
 
 
 def test_reset_forgets_the_drape(scene):
@@ -215,6 +266,8 @@ for obj in list(scene.objects):
     bpy.data.objects.remove(obj, do_unlink=True)
 scene.dd_avatar = build_body()
 test_drape_carries_across_an_edit(scene)
+test_frozen_redrape_carries_drape_and_pins(scene)
+test_reopened_file_signature_still_simulates(scene)
 test_reset_forgets_the_drape(scene)
 test_elastic_narrows_the_edge(scene)
 test_fabric_tack_pulls_points_together(scene)

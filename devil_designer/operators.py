@@ -178,7 +178,7 @@ class DD_OT_demo(bpy.types.Operator):
             garment.tag(torso,'demo')
             scene.dd_avatar = torso
             garment.arrange(context)
-            self.report({'INFO'},'Demo ready. Open the pattern editor or press Simulate in the garment panel.')
+            self.report({'INFO'},'Demo ready. Open Devil Designer from the View menu and press Simulate.')
             return {'FINISHED'}
         return run(self,action)
 

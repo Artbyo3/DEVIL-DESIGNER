@@ -52,9 +52,11 @@ Press <kbd>F</kbd> to show or hide the **Fit Map**, a color guide that shows whe
 ## Simulate Clothing in Layers
 
 1. Keep the inner garment as a mesh.
-2. Open **Simulate**'s arrow; turn the inner garment **On** in **Wear over**.
+2. Open **Simulate**'s arrow and check the inner garment is **On** in **Wear over**.
 3. Position the outer garment around the inner garment.
 4. Choose **High** quality for layered clothing.
+
+Kept garments are **On** by default. The exception is a kept copy of the garment you are still working on: it starts **Off**, so simulating again after a change does not collide with your earlier result. Click its row to turn it **On** if you do want to drape over it.
 
 <figure class="dd-shot" id="shot-simulate-layer-settings" data-shot='{"action":"Enable a kept inner garment for layered draping","ui_state":"Simulate arrow menu open with a named kept inner garment listed under Wear over and set to On","framing":"close-up","aspect_ratio":"4:3"}' data-shot-framing="close-up" aria-labelledby="shot-simulate-layer-settings-caption">
   <div class="dd-shot__frame"><span class="dd-shot__icon" aria-hidden="true"></span><span class="dd-shot__label">Screenshot coming soon</span></div>
@@ -71,7 +73,14 @@ Press <kbd>F</kbd> to show or hide the **Fit Map**, a color guide that shows whe
 
 ## Pin the Draped Cloth
 
-Click the Grab tool and choose **Pin**. Drag the cloth where you want it and release. The point stays pinned there and the drape carries on.
+Pins hold the cloth exactly where you put it while everything around it keeps draping. Nothing restarts.
+
+- While you are holding the cloth with Grab, press <kbd>W</kbd>. The cloth inside the circle stays there.
+- Or click the Grab tool and choose **Pin**. Every drag then pins the cloth where you release it.
+- Drag a pinned spot to move it. It stays where you drop it.
+- <kbd>Ctrl</kbd>+click a pinned spot to free it. **Remove pins** in the Grab menu frees all of them.
+
+Pinned cloth shows as small dots, and <kbd>Ctrl</kbd>+<kbd>Z</kbd> in Grab undoes the last pin change. A smaller circle pins less cloth, which suits a single fold. Pins stay through **Re-drape** and are baked into the mesh by **Keep mesh**. **Reset drape** clears them.
 
 ## Pinch, Steam and Puff
 

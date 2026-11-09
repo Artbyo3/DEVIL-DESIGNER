@@ -13,7 +13,7 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.dont_write_bytecode=True
 sys.path.insert(0,str(ROOT))
 import devil_designer
-from devil_designer import arrangement,arrangement_controls,editor,garment
+from devil_designer import arrangement,arrangement_controls,editor,garment,layering,snapping
 from devil_designer.core import Session
 
 REPORT=ROOT/'scratch'/'editor_release-report.json'
@@ -128,6 +128,8 @@ def run():
             check(sum(getattr(handler,'__name__','')=='capture_updates' for handler in bpy.app.handlers.depsgraph_update_post)==1,
                   'only one copy listens for scene updates')
             for obj in list(scene.objects):bpy.data.objects.remove(obj,do_unlink=True)
+            scene.frame_end=250;scene.render.fps=24;scene.render.fps_base=1;scene.sync_mode='AUDIO_SYNC'
+            state['timeline']=(scene.frame_end,scene.render.fps,scene.render.fps_base,scene.sync_mode)
             body=body_mesh()
             session=Session()
             session.add([(-.15,.1),(.15,.1),(.15,.4),(-.15,.4)])
@@ -180,6 +182,78 @@ def run():
         elif stage==5:
             survived('Simulate after arrangement interactions')
             check(bool(garment.generated(scene,'simulation')),'Simulate builds the drape after arrangement interactions')
+            check(bpy.context.screen.is_animation_playing and 'dd_timeline' in scene,'Simulate locks the timeline while the drape plays')
+            active=workspace()
+            def failing(self,context,event):raise RuntimeError('probe failure')
+            editor.DD_OT_pattern_editor.handle_event=failing
+            try:result=active.modal(bpy.context,type('Event',(),dict(type='MOUSEMOVE',value='NOTHING',mouse_x=region.x+5,mouse_y=region.y+5,ctrl=False,shift=False,alt=False))())
+            finally:editor.DD_OT_pattern_editor.handle_event=recording_handle
+            check(result=={'RUNNING_MODAL'} and workspace() is active,'a RuntimeError inside the editor keeps it open')
+            check('probe failure' in (active.error_message or ''),'the editor reports the RuntimeError instead of closing: '+str(active.error_message))
+            active.error_message=None
+            active.canvas_layout=active.make_layout()
+            button=active.canvas_layout.buttons['CLOSE'][0]
+            x,y=int(region.x+button.x+button.w/2),int(region.y+button.y+button.h/2)
+            bpy.context.window.event_simulate(type='MOUSEMOVE',value='NOTHING',x=x,y=y)
+            key('LEFTMOUSE',(x,y))
+        elif stage==6:
+            check(workspace() is None,'the Close button closes the editor mid-drape')
+            check(not bpy.context.screen.is_animation_playing,'closing mid-drape stops the drape playing')
+            check((scene.frame_end,scene.render.fps,scene.render.fps_base,scene.sync_mode)==state['timeline'] and 'dd_timeline' not in scene,
+                  'closing mid-drape restores frame end, frame rate and sync mode: '+str((scene.frame_end,scene.render.fps,scene.render.fps_base,scene.sync_mode)))
+            check(bool(garment.generated(scene,'simulation')),'closing keeps the drape in the scene')
+            with bpy.context.temp_override(area=area,region=region):
+                bpy.ops.devil_designer.pattern_editor('INVOKE_DEFAULT')
+            active=workspace()
+            check(active is not None,'the editor reopens after closing mid-drape')
+            active.perform_action('KEEP')
+            kept=garment.generated(scene,'final')
+            if kept:
+                check((scene.frame_end,scene.render.fps,scene.render.fps_base,scene.sync_mode)==state['timeline'] and 'dd_timeline' not in scene,
+                      'Keep after reopening finishes and leaves the timeline restored')
+            else:
+                check('dd_timeline' in scene and scene.render.fps!=state['timeline'][1],
+                      'a Keep refused after reopening leaves the clock locked until Reset: '+str(active.message))
+                state['refused']=active.message
+        elif stage==7:
+            active=workspace()
+            kept=garment.generated(scene,'final')
+            if not kept:
+                REPORT.write_text(json.dumps(dict(passed=state['passed'],error='Keep refused, Wear over checks need a kept mesh: '+str(state.get('refused')))),encoding='utf-8')
+                return None
+            own=kept[0]
+            check(dict(layering.worn_garments(scene))[own] is False,'a kept copy of the current design starts with Wear over off')
+            check(own not in layering.collision_bodies(scene),'that kept copy is not a collision body for the next drape')
+            other=own.copy();other.data=own.data.copy();own.users_collection[0].objects.link(other)
+            other['dd_piece_ids']='["another-design"]'
+            check(dict(layering.worn_garments(scene))[other] is True,'a kept mesh of a different design keeps Wear over on')
+            own['dd_wear_over']=True
+            check(dict(layering.worn_garments(scene))[own] is True and own in layering.collision_bodies(scene),'a manual Wear over choice wins over the default')
+            del own['dd_wear_over']
+            bpy.data.objects.remove(other,do_unlink=True)
+            active.restore_canvas()
+            active.tool='POLYGON';active.snap=True;active.draft=[]
+            active.canvas_layout=active.make_layout()
+            corner=active.session.document.patterns[1].vertices[0]
+            spot=active.view.screen((corner.x,corner.y),active.canvas_layout.canvas)
+            state['corner']=(corner.x,corner.y)
+            bpy.context.window.event_simulate(type='MOUSEMOVE',value='NOTHING',x=int(region.x+spot[0]+4),y=int(region.y+spot[1]+3))
+        elif stage==8:
+            active=workspace()
+            marker=active.snap_marker
+            check(marker is not None and marker[1]==snapping.POINT and math.dist(marker[0],state['corner'])<1e-9,
+                  'hovering a drawing tool near a corner shows a point snap marker before the first click: '+str(marker))
+            active.renderer.draw(active)
+            check(not active.error_message,'the snap marker draws without a render error')
+            _,region=areas()
+            spot=active.view.screen(state['corner'],active.canvas_layout.canvas)
+            key('LEFTMOUSE',(region.x+spot[0]+4,region.y+spot[1]+3))
+        elif stage==9:
+            active=workspace()
+            first=active.draft[0] if active.draft else None
+            point=(first.x,first.y) if hasattr(first,'x') else first
+            check(point is not None and math.dist(point,state['corner'])<1e-9,'the first polygon click lands exactly on the snapped corner: '+str(point))
+            active.cancel_gesture()
             garment.stop(bpy.context)
             REPORT.write_text(json.dumps(dict(passed=state['passed'])),encoding='utf-8')
             return None

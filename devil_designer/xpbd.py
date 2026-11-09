@@ -37,6 +37,11 @@ def modifier(obj):
     return obj.modifiers.get(MODIFIER)
 
 
+def current(obj):
+    mod = modifier(obj)
+    return mod is not None and mod.node_group is not None and mod.node_group.get('dd_group_version') == xpbd_nodes.GROUP_VERSION
+
+
 def input_slot(obj, name):
     mod = modifier(obj)
     return getattr(mod.properties.inputs, xpbd_nodes.input_identifier(mod.node_group, name))
@@ -363,6 +368,7 @@ def attach(context, obj, doc, panels, pieces, maps, plan, pinned, tacks):
         shares[vertex] = binding['weights']
     write(mesh, 'dd_pinned', 'BOOLEAN', 'POINT', held)
     write(mesh, 'dd_tacked', 'BOOLEAN', 'POINT', tacked)
+    write(mesh, 'dd_hold', 'BOOLEAN', 'POINT', np.zeros(count, dtype=bool))
     write(mesh, 'dd_pin_target', 'FLOAT_VECTOR', 'POINT', start)
     write(mesh, 'dd_tack_vertices', 'FLOAT_VECTOR', 'POINT', surface)
     write(mesh, 'dd_tack_weights', 'FLOAT_VECTOR', 'POINT', shares)

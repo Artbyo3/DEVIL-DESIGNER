@@ -32,7 +32,7 @@ Use these tools to create and edit garment pattern pieces. A Bezier curve is a s
 | **Lengths Toggle** | <kbd>L</kbd> | Show or hide edge lengths in centimetres. |
 | **Duplicate** | <kbd>Shift</kbd> + <kbd>D</kbd> | Copy selected pieces or the active piece. |
 | **Delete** | <kbd>X</kbd> or <kbd>Del</kbd> | Remove the selected item. |
-| **Grid Snapping** | <kbd>S</kbd> | Turn grid snapping on or off. Hold <kbd>Ctrl</kbd> to reverse it temporarily. |
+| **Snapping** | <kbd>S</kbd> | Turn snapping on or off. Hold <kbd>Ctrl</kbd> to reverse it temporarily. While you draw or move, the cursor snaps to the points, midpoints, edges and crossings of every piece, and a small marker names what it caught. Away from other geometry it snaps to the 1 cm grid. |
 | **Axis Constraint** | Hold <kbd>Shift</kbd> | Keep movement horizontal or vertical. |
 | **Pan / Zoom** | <kbd>MMB</kbd> / Wheel | Move around or zoom the canvas. |
 | **Fit Design** | <kbd>Home</kbd> | Show all pattern pieces in the canvas. |

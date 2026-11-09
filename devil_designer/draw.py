@@ -17,6 +17,7 @@ from .avatar_field import EYEDROPPER, LABEL, SEARCH, TEXT_OFFSET, TEXT_SIZE
 
 from .minimal import FLYOUT_TOOLS, STRIP_KEYS
 from .localization import translate
+from .snapping import EDGE, INTERSECTION, LABELS, MIDPOINT
 from .ui_system import (MENU_CARDS,
     BG_BASE, BG_ELEVATED, BG_WELL, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, ACCENT, ACCENT_BG, ACCENT_BORDER, ACCENT_HOVER, BORDER, BORDER_SUBTLE, RADIUS_WINDOW, RADIUS_BADGE, Tooltip, ComponentRenderer, SURFACE_FLOATING, SURFACE_OUTLINE, SELECTION, TEXT_ON_ACCENT, MinimalMetrics,
     NativeField,
@@ -366,6 +367,22 @@ class Renderer:
         self.triangles(projected, color, indices)
         return True
 
+    def draw_snap_marker(self, spot, kind, s):
+        x, y = spot
+        reach = 6 * s
+        if kind == MIDPOINT:
+            shapes = [[(x - reach, y - reach * .8), (x + reach, y - reach * .8), (x, y + reach), (x - reach, y - reach * .8)]]
+        elif kind == INTERSECTION:
+            shapes = [[(x - reach, y - reach), (x + reach, y + reach)], [(x - reach, y + reach), (x + reach, y - reach)]]
+        elif kind == EDGE:
+            shapes = [[(x, y - reach), (x + reach, y), (x, y + reach), (x - reach, y), (x, y - reach)]]
+        else:
+            shapes = [[(x - reach, y - reach), (x + reach, y - reach), (x + reach, y + reach), (x - reach, y + reach), (x - reach, y - reach)]]
+        for width, color in ((3.5, (0.0, 0.0, 0.0, .55)), (1.5, SELECTION)):
+            for shape in shapes:
+                self.lines(shape, color, width, True)
+        self.text(x + reach + 5 * s, y + reach, LABELS[kind], 10, TEXT_PRIMARY)
+
     def draw_grab_ring(self, ed):
         pixels = ed.grab_ring_pixels()
         if pixels is None:
@@ -374,6 +391,14 @@ class Renderer:
         ring = [(x + math.cos(step * math.tau / 64) * pixels, y + math.sin(step * math.tau / 64) * pixels) for step in range(65)]
         self.lines(ring, (0.0, 0.0, 0.0, .45), 3, strip=True)
         self.lines(ring, (*ACCENT[:3], 1.0), 1.5, strip=True)
+
+    def draw_cloth_pins(self, ed):
+        pixels = ed.cloth_pin_pixels()
+        for radius, color in ((5.5, (0.0, 0.0, 0.0, .5)), (3.5, (1, 0.42, 0.3, 1))):
+            reach = radius * ed.canvas_layout.scale
+            ring = [(math.cos(step * math.tau / 8) * reach, math.sin(step * math.tau / 8) * reach) for step in range(8)]
+            corners = [(x + across, y + up) for x, y in pixels for across, up in ring]
+            self.triangles(corners, color, [(base * 8, base * 8 + step, base * 8 + step + 1) for base in range(len(pixels)) for step in range(1, 7)])
 
     def draw_shaping_strip(self, ed):
         rects = ed.shaping_strip_rects
@@ -620,6 +645,9 @@ class Renderer:
                         self.lines(ring, SELECTION, 1.5, True)
                         lbl = ed.gesture.get('label', 'Pivot')
                         self.text(pt[0] + 10 * s, pt[1] + 5 * s, lbl, 10, TEXT_PRIMARY)
+
+                if ed.snap_marker:
+                    self.draw_snap_marker(view.screen(ed.snap_marker[0], c), ed.snap_marker[1], s)
 
                 gesture = ed.gesture
                 preview_doc = gesture.get('candidate') if gesture and gesture.get('mode') in {'MOVE', 'TRANSFORM'} else None

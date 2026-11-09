@@ -1297,7 +1297,7 @@ def run():
             button('SIMULATE_OPTIONS')
             check(workspace.card_kind=='SIMULATE','Simulate arrow opens Wear over only after kept garments exist')
             rows=[row for rect,row in workspace.minimal_card()[2] if row[0].startswith('WEAR_OVER_')]
-            check(len(rows)==5 and all(row[2]=='On' for row in rows),'Wear over shows at most five garments and defaults every garment on')
+            check(len(rows)==5 and all(row[2]=='Off' for row in rows),'Wear over shows at most five garments and defaults kept copies of the current design off')
             first_names=[row[1] for row in rows]
             card=workspace.minimal_card()[0]
             inside=(card.x+card.w/2,card.y+card.h/2)
@@ -1307,7 +1307,7 @@ def run():
             check([row[1] for row in rows]!=first_names and workspace.view.zoom==zoom,'Wear over scrolls its five-row list without zooming the canvas')
             target=workspace.card_models[int(rows[-1][0].removeprefix('WEAR_OVER_'))]
             card_click(rows[-1][0])
-            check(target.get('dd_wear_over') is False and workspace.card_kind is None,'Wear over toggle persists and immediately dismisses to pure canvas')
+            check(target.get('dd_wear_over') is True and workspace.card_kind is None,'Wear over toggle persists and immediately dismisses to pure canvas')
             button('SIMULATE_OPTIONS')
             card_click('SCROLL_WEAR_OVER')
             check(workspace.card_kind=='SIMULATE' and len([row for rect,row in workspace.minimal_card()[2] if row[0].startswith('WEAR_OVER_')])==5,

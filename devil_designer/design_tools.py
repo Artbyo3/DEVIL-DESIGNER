@@ -131,10 +131,9 @@ class DesignTools:
                 elif scene.dd_avatar:
                     from .measurements import estimate_body_measurements
                     measurements = estimate_body_measurements(scene.dd_avatar, scene)
-                before = scene.dd_document
-                self.session.undo_stack.append(before)
-                self.session.redo_stack.clear()
                 starter_doc = generator(measurements, getattr(self.session.document, 'preset', 'COTTON'))
+                self.session.undo_stack.append(scene.dd_document)
+                self.session.redo_stack.clear()
                 self.clear_interaction_references()
                 self.session.document = starter_doc
                 self.session.selected = starter_doc.patterns[0].id if starter_doc.patterns else None
@@ -148,7 +147,7 @@ class DesignTools:
                 self.update_reference(bpy.context, align=False)
                 self.fit()
                 self.choose_tool('SELECT')
-                self.message = f"{label} starter created. Pre-sewn and placed on avatar."
+                self.message = f"{label} starter created. Pre-sewn and placed on avatar." if scene.dd_avatar else f"{label} starter created in a standard size. Choose your avatar under Garment, Body to fit and place it."
                 return
             elif action == 'DEMO_PANEL':
                 ref_bounds = getattr(self.reference, 'bounds', None) if hasattr(self, 'reference') else None

@@ -23,9 +23,20 @@ class LayeringTests(unittest.TestCase):
         body=SimpleNamespace(type='MESH',modifiers=[],get=lambda key,default=None:default)
         shirt=self.kept('Shirt')
         skipped=self.kept('Skirt',False)
-        with patch.object(layering,'kept_garments',return_value=[shirt,skipped]):
+        with patch.object(layering,'kept_garments',return_value=[shirt,skipped]),patch.object(layering,'current_pieces',return_value=set()):
             bodies=layering.collision_bodies(self.scene([body,shirt,skipped],body))
         self.assertEqual(bodies,[body,shirt])
+
+    def test_kept_copy_of_the_current_design_defaults_off(self):
+        values=dict(dd_piece_ids='["a","b"]')
+        own=SimpleNamespace(get=lambda key,default=None:values.get(key,default))
+        self.assertFalse(layering.worn(own,{'b','c'}))
+        self.assertTrue(layering.worn(own,{'c'}))
+        self.assertTrue(layering.worn(own,set()))
+        values['dd_wear_over']=True
+        self.assertTrue(layering.worn(own,{'b'}))
+        values['dd_wear_over']=False
+        self.assertFalse(layering.worn(own,{'c'}))
 
     def test_artist_collision_objects_stay_in_the_simulation(self):
         body=SimpleNamespace(type='MESH',modifiers=[],get=lambda key,default=None:default)
@@ -49,7 +60,7 @@ class LayeringTests(unittest.TestCase):
         with patch.object(layering,'kept_garments',return_value=[]):
             self.assertEqual(namespace['signature'](scene,[]),namespace['signature'](scene,[]))
         shirt=self.kept('Shirt')
-        with patch.object(layering,'kept_garments',return_value=[shirt]):
+        with patch.object(layering,'kept_garments',return_value=[shirt]),patch.object(layering,'current_pieces',return_value=set()):
             enabled=namespace['signature'](scene,[])
             shirt.get=lambda key,default=None:False
             self.assertNotEqual(namespace['signature'](scene,[]),enabled)

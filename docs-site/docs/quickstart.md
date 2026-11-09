@@ -30,7 +30,7 @@ For a matching left and right piece, right-click a piece and choose **Clone > Cl
 
 Panels can drape without being arranged first. To place them around the avatar:
 
-1. Reveal the 3D Viewport.
+1. Click **3D view** at the top right of the editor to reveal the 3D Viewport.
 2. Select a piece and click a blue placement point, such as **Chest Front**.
 3. Place the back piece at **Chest Back**.
 4. Use Blender's <kbd>G</kbd> and <kbd>R</kbd> controls to adjust a piece if needed.
@@ -68,7 +68,11 @@ The finished mesh is editable in Blender. Its UVs are the flat map used to place
   <figcaption id="shot-quickstart-mesh-keep-caption">Full-editor view showing the finished cloth mesh selected around the avatar in the Blender 3D Viewport after clicking Keep mesh.</figcaption>
 </figure>
 
-## Step 8: Save Your Work
+## Step 8: Take It to Your Avatar
+
+The kept garment is a normal Blender mesh named **DD Garment**. Devil Designer does not rig or export it. From here you use Blender as usual: parent it to your avatar's armature, copy the skin weights from the body, then export the avatar with its clothing.
+
+## Step 9: Save Your Work
 
 Save the Blender file to keep your pattern pieces, seams, fabric choices, and panel placement.
 

@@ -149,11 +149,19 @@ def run():
             bpy.ops.screen.animation_cancel(restore_frame=False)
             op.shaping.mode = 'PIN'
             before = len(op.session.document.anchors)
+            cloth = garment.generated(scene, 'simulation')[0]
             op.shaping.vertex = vertex
             op.pin_grabbed(bpy.context, op.shaping)
-            check(len(op.session.document.anchors) == before + 1 and op.shaping.mode == 'PIN', 'Pin in Grab adds a pin and stays in Grab')
+            from devil_designer import xpbd_live as live
+            check(len(live.pinned_vertices(cloth)) > 0 and garment.generated(scene, 'simulation')[0] == cloth and len(op.session.document.anchors) == before and op.shaping.mode == 'PIN',
+                  'Pin in Grab pins the live cloth without a new drape and stays in Grab')
             bpy.ops.screen.animation_cancel(restore_frame=False)
             drawn('Pinned Grab')
+            op.error_message = None
+            op.renderer.draw_cloth_pins(op)
+            check(not op.error_message and len(op.cloth_pin_pixels()) > 0, 'cloth pins draw over the 3D view')
+            op.minimal_action('GRAB_UNPIN')
+            check(len(live.pinned_vertices(cloth)) == 0, 'Remove pins frees the cloth')
             op.choose_tool('SELECT')
             piece = garment.generated(scene, 'simulation')[0]
             front = op.session.document.patterns[0].id
