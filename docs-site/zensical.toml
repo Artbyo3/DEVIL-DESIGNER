@@ -18,7 +18,7 @@ nav = [
 ]
 
 [project.extra]
-version = "v0.13.0"
+version = "v0.15.0"
 
 [project.theme]
 language = "en"
