@@ -1486,11 +1486,13 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         if event.type == 'MOUSEMOVE':
             self._area.tag_redraw()
         if event.type == 'MIDDLEMOUSE' or event.alt:
+            grab.view_changed()
             return {'PASS_THROUGH'}
         if event.type in {'WHEELUPMOUSE', 'WHEELDOWNMOUSE'}:
             if panel:
                 return None
             if not event.ctrl:
+                grab.view_changed()
                 return {'PASS_THROUGH'}
             if not grab.held:
                 grab.scale_radius(RADIUS_STEP if event.type == 'WHEELUPMOUSE' else 1 / RADIUS_STEP)
