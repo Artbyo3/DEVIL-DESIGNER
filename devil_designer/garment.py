@@ -94,15 +94,22 @@ def remember_drape(context):
         _carried_drape = dict(scene=scene.name,avatar=scene.dd_avatar.name if scene.dd_avatar else '',poses=poses,pins=xpbd_live.pin_records(simulations[0]))
 
 
+def carried_drape(scene):
+    carried = _carried_drape
+    if carried is None or carried['scene']!=scene.name or carried['avatar']!=(scene.dd_avatar.name if scene.dd_avatar else ''):
+        return None
+    return carried
+
+
 def forget_drape():
     global _carried_drape
     _carried_drape = None
 
 
 def restore_drape(scene,obj,panels):
-    carried = _carried_drape
+    carried = carried_drape(scene)
     forget_drape()
-    if carried is None or carried['scene']!=scene.name or carried['avatar']!=(scene.dd_avatar.name if scene.dd_avatar else ''):
+    if carried is None:
         return
     from . import piece_states,xpbd_live
     rests = {panel['dd_pattern_id']:[tuple(item.vector) for item in panel.data.attributes['dd_rest'].data] for panel in panels}

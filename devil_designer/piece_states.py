@@ -165,6 +165,9 @@ def compile_run(context, document):
     if old and old[0].get('dd_signature') == marker and xpbd.current(old[0]):
         return old[0]
     pins = xpbd_live.pin_records(old[0]) if old and poses else {}
+    carried = garment.carried_drape(scene)
+    if not poses and carried is not None:
+        poses, pins = carried['poses'], carried['pins']
     garment.require_body(scene)
     temporary = bpy.data.scenes.new('DD State Compile')
     owned_collection = None
