@@ -22,6 +22,11 @@ not replace the source patterns with their triangulated approximation.
 - Patterns represented by editable Bezier paths, including straight segments.
 - Convert points between corners and curve points, with editable handles.
 - Numeric drafting and editing in centimetres; retain metre-based internal units.
+- Snapping, on by default and reversed by Ctrl: drawing points, the rectangle and
+  ellipse corners, knife points, moves and the transform pivot snap to the points,
+  midpoints, edges and crossings of every piece within 10 pixels, with a marker that
+  names the target. A move snaps the moving point nearest the cursor, and geometry
+  that is itself moving is never a target. Otherwise positions snap to the 1 cm grid.
 - Display live segment lengths while drawing and editing, including curve arc
   lengths, so edges can be compared before sewing.
 - Keep measurement, displayed curves, sewing, and meshing consistent by sharing

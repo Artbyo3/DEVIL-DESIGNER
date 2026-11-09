@@ -58,3 +58,15 @@ The audit read the operators, the editor event and error paths, the simulate, sh
 - The earlier list in `reports/live-cloth-pins.md` still applies. Item 1 there is now settled by the probe.
 - The editor no longer closes on `RuntimeError`. Any suite that relied on that close will fail and should be updated.
 - `tests/blender_layering.py` and `tests/test_layering.py` encode the Wear over default. A fix for the first row changes them.
+
+## Build round after the audit
+
+Three holes were built on the same branch. No suite was run. Only `tests/test_snapping.py` was executed on its own, and it passes.
+
+| Hole | What changed | Test phase must verify |
+| --- | --- | --- |
+| Kept garment collides with its own re-drape | `layering.worn` defaults Wear over off when a kept mesh shares pieces with the current design. A manual choice wins. | `tests/blender_layering.py`, `tests/test_layering.py` and the Wear over block of `tests/gui_fast_flow.py` were edited to the new default and are unrun. Keep's body check now also skips such a mesh. |
+| Timeline left changed after closing | `editor.cleanup` restores the timeline when playback is paused. Keep locks the clock again before refining. | No test covers it. Simulate, pause, close: frame rate, end frame and sync mode return. Reopen and Keep still works. A Keep refused after reopening leaves the clock locked until Reset. |
+| No snapping to geometry | `snapping.py`, wired into drawing points, rectangle and ellipse corners, knife points, moves and the pivot, with a marker. | GUI drag tests that end within 10 pixels of other geometry now land on it instead of the grid. Marker draws in every draw state. Hover marker before the first click of a drawing tool. |
+
+Snapping left out on purpose: Pin, Tack and Dart clicks and the double-click edge split still use the grid only, because a point snapped onto the outline fails their inside-the-fabric check. A linked twin that moves with its partner is still a target at its old place during the drag.
