@@ -572,6 +572,11 @@ class Renderer:
                     state_label = label(pat)
                     if state_label:
                         label_txt += ' · ' + state_label
+                    record = pat.arrangement
+                    if record:
+                        label_txt += f" · {'Flat' if record['flat'] else 'Wrap'} {record['volume'].replace('_', ' ')} {record['point'].replace('_', ' ')}"
+                        if not record['flat'] and record.get('overwrap'):
+                            label_txt += ', right on top' if record.get('direction', 1) == 1 else ', left on top'
                     show_twin=is_twin and (selected or partner_selected or hovered_piece and hovered_piece.id in pair['members'])
                     if show_twin:
                         p_idx = next((idx for idx, lp in enumerate(twin_pairs) if lp is pair), 0)
