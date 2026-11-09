@@ -158,6 +158,29 @@ def advance():
             check(workspace.message.startswith('Released'), 'release is reported to the artist')
             return 1.0
         if step == 6:
+            from devil_designer import xpbd_live
+            point = cloth_pixel()
+            moved = (point[0] + 30, point[1] + 20)
+            workspace.handle_event(bpy.context, event('MOUSEMOVE', point, 'NOTHING'))
+            workspace.handle_event(bpy.context, event('LEFTMOUSE', point))
+            workspace.handle_event(bpy.context, event('MOUSEMOVE', moved, 'NOTHING'))
+            workspace.handle_event(bpy.context, event('W', moved))
+            check(not workspace.shaping.held and len(xpbd_live.pinned_vertices(state['simulation'])) > 0, 'W pins the held cloth while it simulates')
+            workspace.handle_event(bpy.context, event('LEFTMOUSE', moved, 'RELEASE'))
+            workspace.draw_overlay()
+            check(not workspace.error_message and len(workspace.cloth_pin_pixels()) > 0, 'cloth pins are drawn during live simulation')
+            return .6
+        if step == 7:
+            from devil_designer import xpbd_live
+            point = cloth_pixel()
+            workspace.handle_event(bpy.context, event('LEFTMOUSE', point, ctrl=True))
+            workspace.handle_event(bpy.context, event('LEFTMOUSE', point, 'RELEASE', ctrl=True))
+            check(not workspace.shaping.held, 'Ctrl+click does not grab the cloth')
+            workspace.open_flyout('SHAPE')
+            click(center(workspace.canvas_layout.buttons['STRIP_GRAB_UNPIN'][0]))
+            check(len(xpbd_live.pinned_vertices(state['simulation'])) == 0 and workspace.tool == 'SHAPE', 'Remove pins frees every cloth pin and stays in Grab')
+            return .4
+        if step == 8:
             workspace.draw_overlay()
             check(not workspace.error_message, 'editor draws without error during live simulation')
             button('SIMULATE')

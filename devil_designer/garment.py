@@ -88,10 +88,10 @@ def remember_drape(context):
     simulations = generated(scene,'simulation')
     if not simulations or simulations[0].hide_get():
         return
-    from . import piece_states
+    from . import piece_states,xpbd_live
     poses = piece_states.snapshot(context,generated(scene,'panel'))
     if poses:
-        _carried_drape = dict(scene=scene.name,avatar=scene.dd_avatar.name if scene.dd_avatar else '',poses=poses)
+        _carried_drape = dict(scene=scene.name,avatar=scene.dd_avatar.name if scene.dd_avatar else '',poses=poses,pins=xpbd_live.pin_records(simulations[0]))
 
 
 def forget_drape():
@@ -104,13 +104,14 @@ def restore_drape(scene,obj,panels):
     forget_drape()
     if carried is None or carried['scene']!=scene.name or carried['avatar']!=(scene.dd_avatar.name if scene.dd_avatar else ''):
         return
-    from . import piece_states
+    from . import piece_states,xpbd_live
     rests = {panel['dd_pattern_id']:[tuple(item.vector) for item in panel.data.attributes['dd_rest'].data] for panel in panels}
     for identity,indices in piece_states.piece_indices(obj).items():
         if identity in carried['poses']:
             for index,point in zip(indices,piece_states.carry(*carried['poses'][identity],rests[identity])):
                 obj.data.vertices[index].co = point
     obj.data.update()
+    xpbd_live.carry_pins(obj,carried['pins'])
     xpbd.restart_from_pose(obj)
 
 
@@ -384,7 +385,7 @@ def build_simulation(context):
     marker = signature(scene,panels)
     old = generated(scene,'simulation')
     old_anchors=generated(scene,'anchor')+generated(scene,'collider')
-    if old and old[0].get('dd_signature')==marker:
+    if old and old[0].get('dd_signature')==marker and xpbd.current(old[0]):
         return old[0]
     remember_drape(context)
     stop(context)

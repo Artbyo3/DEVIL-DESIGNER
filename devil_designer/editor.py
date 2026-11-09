@@ -534,6 +534,7 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                 self.draw_cached_overlay()
             else:
                 self.draw_interface()
+            self.renderer.draw_cloth_pins(self)
             self.renderer.draw_grab_ring(self)
         except Exception as exc:
             self.error_message = f"Render error: {exc}"
@@ -1435,20 +1436,26 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         simulations = garment.generated(context.scene, 'simulation')
         if not simulations or simulations[0].hide_get():
             raise ValueError('Start a drape before grabbing it.')
+        from . import xpbd
+        if not xpbd.current(simulations[0]):
+            raise ValueError('This drape comes from an older version. Press Simulate once, then grab it.')
         if self.shaping is None or self.shaping.source != simulations[0]:
             self.shaping = ClothGrab(simulations[0])
         if not self.choose_tool('SHAPE'):
             return
+        self.shaping.arm()
         if self.full:
             self.reveal_3d()
         self.card_kind = None
         self._window.cursor_modal_set('HAND')
         self.shape_cursor = 'HAND'
-        self.message = 'Drag the cloth while it simulates. Ctrl+wheel changes radius. Release to let it fall back.'
+        self.message = 'Drag the cloth while it simulates. W pins it where you hold it. Ctrl+wheel changes radius.'
 
     def end_shaping(self):
         if self.shaping is not None:
-            self.shaping.release()
+            if self.shaping.alive:
+                self.shaping.release(bpy.context)
+            self.shaping.disarm()
         if self.shape_cursor is not None:
             self._window.cursor_modal_restore()
         self.shape_cursor = None
@@ -1546,9 +1553,12 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
             else:
                 garment.start_playback(context)
             return {'RUNNING_MODAL'}
+        if press and event.ctrl and event.type == 'Z' and grab.undo():
+            self.message = 'Cloth pin change undone.'
+            return {'RUNNING_MODAL'}
         if press and event.type == 'ESC':
             if grab.held:
-                grab.release()
+                grab.release(context)
                 self._window.cursor_modal_set('HAND')
                 self.shape_cursor = 'HAND'
             else:
@@ -1558,14 +1568,14 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
             self.choose_tool({'V': 'SELECT', 'P': 'POLYGON', 'R': 'RECTANGLE', 'E': 'ELLIPSE', 'I': 'INTERNAL', 'D': 'DART',
                               'J': 'SEW', 'K': 'PIN', 'T': 'TACK', 'N': 'KNIFE'}[event.type])
             return {'RUNNING_MODAL'}
-        if event.type == 'LEFTMOUSE' and event.value == 'RELEASE' and grab.held and grab.mode == 'PIN':
+        if grab.held and (press and event.type == 'W' or event.type == 'LEFTMOUSE' and event.value == 'RELEASE' and grab.mode == 'PIN'):
             self.pin_grabbed(context, grab)
             return {'RUNNING_MODAL'}
         if event.type == 'LEFTMOUSE' and event.value == 'RELEASE' and grab.held:
-            grab.release()
+            grab.release(context)
             self._window.cursor_modal_set('HAND')
             self.shape_cursor = 'HAND'
-            self.message = 'Released. The cloth keeps simulating from where you left it.'
+            self.message = 'Released. The cloth settles from where you left it. Press W while holding to pin it instead.'
             return {'RUNNING_MODAL'}
         if event.type == 'MOUSEMOVE' and grab.held:
             grab.drag(*self.pointer_ray())
@@ -1595,6 +1605,9 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
             if hit is None:
                 self.message = 'Press on the cloth to grab it.'
                 return {'RUNNING_MODAL'}
+            if event.ctrl:
+                self.message = 'Pin removed.' if grab.unpin_near(context, hit[0]) else 'No pin under the ring. Ctrl+click a pinned spot to free it.'
+                return {'RUNNING_MODAL'}
             if grab.mode in {'PINCH', 'STEAM'}:
                 self.brush_stretch = event.shift
                 self.brush_cloth(grab, hit[0], hit[1], event.shift)
@@ -1611,14 +1624,22 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         return None
 
     def pin_grabbed(self, context, grab):
-        try:
-            identity, placed = self.cloth_point(grab.source, grab.vertex)
-        except ValueError as failure:
-            grab.release()
-            self.message = str(failure)
-            return
-        self.run_edit(lambda: self.session.add_pins([(identity, *placed)]), 'Cloth pinned.')
-        self.redrape_in_grab(context, 'PIN', grab.radius)
+        pinned = grab.pin(context)
+        self._window.cursor_modal_set('HAND')
+        self.shape_cursor = 'HAND'
+        self.message = 'Pinned here. Drag it to move it. Ctrl+click frees it.' if pinned else 'That cloth is already held by a pattern pin, tack or freeze.'
+
+    def cloth_pin_pixels(self):
+        from . import garment
+        simulations = garment.generated(self._scene, 'simulation')
+        if self.full or not simulations or simulations[0].hide_get():
+            return []
+        from bpy_extras import view3d_utils
+        from .xpbd_live import pinned_world
+        view = self._area.spaces.active.region_3d
+        bounds = self.shaping_view_bounds()
+        pixels = [view3d_utils.location_3d_to_region_2d(self._region, view, point) for point in pinned_world(simulations[0])]
+        return [tuple(pixel) for pixel in pixels if pixel is not None and bounds.contains(*pixel)]
 
     def brush_cloth(self, grab, vertex, world, stretch):
         try:

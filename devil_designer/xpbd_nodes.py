@@ -4,7 +4,7 @@ import bpy
 ASSET_FILE = 'geometry_nodes_dynamics_assets.blend'
 STOCK_GROUPS = ('XPBD Simulation', 'XPBD Solver', 'Gravity', 'Collider', 'Set Friction', 'Set Geometry Tags',
                 'Set Geo Updater - Deform Only')
-GROUP_VERSION = 3
+GROUP_VERSION = 4
 STOCK_PREFIX = 'DD Stock '
 CLOTH_GROUP = 'DD XPBD Cloth'
 SOLVER_GROUP = 'DD XPBD Solver'
@@ -12,6 +12,7 @@ SIMULATION_GROUP = 'DD XPBD Simulation'
 CONTACT_GROUP = 'DD Self Contact'
 GEOMETRY_PATH = 'Cloth/Geometry'
 SHELL_FRICTION = .5
+GRAB_EASE = .25
 
 
 class Graph:
@@ -260,6 +261,7 @@ def build_cloth_group(simulation):
     socket(tree, 'Grab Radius', 'INPUT', 'NodeSocketFloat', .05)
     socket(tree, 'Grab Stride', 'INPUT', 'NodeSocketFloat', .015)
     socket(tree, 'Grab Reach', 'INPUT', 'NodeSocketFloat', .12)
+    socket(tree, 'Grab Release', 'INPUT', 'NodeSocketFloat', -1.0)
     socket(tree, 'Contact Passes', 'INPUT', 'NodeSocketInt', 1)
     socket(tree, 'Inner Substeps', 'INPUT', 'NodeSocketInt', 12)
     socket(tree, 'Iterations', 'INPUT', 'NodeSocketInt', 2)
@@ -331,8 +333,13 @@ def build_cloth_group(simulation):
     distance_to_hand = graph.vector('LENGTH', reach)
     grip = graph.node('ShaderNodeClamp', graph.math('SUBTRACT', 1.0, graph.math('DIVIDE', distance_to_hand, graph.math('MAXIMUM', out['Grab Reach'], .001))), 0.0, 1.0).outputs[0]
     stride = graph.math('MULTIPLY', graph.math('MINIMUM', distance_to_hand, out['Grab Stride']), grip)
-    pull = graph.scale(graph.vector('NORMALIZE', reach), graph.math('MULTIPLY', stride, smooth))
-    held = graph.logic('AND', graph.compare('GREATER_EQUAL', out['Grab Index'], 0, 'INT'), graph.compare('GREATER_THAN', smooth, .001))
+    since_release = graph.math('SUBTRACT', seconds, out['Grab Release'])
+    easing = graph.node('ShaderNodeClamp', graph.math('SUBTRACT', 1.0, graph.math('DIVIDE', since_release, GRAB_EASE)), 0.0, 1.0).outputs[0]
+    released = graph.switch('FLOAT', graph.compare('LESS_THAN', since_release, 0.0), easing, 0.0)
+    hold = graph.switch('FLOAT', graph.compare('LESS_THAN', out['Grab Release'], 0.0), released, 1.0)
+    pull = graph.scale(graph.vector('NORMALIZE', reach), graph.math('MULTIPLY', graph.math('MULTIPLY', stride, smooth), hold))
+    held = graph.logic('AND', graph.logic('AND', graph.compare('GREATER_EQUAL', out['Grab Index'], 0, 'INT'), graph.compare('GREATER_THAN', smooth, .001)),
+                       graph.compare('GREATER_THAN', hold, 0.0))
     pinned = graph.attribute('dd_pinned', 'BOOLEAN')
     pins = graph.bundle((('Type', 'STRING', 'Blender.Constraint.PinPosition'), ('filter', 'STRING', ''),
                          ('selection', 'BOOLEAN', graph.logic('OR', pinned, held)),

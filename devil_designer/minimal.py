@@ -1029,7 +1029,7 @@ class MinimalCards:
             return [('SET_SEW_SEGMENT', 'Segment', not free and not self.mn_sewing), ('SET_SEW_FREE', 'Free', free),
                     ('SET_SEW_MN', 'M:N', self.mn_sewing), ('SET_SEW_AUTO', 'Auto sew', False)]
         if owner == 'SHAPE' and self.shaping is not None:
-            return [('GRAB_' + mode, mode.title(), self.shaping.mode == mode) for mode in ('PULL', 'PUSH', 'PIN', 'PINCH', 'STEAM')]
+            return [('GRAB_' + mode, mode.title(), self.shaping.mode == mode) for mode in ('PULL', 'PUSH', 'PIN', 'PINCH', 'STEAM')] + [('GRAB_UNPIN', 'Remove pins', False)]
         if owner == 'PIN':
             return [('SET_PIN_FABRIC', 'Pin', tool == 'PIN'), ('SET_PIN_BOX', 'Box', tool == 'PIN_BOX'), ('SET_PIN_EDGE', 'Edge', tool == 'PIN_EDGE'),
                     ('SET_PIN_BODY', 'Tack to body', tool == 'TACK'), ('SET_PIN_JOIN', 'Tack fabric', tool == 'TACK_FABRIC')]
@@ -1271,9 +1271,12 @@ class MinimalCards:
             angle = float(key.removeprefix('SLASH_SPREAD_').split()[0])
             self.run_edit(lambda: self.session.slash_spread(angle), 'Pattern spread.')
             self.card_kind = None
+        elif key == 'GRAB_UNPIN':
+            removed = self.shaping.unpin_all()
+            self.message = f'{removed} pinned point(s) freed. The cloth drapes again.' if removed else 'No cloth pins to remove.'
         elif key.startswith('GRAB_'):
             self.shaping.mode = key.removeprefix('GRAB_')
-            self.message = {'PIN': 'Drag the cloth and release to pin it there.', 'PINCH': 'Click or drag along the cloth to gather a fold. Space applies.',
+            self.message = {'PIN': 'Drag the cloth and release to pin it there. Ctrl+click frees a pin.', 'PINCH': 'Click or drag along the cloth to gather a fold. Space applies.',
                             'STEAM': 'Drag to shrink, Shift+drag to stretch. Space applies.'}.get(self.shaping.mode, f'Grab mode {self.shaping.mode.title()}')
         elif key == 'SET_SEW_AUTO':
             self.run_edit(self.session.auto_sew, 'Matching edges sewn. Check the seams, Undo removes them.')

@@ -167,6 +167,15 @@ preserve valid pair membership. Designs without pair records remain unchanged.
   the body side, and extra width stands out as a flap so the panels cannot cross.
 - Grab cloth while it simulates. Pull follows the hand in the view plane, Push
   presses along the surface normal, and radius is set by Ctrl+wheel or the strip. The wheel alone zooms the view.
+  Releasing eases the hand out over a quarter second instead of dropping the cloth in one frame.
+- Cloth pins hold the cloth where the artist put it while the simulation keeps running. W while holding
+  pins the cloth inside the ring, and Pin mode pins on release. Dragging a pinned spot moves it, Ctrl+click
+  frees the pins under the ring, and Remove pins in the Grab flyout frees all of them. Cloth pins are written
+  straight into the running solver, so no new drape starts. They are kept through Re-drape and Keep, and
+  Reset drape clears them. They never override pattern pins, tacks or frozen pieces. Pinned cloth shows as
+  dots over the 3D view in every tool, and Ctrl+Z in Grab undoes the last pin change.
+- Pressing the cloth holds the grabbed cloth point itself, so a still hand does not move it. The solver
+  substeps change once when the Grab tool opens, not at each press and release.
 - Keep runs a short high-substep refine, then checks the result against every
   collision body. Contacts within 12 mm are nudged clear and deeper ones refuse.
 - Reset/rebuild without losing valid source relationships or arranged placements.

@@ -71,7 +71,14 @@ Press <kbd>F</kbd> to show or hide the **Fit Map**, a color guide that shows whe
 
 ## Pin the Draped Cloth
 
-Click the Grab tool and choose **Pin**. Drag the cloth where you want it and release. The point stays pinned there and the drape carries on.
+Pins hold the cloth exactly where you put it while everything around it keeps draping. Nothing restarts.
+
+- While you are holding the cloth with Grab, press <kbd>W</kbd>. The cloth inside the circle stays there.
+- Or click the Grab tool and choose **Pin**. Every drag then pins the cloth where you release it.
+- Drag a pinned spot to move it. It stays where you drop it.
+- <kbd>Ctrl</kbd>+click a pinned spot to free it. **Remove pins** in the Grab menu frees all of them.
+
+Pinned cloth shows as small dots, and <kbd>Ctrl</kbd>+<kbd>Z</kbd> in Grab undoes the last pin change. A smaller circle pins less cloth, which suits a single fold. Pins stay through **Re-drape** and are baked into the mesh by **Keep mesh**. **Reset drape** clears them.
 
 ## Pinch, Steam and Puff
 
