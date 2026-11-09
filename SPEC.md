@@ -160,7 +160,8 @@ preserve valid pair membership. Designs without pair records remain unchanged.
 - Simulate with the Geometry Nodes XPBD system in `xpbd.py` and `xpbd_nodes.py`.
   It is the only simulation engine. The zone runs in realtime mode at a fixed
   30 fps clock, so playback runs until stopped and accepts live input. The
-  artist's frame rate and timeline are restored on Keep and Reset.
+  artist's frame rate and timeline are restored on Keep and Reset, and when the
+  editor is closed. Simulate and Keep set the clock again after reopening.
 - Fabrics differ through bending stiffness. Linen, Denim and Leather add links across
   two cloth edges, because the solver's own bending saturates.
 - A piece with a partner on the opposite side of the same volume stops wrapping at

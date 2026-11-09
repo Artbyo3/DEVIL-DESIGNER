@@ -1782,6 +1782,10 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         if self._closed:
             return
         self.end_shaping()
+        screen = bpy.context.screen
+        if screen is None or not screen.is_animation_playing:
+            from . import garment
+            garment.restore_timeline(self._scene)
         self.cancel_pending_sub()
         self.avatar_field.close()
         self.avatar_field.release_surface()
