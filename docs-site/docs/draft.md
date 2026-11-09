@@ -39,6 +39,15 @@ Use these tools to create and edit garment pattern pieces. A Bezier curve is a s
 | **Avatar Guide** | <kbd>H</kbd> | Show or hide the avatar guide. |
 | **Cancel / Exit** | <kbd>Escape</kbd> | Cancel the current action, close a menu, or clear the selection. Use the X to close the editor. |
 
+These shortcuts work while the pointer is over the editor panel, its dock, or an open menu. With the pointer anywhere else, Blender's own shortcuts are in charge. A few keys keep working everywhere because they finish or undo work you started in the editor:
+
+- <kbd>B</kbd> reverses the selected seam, or flips the sewing direction while the Sew tool is active.
+- <kbd>X</kbd>, <kbd>Del</kbd>, or <kbd>Backspace</kbd> removes the selected seam.
+- <kbd>Escape</kbd> closes an open menu or flyout, or cancels a sewing, placement, or tack step in progress.
+- <kbd>Enter</kbd> finishes a multi-pair seam in progress.
+- <kbd>Ctrl</kbd> + <kbd>Z</kbd> and <kbd>Ctrl</kbd> + <kbd>Y</kbd> undo and redo editor changes, so Blender's undo never rolls the editor back past its own history.
+- While drawing, dragging, typing a value, or using the Grab tool, the editor keeps every key until you finish.
+
 ## Bezier Curve Editing & Numeric Accuracy
 
 Select a point and press <kbd>C</kbd> to make it a smooth curve. Drag its handles to change the shape. Right-click a point or edge to enter an exact position or length in centimetres.

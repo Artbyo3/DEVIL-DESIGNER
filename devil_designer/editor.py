@@ -17,6 +17,7 @@ from .fit_display import FitOverlay
 OVERLAY_REFRESH = .4
 RADIUS_STEP = 1.15
 BRUSH_SPACING = .6
+NON_KEYBOARD_TOKENS = ('MOUSE', 'TRACKPAD', 'TIMER', 'NDOF', 'WINDOW', 'PEN', 'ERASER', 'XR_', 'ACTIONZONE', 'EVT_', 'TEXTINPUT')
 _active = None
 
 
@@ -645,6 +646,8 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                 self.cancel_transform()
             elif not (event.ctrl and event.type == 'S'):
                 return {'RUNNING_MODAL'}
+        if self.shortcut_belongs_to_blender(event, panel):
+            return {'PASS_THROUGH'}
         result = self.shaping_event(context, event, panel)
         if result is not None:
             return result
@@ -1453,6 +1456,25 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         view = self._area.spaces.active.region_3d
         origin = view3d_utils.region_2d_to_origin_3d(self._region, view, self.pointer)
         return origin, view3d_utils.region_2d_to_vector_3d(self._region, view, self.pointer)
+
+    def shortcut_belongs_to_blender(self, event, panel):
+        if panel or self.tool == 'SHAPE' or event.type == 'NONE' or any(token in event.type for token in NON_KEYBOARD_TOKENS):
+            return False
+        if (self.numeric or self.library_edit or self.setting_drag or self.gesture or self.draft or self.confirm_action
+                or self.trace_points is not None or getattr(self, 'pending_transform', None)):
+            return False
+        if event.ctrl and event.type in {'Z', 'Y'}:
+            return False
+        if event.type == 'ESC' and (self.card_kind or self.flyout or self.pending_edge or self.pending_place or self.pending_tack
+                                    or self.free_clicks or self.mn_chain or self.mn_first):
+            return False
+        if event.type == 'B' and (self.seam_selected or self.pending_edge or self.tool == 'SEW'):
+            return False
+        if event.type in {'RET', 'NUMPAD_ENTER'} and self.mn_sewing:
+            return False
+        if event.type in {'X', 'DEL', 'BACK_SPACE'} and self.seam_selected and not (event.ctrl or event.alt or event.shift):
+            return False
+        return True
 
     def shaping_event(self, context, event, panel):
         from . import garment
