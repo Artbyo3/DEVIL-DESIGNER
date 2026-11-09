@@ -115,7 +115,8 @@ def pin_records(source):
     saved = json.loads(source['dd_run_rest'])
     records = {}
     for identity, indices in piece_indices(source).items():
-        points = [saved[identity][offset][:2] for offset, index in enumerate(indices) if held[index]] if identity in saved else []
+        rest = saved.get(identity, [])
+        points = [rest[offset][:2] for offset, index in enumerate(indices) if held[index]] if len(rest) == len(indices) else []
         if points:
             records[identity] = points
     return records
@@ -186,6 +187,10 @@ class ClothGrab:
             return False
         store_pins(self.source, *self.undo_steps.pop())
         return True
+
+    def locked(self, vertex):
+        mesh = self.source.data
+        return bool(flags(mesh, 'dd_pinned')[vertex] and not flags(mesh, 'dd_hold')[vertex])
 
     def arm(self):
         if self.quality:

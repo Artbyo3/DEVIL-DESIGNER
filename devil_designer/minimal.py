@@ -1793,6 +1793,9 @@ class MinimalCards:
             elif button == 'CLOSE':
                 if self.draft or self.gesture:
                     self.cancel_gesture()
+                from . import garment
+                if garment.generated(self._scene, 'simulation'):
+                    garment.stop(context)
                 self.cleanup()
                 return {'FINISHED'}
             elif button == 'RESTORE_CANVAS':

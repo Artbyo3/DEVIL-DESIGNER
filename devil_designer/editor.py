@@ -445,7 +445,6 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                 self.show_card('BODY')
                 self.message = 'Choose the body. Simulation will start automatically.'
                 return False
-                return False
             self.choose_body(body, context)
         if len(self.session.document.patterns) == 2 and all(pattern.placement_mode=='LEGACY' for pattern in self.session.document.patterns) and not garment.generated(self._scene, 'panel'):
             result = bpy.ops.devil_designer.arrange('EXEC_DEFAULT')
@@ -570,11 +569,12 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
             return {'FINISHED'}
         try:
             return self.handle_event(context, event)
-        except (ReferenceError, RuntimeError):
+        except ReferenceError:
             self.cleanup()
+            self.report({'WARNING'}, 'Devil Designer closed because the view or scene it was using is gone. Your design is saved in the scene. Reopen it from View > Devil Designer.')
             return {'CANCELLED'}
         except Exception as exc:
-            print("Devil Designer modal error:", exc)
+            traceback.print_exc()
             self.error_message = f"Editor error: {exc}"
             self.message = self.error_message
             return {'RUNNING_MODAL'}
@@ -1612,6 +1612,9 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                 self.brush_stretch = event.shift
                 self.brush_cloth(grab, hit[0], hit[1], event.shift)
                 return {'RUNNING_MODAL'}
+            if grab.locked(hit[0]):
+                self.message = 'This cloth is held by a pattern pin, a tack or a frozen piece, so it cannot be dragged.'
+                return {'RUNNING_MODAL'}
             grab.begin(context, hit[0], hit[1], hit[2], direction)
             self._window.cursor_modal_set('HAND_CLOSED')
             self.shape_cursor = 'HAND_CLOSED'
@@ -1632,7 +1635,7 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
     def cloth_pin_pixels(self):
         from . import garment
         simulations = garment.generated(self._scene, 'simulation')
-        if self.full or not simulations or simulations[0].hide_get():
+        if self.full or not simulations or not simulations[0].visible_get():
             return []
         from bpy_extras import view3d_utils
         from .xpbd_live import pinned_world

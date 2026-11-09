@@ -32,7 +32,7 @@ Use this to sew several edges to several others, such as a two-piece sleeve to a
 
 ## Direct 3D Viewport Sewing
 
-1. Reveal the 3D Viewport.
+1. Click **3D view** at the top right of the editor to reveal the 3D Viewport.
 2. Press <kbd>J</kbd> or <kbd>Shift</kbd> + <kbd>J</kbd>.
 3. Click the visible edges on the placed pieces.
 

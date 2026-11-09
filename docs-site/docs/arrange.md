@@ -13,7 +13,7 @@ Closing a pattern shape creates a matching 3D panel. Changes to the shape update
 
 ## Wrap a Panel Around the Body
 
-1. Reveal the 3D Viewport.
+1. Click **3D view** at the top right of the editor to reveal the 3D Viewport beside the canvas. **Full canvas** brings the canvas back.
 2. Select a piece in the canvas or 3D view.
 3. Click a blue placement point, such as **Chest Front**, **Chest Back**, **Waist**, or **Upper Arm**.
 4. Repeat for the other pieces.
