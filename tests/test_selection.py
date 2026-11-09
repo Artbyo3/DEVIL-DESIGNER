@@ -693,5 +693,26 @@ class SelectionTests(unittest.TestCase):
         pre3 = s.preflight_transform(cand3, set(), {})
         self.assertEqual(pre3['status'], 'BLOCK')
 
+    def test_align_and_distribute_pieces(self):
+        s = Session()
+        ids = []
+        for x, y, w in ((0.0, 0.0, .2), (.5, .3, .1), (1.2, .1, .3)):
+            s.add([(x, y), (x + w, y), (x + w, y + .2), (x, y + .2)])
+            ids.append(s.selected)
+        s.selected_patterns = set(ids)
+        s.align_pieces('LEFT')
+        self.assertEqual({round(min(v.x for v in s.document.find(i).vertices), 9) for i in ids}, {0.0})
+        s.align_pieces('TOP')
+        self.assertEqual({round(max(v.y for v in s.document.find(i).vertices), 9) for i in ids}, {.5})
+        for index, identity in enumerate(ids):
+            for v in s.document.find(identity).vertices:
+                v.x += index * .5
+        s.align_pieces('DISTRIBUTE_X')
+        boxes = sorted((min(v.x for v in s.document.find(i).vertices), max(v.x for v in s.document.find(i).vertices)) for i in ids)
+        self.assertAlmostEqual(boxes[1][0] - boxes[0][1], boxes[2][0] - boxes[1][1])
+        s.selected_patterns = set(ids[:1])
+        with self.assertRaises(ValueError):
+            s.align_pieces('LEFT')
+
 if __name__ == '__main__':
     unittest.main()

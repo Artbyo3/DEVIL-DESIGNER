@@ -4,7 +4,8 @@ import bpy
 ASSET_FILE = 'geometry_nodes_dynamics_assets.blend'
 STOCK_GROUPS = ('XPBD Simulation', 'XPBD Solver', 'Gravity', 'Collider', 'Set Friction', 'Set Geometry Tags',
                 'Set Geo Updater - Deform Only')
-GROUP_VERSION = 2
+GROUP_VERSION = 3
+STOCK_PREFIX = 'DD Stock '
 CLOTH_GROUP = 'DD XPBD Cloth'
 SOLVER_GROUP = 'DD XPBD Solver'
 SIMULATION_GROUP = 'DD XPBD Simulation'
@@ -84,16 +85,24 @@ class Graph:
         return node
 
 
+def stock_group(name):
+    return bpy.data.node_groups[STOCK_PREFIX + name]
+
+
 def load_stock_groups():
-    missing = [name for name in STOCK_GROUPS if name not in bpy.data.node_groups]
+    missing = [name for name in STOCK_GROUPS if STOCK_PREFIX + name not in bpy.data.node_groups]
     if not missing:
         return
     path = os.path.join(bpy.utils.resource_path('LOCAL'), 'datafiles', 'assets', 'nodes', ASSET_FILE)
     if not os.path.exists(path):
         raise ValueError('This Blender build has no XPBD dynamics assets. Devil Designer needs Blender 5.2 or newer.')
     with bpy.data.libraries.load(path, link=False) as (source, target):
-        target.node_groups = [name for name in missing if name in source.node_groups]
-    absent = [name for name in missing if name not in bpy.data.node_groups]
+        available = [name for name in missing if name in source.node_groups]
+        target.node_groups = list(available)
+    for name, group in zip(available, target.node_groups):
+        if group is not None:
+            group.name = STOCK_PREFIX + name
+    absent = [name for name in missing if STOCK_PREFIX + name not in bpy.data.node_groups]
     if absent:
         raise ValueError('The XPBD dynamics assets are incomplete: ' + ', '.join(absent))
 
@@ -203,7 +212,7 @@ def build_contact_group():
 
 
 def build_solver_group(contact):
-    tree = bpy.data.node_groups[STOCK_GROUPS[1]].copy()
+    tree = stock_group('XPBD Solver').copy()
     tree.name = SOLVER_GROUP
     socket(tree, 'Inner Substeps', 'INPUT', 'NodeSocketInt', 4)
     socket(tree, 'Body', 'INPUT', 'NodeSocketGeometry')
@@ -227,7 +236,7 @@ def build_solver_group(contact):
 
 
 def build_simulation_group(solver):
-    tree = bpy.data.node_groups[STOCK_GROUPS[0]].copy()
+    tree = stock_group('XPBD Simulation').copy()
     tree.name = SIMULATION_GROUP
     socket(tree, 'Inner Substeps', 'INPUT', 'NodeSocketInt', 4)
     socket(tree, 'Body', 'INPUT', 'NodeSocketGeometry')
@@ -303,9 +312,9 @@ def build_cloth_group(simulation):
 
     goal = graph.node('GeometryNodeStoreNamedAttribute', out['Geometry'], settings={'data_type': 'FLOAT_VECTOR', 'domain': 'POINT'}, Name='dd_pin_goal')
     graph.wire(goal.inputs['Value'], anchor)
-    tagged = graph.group(bpy.data.node_groups['Set Geometry Tags'], Geometry=goal.outputs[0], Tags='').outputs[0]
-    gripping = graph.group(bpy.data.node_groups['Set Friction'], Geometry=tagged, Static=SHELL_FRICTION, Dynamic=SHELL_FRICTION).outputs[0]
-    updated = graph.group(bpy.data.node_groups['Set Geo Updater - Deform Only'], Geometry=gripping, Extra_Sim_Attributes='').outputs[0]
+    tagged = graph.group(stock_group('Set Geometry Tags'), Geometry=goal.outputs[0], Tags='').outputs[0]
+    gripping = graph.group(stock_group('Set Friction'), Geometry=tagged, Static=SHELL_FRICTION, Dynamic=SHELL_FRICTION).outputs[0]
+    updated = graph.group(stock_group('Set Geo Updater - Deform Only'), Geometry=gripping, Extra_Sim_Attributes='').outputs[0]
 
     handle = graph.node('GeometryNodeObjectInfo', out['Grab Handle'], settings={'transform_space': 'RELATIVE'}).outputs['Location']
     grabbed = graph.node('GeometryNodeFieldAtIndex', settings={'data_type': 'FLOAT_VECTOR', 'domain': 'POINT'})
@@ -333,11 +342,11 @@ def build_cloth_group(simulation):
 
     settling = graph.math('SUBTRACT', progress, 1.0)
     ramp = graph.node('ShaderNodeClamp', settling, 0.0, 1.0).outputs[0]
-    gravity = graph.group(bpy.data.node_groups['Gravity'], Gravity=graph.scale(out['Gravity'], ramp)).outputs[0]
+    gravity = graph.group(stock_group('Gravity'), Gravity=graph.scale(out['Gravity'], ramp)).outputs[0]
     damping = graph.bundle((('Type', 'STRING', 'Blender.Damping'), ('filter', 'STRING', ''),
                             ('linear_damping', 'FLOAT', out['Damping']), ('angular_damping', 'FLOAT', 1.0)))
     shell = graph.node('GeometryNodeObjectInfo', out['Body Shell'], settings={'transform_space': 'RELATIVE'}).outputs['Geometry']
-    collider = graph.group(bpy.data.node_groups['Collider'], Geometry=shell, Friction=SHELL_FRICTION).outputs['Collider']
+    collider = graph.group(stock_group('Collider'), Geometry=shell, Friction=SHELL_FRICTION).outputs['Collider']
     cloth = graph.bundle((('Geometry', 'GEOMETRY', updated), ('Edge Length', 'BUNDLE', edge), ('Cross Edge Length', 'BUNDLE', bend),
                           ('Pin Positions', 'BUNDLE', pins), ('Gravity', 'BUNDLE', gravity), ('Damping', 'BUNDLE', damping),
                           ('Shell', 'BUNDLE', collider)))

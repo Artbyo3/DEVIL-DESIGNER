@@ -17,6 +17,7 @@ from .fit_display import FitOverlay
 OVERLAY_REFRESH = .4
 RADIUS_STEP = 1.15
 BRUSH_SPACING = .6
+NON_KEYBOARD_TOKENS = ('MOUSE', 'TRACKPAD', 'TIMER', 'NDOF', 'WINDOW', 'PEN', 'ERASER', 'XR_', 'ACTIONZONE', 'EVT_', 'TEXTINPUT')
 _active = None
 
 
@@ -260,8 +261,7 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         points = [p for pat in self.session.document.patterns for p in pat.points]
         points += self.reference_corners()
         from . import tracing
-        if self._scene.dd_trace_visible:
-            points += list(tracing.reference_corners(self._scene))
+        points += tracing.all_reference_corners(self._scene)
         layout = self.canvas_layout
         canvas = layout.canvas
         fit_rect = canvas
@@ -492,6 +492,8 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                     self.message += ' ' + self.triangle_note()
                 if button == 'SIMULATE' and self._scene.get('dd_arrangement_message'):
                     self.message+=' '+self._scene['dd_arrangement_message']
+                if button == 'SIMULATE' and self._scene.get('dd_collision_warning'):
+                    self.message+=' '+self._scene['dd_collision_warning']
                 return True
             err = self._scene.pop('dd_last_error', None)
             self.message = self.error_message = err or 'Action could not finish. Check the Blender report and try again.'
@@ -645,6 +647,8 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                 self.cancel_transform()
             elif not (event.ctrl and event.type == 'S'):
                 return {'RUNNING_MODAL'}
+        if self.shortcut_belongs_to_blender(event, panel):
+            return {'PASS_THROUGH'}
         result = self.shaping_event(context, event, panel)
         if result is not None:
             return result
@@ -699,7 +703,7 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                 from . import tracing
                 point = self.view.world(self.pointer, self.canvas_layout.canvas)
                 corners = tracing.reference_corners(self._scene)
-                if not corners or not (corners[0][0] <= point[0] <= corners[2][0] and corners[0][1] <= point[1] <= corners[2][1]):
+                if not corners or not tracing.inside(corners, point):
                     self.message = 'Pick a point inside the reference image.'
                     return {'RUNNING_MODAL'}
                 self.trace_points.append(point)
@@ -716,6 +720,10 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                     self.message = 'Now click the other end of the measured length.'
                 return {'RUNNING_MODAL'}
             return {'PASS_THROUGH'} if not panel else {'RUNNING_MODAL'}
+        if self.trace_drag is not None:
+            result = self.trace_drag_event(event, canvas)
+            if result is not None:
+                return result
         if press and event.type in {'ESC', 'RIGHTMOUSE'} and (self.pending_place or self.pending_tack):
             return self.design_pending_event(context, event, panel)
         if self.confirm_action:
@@ -1454,6 +1462,55 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         origin = view3d_utils.region_2d_to_origin_3d(self._region, view, self.pointer)
         return origin, view3d_utils.region_2d_to_vector_3d(self._region, view, self.pointer)
 
+    def trace_drag_event(self, event, canvas):
+        scene = self._scene
+        if not scene.dd_trace_path or scene.dd_trace_locked:
+            self.trace_drag = None
+            return None
+        press = event.value == 'PRESS'
+        if press and event.type in {'ESC', 'RIGHTMOUSE'}:
+            self.trace_drag = None
+            self.message = 'Image placement finished.'
+            return {'RUNNING_MODAL'}
+        if (press and event.type == 'LEFTMOUSE' and canvas and not self.canvas_layout.rail.contains(*self.pointer)
+                and not any(card[0].contains(*self.pointer) for card in self.visible_cards())):
+            self.trace_drag = dict(start=self.view.world(self.pointer, self.canvas_layout.canvas),
+                                   origin=(scene.dd_trace_x, scene.dd_trace_y))
+            return {'RUNNING_MODAL'}
+        if isinstance(self.trace_drag, dict):
+            if event.type == 'MOUSEMOVE':
+                point = self.view.world(self.pointer, self.canvas_layout.canvas)
+                scene.dd_trace_x = self.trace_drag['origin'][0] + point[0] - self.trace_drag['start'][0]
+                scene.dd_trace_y = self.trace_drag['origin'][1] + point[1] - self.trace_drag['start'][1]
+                return {'RUNNING_MODAL'}
+            if event.type == 'LEFTMOUSE' and event.value == 'RELEASE':
+                self.trace_drag = 'ARMED'
+                self.message = 'Image moved. Drag again, or press Escape to finish.'
+                return {'RUNNING_MODAL'}
+        return None
+
+    def shortcut_belongs_to_blender(self, event, panel):
+        if panel or self.tool in {'SHAPE', 'PEN'} or self.pen_mode or event.type == 'NONE' or any(token in event.type for token in NON_KEYBOARD_TOKENS):
+            return False
+        if (self.numeric or self.library_edit or self.setting_drag or self.gesture or self.draft or self.confirm_action
+                or self.trace_points is not None or self.trace_drag is not None or getattr(self, 'pending_transform', None)):
+            return False
+        from .arrangement_controls import interaction_active
+        if interaction_active():
+            return False
+        if event.ctrl and event.type in {'Z', 'Y'}:
+            return False
+        if event.type == 'ESC' and (self.card_kind or self.flyout or self.pending_edge or self.pending_place or self.pending_tack
+                                    or self.free_clicks or self.mn_chain or self.mn_first):
+            return False
+        if event.type == 'B' and (self.seam_selected or self.pending_edge or self.tool == 'SEW'):
+            return False
+        if event.type in {'RET', 'NUMPAD_ENTER'} and self.mn_sewing:
+            return False
+        if event.type in {'X', 'DEL', 'BACK_SPACE'} and self.seam_selected and not (event.ctrl or event.alt or event.shift):
+            return False
+        return True
+
     def shaping_event(self, context, event, panel):
         from . import garment
         press = event.value == 'PRESS'
@@ -1464,11 +1521,15 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         if event.type == 'MOUSEMOVE':
             self._area.tag_redraw()
         if event.type == 'MIDDLEMOUSE' or event.alt:
+            if grab is not None:
+                grab.view_changed()
             return {'PASS_THROUGH'}
         if event.type in {'WHEELUPMOUSE', 'WHEELDOWNMOUSE'}:
             if panel:
                 return None
             if not event.ctrl:
+                if grab is not None:
+                    grab.view_changed()
                 return {'PASS_THROUGH'}
             if not grab.held:
                 grab.scale_radius(RADIUS_STEP if event.type == 'WHEELUPMOUSE' else 1 / RADIUS_STEP)

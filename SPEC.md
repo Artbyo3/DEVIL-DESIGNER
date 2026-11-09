@@ -52,8 +52,12 @@ Outline and internal-path edits mirror bidirectionally within the same undo
 transaction. Whole-piece layout movement and 3D arrangement remain independent.
 Remove Linked Editing changes only the enabled state; Apply Linked Editing
 replaces the other outline from the active member. Two selected unpaired pieces
-can be linked explicitly. Linking refuses invalidation of existing sewing; it
-never creates, copies, or removes seams. Point topology edits retain the existing
+can be linked explicitly. Linking refuses invalidation of existing sewing, and
+turning a link on or off never creates, copies, or removes seams. Sewing on a
+linked twin is linked as well: a seam created on enabled twins gets the mirrored
+seam on the partners, and reversing, removing, switching on or off, changing
+shrink or shrink side, or moving a seam end applies to that mirrored seam in the
+same undo step. Seams on unlinked pieces are unchanged. Point topology edits retain the existing
 sewing remapping and repair contract. Deletion, paired/independent duplication,
 explicit Mirror with seam, document/library persistence, refits and history must
 preserve valid pair membership. Designs without pair records remain unchanged.
@@ -242,6 +246,12 @@ panel-round-trip transfer that was replaced by exact in-mesh pose transfer.
    the current avatar and live simulation object.
 6. Retain transactional edits, undo/redo, save/reopen support, and the complete
    in-editor workflow as the data model expands.
+7. Every string the editor draws passes through one lookup keyed by its English
+   text. Each language is one JSON file in `devil_designer/locales`, named by
+   Blender locale (`ja_JP.json`) or language (`ja.json`). The active language
+   follows Blender's interface language when interface translation is on.
+   English is the source and the per-string fallback, so a partial file works
+   and a language without a file shows English. Japanese and Spanish ship first.
 
 ## Implementation coverage (0.5 development)
 

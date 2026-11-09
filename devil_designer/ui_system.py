@@ -159,7 +159,8 @@ class ComponentRenderer:
         x, y = tooltip.pos
         if blf:
             blf.size(0, 10 * s)
-            tw = blf.dimensions(0, tooltip.text)[0]
+            from .localization import translate
+            tw = blf.dimensions(0, translate(tooltip.text))[0]
             kw = blf.dimensions(0, tooltip.shortcut)[0] if tooltip.shortcut else 0.0
         else:
             tw = len(tooltip.text) * 7 * s

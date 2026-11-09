@@ -39,6 +39,15 @@ Use these tools to create and edit garment pattern pieces. A Bezier curve is a s
 | **Avatar Guide** | <kbd>H</kbd> | Show or hide the avatar guide. |
 | **Cancel / Exit** | <kbd>Escape</kbd> | Cancel the current action, close a menu, or clear the selection. Use the X to close the editor. |
 
+These shortcuts work while the pointer is over the editor panel, its dock, or an open menu. With the pointer anywhere else, Blender's own shortcuts are in charge. A few keys keep working everywhere because they finish or undo work you started in the editor:
+
+- <kbd>B</kbd> reverses the selected seam, or flips the sewing direction while the Sew tool is active.
+- <kbd>X</kbd>, <kbd>Del</kbd>, or <kbd>Backspace</kbd> removes the selected seam.
+- <kbd>Escape</kbd> closes an open menu or flyout, or cancels a sewing, placement, or tack step in progress.
+- <kbd>Enter</kbd> finishes a multi-pair seam in progress.
+- <kbd>Ctrl</kbd> + <kbd>Z</kbd> and <kbd>Ctrl</kbd> + <kbd>Y</kbd> undo and redo editor changes, so Blender's undo never rolls the editor back past its own history.
+- While drawing, dragging, moving an arrangement point, typing a value, drawing a line on the cloth or avatar, or using the Grab tool, the editor keeps every key until you finish.
+
 ## Bezier Curve Editing & Numeric Accuracy
 
 Select a point and press <kbd>C</kbd> to make it a smooth curve. Drag its handles to change the shape. Right-click a point or edge to enter an exact position or length in centimetres.
@@ -138,6 +147,9 @@ Fold settings do not change how darts are made or add a dart-depth cap. A deep d
 2. Place the image and adjust its opacity.
 3. Open **Set measured scale** and set **Known length** in centimetres.
 4. Choose **Pick length endpoints**, then click two known points to set the image scale.
+5. In **Image placement**, choose **Move on canvas** and drag the image, or set its width, position, and rotation. **Mirror H** and **Mirror V** flip it, for example to trace the other side.
+6. Choose **Add image** to place another reference, such as a back view or a detail photo, beside the first. **Next image** picks which one you edit. Each image keeps its own placement, scale, and opacity.
+7. **Lock** keeps the image from moving. **Replace image** swaps the file and keeps its placement and scale. References are saved with the Blender file.
 
 <figure class="dd-shot" id="shot-draft-trace-reference" data-shot='{"action":"Calibrate reference image scale with known-length endpoints","ui_state":"Loaded trace image with calibration endpoints and scale numeric input controls","framing":"close-up","aspect_ratio":"4:3"}' data-shot-framing="close-up" aria-labelledby="shot-draft-trace-reference-caption">
   <div class="dd-shot__frame"><span class="dd-shot__icon" aria-hidden="true"></span><span class="dd-shot__label">Screenshot coming soon</span></div>

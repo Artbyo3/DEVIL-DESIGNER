@@ -111,6 +111,47 @@ class ImageLoadingTests(unittest.TestCase):
         self.assertEqual(tracing.reference_corners(scene), ())
 
 
+class ReferenceStackTests(unittest.TestCase):
+    def scene(self):
+        return SimpleNamespace(dd_trace_path='', dd_trace_width=1.0, dd_trace_x=0.0, dd_trace_y=0.0, dd_trace_opacity=.35,
+                               dd_trace_visible=True, dd_trace_rotation=0.0, dd_trace_flip_x=False, dd_trace_flip_y=False,
+                               dd_trace_locked=False, dd_trace_stack='[]', dd_trace_error='')
+
+    def test_add_cycle_and_remove_keep_each_image_placement(self):
+        scene = self.scene()
+        tracing.add_reference(scene, 'front.png')
+        scene.dd_trace_width, scene.dd_trace_rotation, scene.dd_trace_flip_x = .5, 15.0, True
+        tracing.add_reference(scene, 'back.png')
+        self.assertEqual(scene.dd_trace_path, 'back.png')
+        self.assertAlmostEqual(scene.dd_trace_x, .55)
+        self.assertEqual(tracing.reference_count(scene), 2)
+        self.assertTrue(tracing.cycle_reference(scene))
+        self.assertEqual((scene.dd_trace_path, scene.dd_trace_width, scene.dd_trace_rotation, scene.dd_trace_flip_x), ('front.png', .5, 15.0, True))
+        tracing.cycle_reference(scene)
+        self.assertEqual(scene.dd_trace_path, 'back.png')
+        tracing.remove_reference(scene)
+        self.assertEqual((scene.dd_trace_path, tracing.reference_count(scene)), ('front.png', 1))
+        tracing.remove_reference(scene)
+        self.assertEqual(tracing.reference_count(scene), 0)
+
+    def test_invalid_stack_entries_are_ignored(self):
+        scene = self.scene()
+        scene.dd_trace_stack = '[{"path": "a.png", "width": -1}, {"path": "b.png"}, 3]'
+        self.assertEqual([entry['path'] for entry in tracing.stack(scene)], ['b.png'])
+        scene.dd_trace_stack = 'not json'
+        self.assertEqual(tracing.stack(scene), [])
+
+    def test_rotation_turns_corners_about_the_center_and_hit_test_follows(self):
+        corners = tracing.image_corners(2, (200, 200), (0, 0), 90)
+        expected = ((2, 0), (2, 2), (0, 2), (0, 0))
+        for corner, target in zip(corners, expected):
+            self.assertAlmostEqual(corner[0], target[0])
+            self.assertAlmostEqual(corner[1], target[1])
+        tilted = tracing.image_corners(2, (200, 200), (0, 0), 45)
+        self.assertTrue(tracing.inside(tilted, (1, 1)))
+        self.assertFalse(tracing.inside(tilted, (.05, .05)))
+
+
 class DrawingTests(unittest.TestCase):
     def setUp(self):
         self.scene = SimpleNamespace(

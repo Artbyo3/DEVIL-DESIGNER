@@ -1,3 +1,4 @@
+import json
 import math
 from pathlib import Path
 
@@ -5,9 +6,88 @@ from pathlib import Path
 PROPERTIES = (
     'dd_trace_path', 'dd_trace_width', 'dd_trace_x', 'dd_trace_y',
     'dd_trace_opacity', 'dd_trace_visible', 'dd_trace_length', 'dd_trace_error',
+    'dd_trace_rotation', 'dd_trace_flip_x', 'dd_trace_flip_y', 'dd_trace_locked', 'dd_trace_stack',
 )
+ENTRY_FIELDS = {'path': '', 'width': 1.0, 'x': 0.0, 'y': 0.0, 'opacity': .35, 'visible': True,
+                'rotation': 0.0, 'flip_x': False, 'flip_y': False, 'locked': False}
+REFERENCE_GAP = .05
 _classes = []
 _images = {}
+
+
+def active_entry(scene):
+    return {field: getattr(scene, 'dd_trace_' + field, default) for field, default in ENTRY_FIELDS.items()}
+
+
+def apply_entry(scene, entry):
+    for field, default in ENTRY_FIELDS.items():
+        setattr(scene, 'dd_trace_' + field, type(default)(entry.get(field, default)))
+
+
+def valid_entry(entry):
+    if not isinstance(entry, dict) or not isinstance(entry.get('path'), str) or not entry['path']:
+        return False
+    for field, default in ENTRY_FIELDS.items():
+        value = entry.get(field, default)
+        if isinstance(default, bool):
+            if type(value) is not bool:
+                return False
+        elif isinstance(default, float):
+            if type(value) not in (int, float) or not math.isfinite(value):
+                return False
+    return entry.get('width', 1.0) > 0
+
+
+def stack(scene):
+    try:
+        entries = json.loads(getattr(scene, 'dd_trace_stack', '') or '[]')
+    except ValueError:
+        return []
+    if not isinstance(entries, list):
+        return []
+    return [dict(ENTRY_FIELDS, **entry) for entry in entries if valid_entry(entry)]
+
+
+def write_stack(scene, entries):
+    scene.dd_trace_stack = json.dumps(entries)
+
+
+def reference_count(scene):
+    return (1 if scene.dd_trace_path else 0) + len(stack(scene))
+
+
+def add_reference(scene, path):
+    entries = stack(scene)
+    entry = dict(ENTRY_FIELDS, path=path)
+    if scene.dd_trace_path:
+        current = active_entry(scene)
+        entries.append(current)
+        entry.update(width=current['width'], y=current['y'], opacity=current['opacity'],
+                     x=max(item['x'] + item['width'] for item in entries) + REFERENCE_GAP)
+    write_stack(scene, entries)
+    apply_entry(scene, entry)
+    scene.dd_trace_error = ''
+
+
+def cycle_reference(scene):
+    entries = stack(scene)
+    if not entries:
+        return False
+    current = active_entry(scene)
+    write_stack(scene, entries[1:] + ([current] if current['path'] else []))
+    apply_entry(scene, entries[0])
+    scene.dd_trace_error = ''
+    return True
+
+
+def remove_reference(scene):
+    entries = stack(scene)
+    if entries:
+        write_stack(scene, entries[1:])
+        apply_entry(scene, entries[0])
+    else:
+        scene.dd_trace_path = ''
+    scene.dd_trace_error = ''
 
 
 def calibrated_width(width, first, second, measured_meters):
@@ -25,18 +105,30 @@ def calibrated_width(width, first, second, measured_meters):
     return result
 
 
-def image_corners(width, image_size, position):
+def image_corners(width, image_size, position, rotation=0.0):
     pixel_width, pixel_height = image_size
     origin_x, origin_y = position
-    if not all(math.isfinite(value) for value in (width, pixel_width, pixel_height, origin_x, origin_y)):
+    if not all(math.isfinite(value) for value in (width, pixel_width, pixel_height, origin_x, origin_y, rotation)):
         raise ValueError('The reference image size or position is invalid.')
     if width <= 0 or pixel_width <= 0 or pixel_height <= 0:
         raise ValueError('Choose an image with a valid width and height.')
     height = width * pixel_height / pixel_width
-    return (
+    corners = (
         (origin_x, origin_y), (origin_x + width, origin_y),
         (origin_x + width, origin_y + height), (origin_x, origin_y + height),
     )
+    if not rotation:
+        return corners
+    center_x, center_y = origin_x + width / 2, origin_y + height / 2
+    cosine, sine = math.cos(math.radians(rotation)), math.sin(math.radians(rotation))
+    return tuple((center_x + (x - center_x) * cosine - (y - center_y) * sine,
+                  center_y + (x - center_x) * sine + (y - center_y) * cosine) for x, y in corners)
+
+
+def inside(corners, point):
+    signs = [(bx - ax) * (point[1] - ay) - (by - ay) * (point[0] - ax) >= 0
+             for (ax, ay), (bx, by) in zip(corners, corners[1:] + corners[:1])]
+    return all(signs) or not any(signs)
 
 
 def calibrate(scene, first, second):
@@ -87,12 +179,16 @@ def load_image(filepath, retry=False):
     return image
 
 
+def entry_corners(entry):
+    image = load_image(entry['path'])
+    return image, image_corners(entry['width'], image.size[:], (entry['x'], entry['y']), entry['rotation'])
+
+
 def reference_corners(scene):
     if not scene.dd_trace_path:
         return ()
     try:
-        image = load_image(scene.dd_trace_path)
-        corners = image_corners(scene.dd_trace_width, image.size[:], (scene.dd_trace_x, scene.dd_trace_y))
+        corners = entry_corners(active_entry(scene))[1]
     except (ValueError, ReferenceError) as error:
         scene.dd_trace_error = str(error)
         return ()
@@ -100,36 +196,54 @@ def reference_corners(scene):
     return corners
 
 
+def all_reference_corners(scene):
+    points = list(reference_corners(scene)) if scene.dd_trace_visible else []
+    for entry in stack(scene):
+        if entry['visible']:
+            try:
+                points += entry_corners(entry)[1]
+            except (ValueError, ReferenceError):
+                continue
+    return points
+
+
+def draw_entry(ed, renderer, entry):
+    import gpu
+    from gpu_extras.batch import batch_for_shader
+
+    image, corners = entry_corners(entry)
+    points = [ed.view.screen(point, ed.canvas_layout.canvas) for point in corners]
+    shader = getattr(renderer, '_trace_shader', None)
+    if shader is None:
+        shader = gpu.shader.from_builtin('IMAGE_COLOR')
+        renderer._trace_shader = shader
+    texture = gpu.texture.from_image(image)
+    coordinates = [((1 - u) if entry['flip_x'] else u, (1 - v) if entry['flip_y'] else v)
+                   for u, v in ((0, 0), (1, 0), (1, 1), (0, 1))]
+    batch = batch_for_shader(shader, 'TRIS', {'pos': points, 'texCoord': coordinates}, indices=[(0, 1, 2), (0, 2, 3)])
+    blend = gpu.state.blend_get()
+    try:
+        gpu.state.blend_set('ALPHA')
+        shader.bind()
+        shader.uniform_sampler('image', texture)
+        shader.uniform_float('color', (1, 1, 1, entry['opacity']))
+        batch.draw(shader)
+    finally:
+        gpu.state.blend_set(blend)
+
+
 def draw_reference(ed, renderer):
     scene = ed._scene
+    for entry in stack(scene):
+        if entry['visible'] and entry['opacity'] > 0:
+            try:
+                draw_entry(ed, renderer, entry)
+            except (ValueError, RuntimeError, ReferenceError):
+                continue
     if not scene.dd_trace_visible or scene.dd_trace_opacity <= 0 or not scene.dd_trace_path:
         return False
     try:
-        image = load_image(scene.dd_trace_path)
-        corners = image_corners(scene.dd_trace_width, image.size[:], (scene.dd_trace_x, scene.dd_trace_y))
-        points = [ed.view.screen(point, ed.canvas_layout.canvas) for point in corners]
-        import gpu
-        from gpu_extras.batch import batch_for_shader
-
-        shader = getattr(renderer, '_trace_shader', None)
-        if shader is None:
-            shader = gpu.shader.from_builtin('IMAGE_COLOR')
-            renderer._trace_shader = shader
-        texture = gpu.texture.from_image(image)
-        batch = batch_for_shader(
-            shader, 'TRIS',
-            {'pos': points, 'texCoord': [(0, 0), (1, 0), (1, 1), (0, 1)]},
-            indices=[(0, 1, 2), (0, 2, 3)],
-        )
-        blend = gpu.state.blend_get()
-        try:
-            gpu.state.blend_set('ALPHA')
-            shader.bind()
-            shader.uniform_sampler('image', texture)
-            shader.uniform_float('color', (1, 1, 1, scene.dd_trace_opacity))
-            batch.draw(shader)
-        finally:
-            gpu.state.blend_set(blend)
+        draw_entry(ed, renderer, active_entry(scene))
     except (ValueError, RuntimeError, ReferenceError) as error:
         scene.dd_trace_error = str(error) if isinstance(error, ValueError) else 'Could not display the reference image. Try Load image again.'
         return False
@@ -145,10 +259,11 @@ def _make_operator(bpy):
         bl_options = {'REGISTER', 'UNDO'}
 
         filepath: bpy.props.StringProperty(name='Image', subtype='FILE_PATH')
+        add: bpy.props.BoolProperty(name='Add as another image', default=False, options={'HIDDEN'})
         filter_glob: bpy.props.StringProperty(default='*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.tif;*.tiff;*.tga;*.exr', options={'HIDDEN'})
 
         def invoke(self, context, event):
-            self.filepath = context.scene.dd_trace_path
+            self.filepath = '' if self.add else context.scene.dd_trace_path
             context.window_manager.fileselect_add(self)
             return {'RUNNING_MODAL'}
 
@@ -160,7 +275,10 @@ def _make_operator(bpy):
                 scene.dd_trace_error = str(error)
                 self.report({'ERROR'}, str(error))
                 return {'CANCELLED'}
-            scene.dd_trace_path = bpy.path.abspath(self.filepath)
+            if self.add:
+                add_reference(scene, bpy.path.abspath(self.filepath))
+            else:
+                scene.dd_trace_path = bpy.path.abspath(self.filepath)
             scene.dd_trace_visible = True
             scene.dd_trace_error = ''
             _redraw(scene, context)
@@ -191,6 +309,11 @@ def register():
     scene.dd_trace_opacity = bpy.props.FloatProperty(name='Image opacity', default=0.35, min=0.0, max=1.0, subtype='FACTOR', update=_redraw)
     scene.dd_trace_visible = bpy.props.BoolProperty(name='Show reference image', default=True, update=_redraw)
     scene.dd_trace_error = bpy.props.StringProperty(name='Reference image message', options={'SKIP_SAVE'})
+    scene.dd_trace_rotation = bpy.props.FloatProperty(name='Image rotation', default=0.0, min=-180.0, max=180.0, update=_redraw)
+    scene.dd_trace_flip_x = bpy.props.BoolProperty(name='Mirror image horizontally', default=False, update=_redraw)
+    scene.dd_trace_flip_y = bpy.props.BoolProperty(name='Mirror image vertically', default=False, update=_redraw)
+    scene.dd_trace_locked = bpy.props.BoolProperty(name='Lock reference image', default=False, update=_redraw)
+    scene.dd_trace_stack = bpy.props.StringProperty(name='Other reference images', default='[]', update=_redraw)
     operator = _make_operator(bpy)
     bpy.utils.register_class(operator)
     _classes.append(operator)

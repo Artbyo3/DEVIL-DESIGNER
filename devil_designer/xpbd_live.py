@@ -39,6 +39,8 @@ class ClothGrab:
     plane_normal: object = None
     press_normal: object = None
     quality: int = 0
+    offset: object = None
+    rebase: bool = False
 
     @property
     def held(self):
@@ -67,6 +69,8 @@ class ClothGrab:
         self.plane_point = point.copy()
         self.plane_normal = view_direction.normalized()
         self.press_normal = normal.normalized()
+        self.offset = Vector((0.0, 0.0, 0.0))
+        self.rebase = False
         unit = max(1e-6, context.scene.unit_settings.scale_length)
         xpbd.set_input(self.source, 'Grab Radius', self.radius / unit)
         xpbd.set_input(self.source, 'Grab Index', vertex)
@@ -83,7 +87,15 @@ class ClothGrab:
             return
         if self.mode == PUSH:
             target = self.plane_point - self.press_normal * (target - self.plane_point).length
-        xpbd.input_slot(self.source, 'Grab Handle').value.location = target
+        handle = xpbd.input_slot(self.source, 'Grab Handle').value
+        if self.rebase:
+            self.offset = handle.location - target
+            self.rebase = False
+        handle.location = target + self.offset
+
+    def view_changed(self):
+        if self.held:
+            self.rebase = True
 
     def release(self):
         if self.held:

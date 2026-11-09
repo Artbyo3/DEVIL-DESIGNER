@@ -16,6 +16,7 @@ from .minimal import SEAM_ACTIVE, SEAM_CONNECTED, SEAM_QUIET
 from .avatar_field import EYEDROPPER, LABEL, SEARCH, TEXT_OFFSET, TEXT_SIZE
 
 from .minimal import FLYOUT_TOOLS, STRIP_KEYS
+from .localization import translate
 from .ui_system import (MENU_CARDS,
     BG_BASE, BG_ELEVATED, BG_WELL, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, ACCENT, ACCENT_BG, ACCENT_BORDER, ACCENT_HOVER, BORDER, BORDER_SUBTLE, RADIUS_WINDOW, RADIUS_BADGE, Tooltip, ComponentRenderer, SURFACE_FLOATING, SURFACE_OUTLINE, SELECTION, TEXT_ON_ACCENT, MinimalMetrics,
     NativeField,
@@ -183,6 +184,7 @@ class Renderer:
         self.triangles(pts, color, [(0, i + 1, (i + 1) % n + 1) for i in range(n)])
 
     def text(self, x, y, label, size=11, color=TEXT, center=False, max_width=None):
+        label = translate(label)
         blf.size(0, size * self.s)
         if max_width is not None:
             original = label
@@ -436,7 +438,9 @@ class Renderer:
                     centers=[view.screen(((min(point[0] for point in outline)+max(point[0] for point in outline))/2,
                                           (min(point[1] for point in outline)+max(point[1] for point in outline))/2),c) for outline in outlines]
                     ed.twin_tethers.append(centers)
-                    self.lines(centers,(*ACCENT[:3],.25),1/max(1,s))
+                    self.lines(centers,(*ACCENT[:3],.4),3.6)
+                    for center in centers:
+                        self.dot(center,4.5,(*ACCENT[:3],.85))
                 for index, source in enumerate(ed.session.document.patterns):
                     pat = ed.preview_pattern(source)
                     selected = (pat.id in ed.session.selected_patterns) if ed.session.selected_patterns else (ed.session.selected == pat.id)
@@ -568,6 +572,11 @@ class Renderer:
                     state_label = label(pat)
                     if state_label:
                         label_txt += ' · ' + state_label
+                    record = pat.arrangement
+                    if record:
+                        label_txt += f" · {'Flat' if record['flat'] else 'Wrap'} {record['volume'].replace('_', ' ')} {record['point'].replace('_', ' ')}"
+                        if not record['flat'] and record.get('overwrap'):
+                            label_txt += ', right on top' if record.get('direction', 1) == 1 else ', left on top'
                     show_twin=is_twin and (selected or partner_selected or hovered_piece and hovered_piece.id in pair['members'])
                     if show_twin:
                         p_idx = next((idx for idx, lp in enumerate(twin_pairs) if lp is pair), 0)
@@ -1105,7 +1114,7 @@ class Renderer:
                         self.round_rect(control, ACCENT_BG if hover else ELEVATED, radius=metrics.menu_item if is_menu else metrics.regular)
                     val_str = str(value) if value else ''
                     blf.size(0, 10 * scale)
-                    val_w = blf.dimensions(0, val_str)[0] if val_str else 0
+                    val_w = blf.dimensions(0, translate(val_str))[0] if val_str else 0
                     icon_w = 22 * scale
                     val_x = control.x + control.w - icon_w - val_w
                     lbl_max = max(40 * scale, val_x - control.x - 8 * scale) if val_str else control.w - icon_w
@@ -1158,7 +1167,7 @@ class Renderer:
                         self.text(control.x + 8 * scale, control.y + 7 * scale, val_str, 9, TEXT_MUTED, max_width=control.w - 16 * scale)
                     else:
                         blf.size(0, 10 * scale)
-                        val_w = min(control.w * .62, blf.dimensions(0, val_str)[0]) if val_str else 0
+                        val_w = min(control.w * .62, blf.dimensions(0, translate(val_str))[0]) if val_str else 0
                         val_x = control.x + control.w - icon_w - val_w
                         lbl_max = max(40 * scale, val_x - control.x - 8 * scale) if val_str else control.w - icon_w
                         row_y = control.y + (control.h - 10 * scale) / 2
@@ -1178,19 +1187,21 @@ class Renderer:
             width = min(520 * scale, max(160 * scale, panel.w - 360 * scale))
             blf.size(0, 10 * self.s)
             lines = ['']
-            for word in ed.error_message.split():
+            for word in translate(ed.error_message).split():
                 candidate = (lines[-1] + ' ' + word).strip()
                 if blf.dimensions(0, candidate)[0] <= width - 24 * scale:
                     lines[-1] = candidate
                 else:
                     lines.append(word)
-            lines = lines[:5]
+            lines = lines[:5] + ['Click to copy the full message']
             toast = Rect(panel.x + 76 * scale, panel.y + 15 * scale, width, (16 + 14 * len(lines)) * scale)
             ed.error_rect = toast
             self.round_rect(toast, (.45, .12, .12, .96), radius=metrics.tooltip)
             for index, line in enumerate(lines):
-                self.text(toast.x + 12 * scale, toast.y + toast.h - (18 + 14 * index) * scale, line, 10, (1.0, .85, .85, 1.0))
+                ink = (1.0, .85, .85, .6) if index == len(lines) - 1 else (1.0, .85, .85, 1.0)
+                self.text(toast.x + 12 * scale, toast.y + toast.h - (18 + 14 * index) * scale, line, 10, ink)
         elif ed.message and ed.tool != 'SHAPE':
+            ed.message_rect = None
             if getattr(ed, 'toast_text', None) != ed.message:
                 ed.toast_text = ed.message
                 ed.toast_until = time.monotonic() + 3
@@ -1198,6 +1209,8 @@ class Renderer:
                 panel = layout.panel
                 width = min(420 * scale, max(80 * scale, panel.w - 390 * scale))
                 toast = Rect(panel.x + 76 * scale, panel.y + 15 * scale, width, 30 * scale)
+                blf.size(0, 10 * self.s)
+                ed.message_rect = toast if blf.dimensions(0, translate(ed.toast_text))[0] > toast.w - 24 * scale else None
                 self.round_rect(toast, SURFACE_FLOATING, radius=metrics.tooltip)
                 self.text(toast.x + 12 * scale, toast.y + 10 * scale, ed.toast_text, 10, TEXT_SUB, max_width=toast.w - 24 * scale)
         panel = layout.panel

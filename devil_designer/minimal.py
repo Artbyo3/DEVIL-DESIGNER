@@ -8,6 +8,7 @@ import bpy
 from .canvas import Rect
 from . import budget, layering
 from .ui_system import MENU_CARDS, MinimalMetrics
+from .localization import translate
 from .controls import CONTROL_SETTINGS
 from .avatar_field import AvatarField, LABEL
 
@@ -21,7 +22,7 @@ def text_unscaled_width(text, size=11):
     if blf:
         try:
             blf.size(0, size)
-            return blf.dimensions(0, str(text))[0]
+            return blf.dimensions(0, translate(str(text)))[0]
         except Exception:
             pass
     return len(str(text)) * (size * 0.6)
@@ -620,6 +621,8 @@ class MinimalCards:
                     ('MENU', 'TRANSFORM_MENU', 'Transform', '')]
             if len(self.session.point_selection) > 1:
                 rows.append(('MERGE', 'Merge selected points', ''))
+            if pattern and self.session.path != 'OUTER':
+                rows.append(('PATH_ACTIONS', 'Internal path actions', 'Cut, fold, offset'))
         elif kind == 'EDGE':
             title = 'Edge'
             edge = self.session.segment
@@ -686,12 +689,21 @@ class MinimalCards:
             rows.append(('PAIR_ACTIONS', 'FLIP_SEAM', 'REMOVE_SEAM', 'Reverse', 'Remove'))
         elif kind == 'REFERENCE_IMAGE':
             title = 'Reference image'
-            rows = [('TRACE_LOAD', 'Load image', 'Choose file')]
+            from .tracing import reference_count
+            count = reference_count(scene)
             if scene.dd_trace_path:
-                rows += [('TRACE_CALIBRATION', 'Set measured scale', ''),
-                         ('TRACE_POSITION', 'Image placement', ''),
-                         ('TRACE_VISIBLE', 'Visibility', 'Shown' if scene.dd_trace_visible else 'Hidden'),
-                         ('CHOICES', 'Image opacity', ('TRACE_OPACITY', IMAGE_OPACITY, self.named_choice(scene.dd_trace_opacity, IMAGE_OPACITY)))]
+                rows = [('PAIR_ACTIONS', 'TRACE_LOAD', 'TRACE_ADD', 'Replace image', 'Add image')]
+                if count > 1:
+                    rows.append(('TRACE_NEXT', f'Image 1 of {count}', 'Next image'))
+                if not scene.dd_trace_locked:
+                    rows += [('TRACE_CALIBRATION', 'Set measured scale', ''),
+                             ('TRACE_POSITION', 'Image placement', '')]
+                rows += [('PAIR_ACTIONS', 'TRACE_VISIBLE', 'TRACE_LOCK', 'Hide' if scene.dd_trace_visible else 'Show',
+                          'Unlock' if scene.dd_trace_locked else 'Lock'),
+                         ('CHOICES', 'Image opacity', ('TRACE_OPACITY', IMAGE_OPACITY, self.named_choice(scene.dd_trace_opacity, IMAGE_OPACITY))),
+                         ('TRACE_REMOVE', 'Remove image', '')]
+            else:
+                rows = [('TRACE_LOAD', 'Load image', 'Choose file')]
             if scene.dd_trace_error:
                 rows.append(('INFO', 'Image unavailable', scene.dd_trace_error))
         elif kind == 'TRACE_CALIBRATION':
@@ -701,8 +713,11 @@ class MinimalCards:
                     ('INFO', 'Scale only', 'Cannot correct photo distortion')]
         elif kind == 'TRACE_POSITION':
             title = 'Image placement'
-            rows = [('SLIDER', 'dd_trace_width', 'Width'), ('SLIDER', 'dd_trace_x', 'X position'),
-                    ('SLIDER', 'dd_trace_y', 'Y position'), ('TRACE_FIT', 'Fit image and pieces', '')]
+            rows = [('TRACE_DRAG', 'Move on canvas', 'Drag the image'),
+                    ('SLIDER', 'dd_trace_width', 'Width'), ('SLIDER', 'dd_trace_x', 'X position'),
+                    ('SLIDER', 'dd_trace_y', 'Y position'), ('SLIDER', 'dd_trace_rotation', 'Rotation'),
+                    ('PAIR_ACTIONS', 'TRACE_FLIP_X', 'TRACE_FLIP_Y', 'Mirror H', 'Mirror V'),
+                    ('TRACE_FIT', 'Fit image and pieces', '')]
         elif kind == 'MULTI_SELECTION':
             pieces, points = self.session.selection_counts()
             if pieces > 0 and points > 0:
@@ -758,6 +773,11 @@ class MinimalCards:
                     ('PAIR_ACTIONS', 'FLIP_H', 'FLIP_V', 'Flip H', 'Flip V')]
             if pattern and self.session.corner is None and not self.session.selected_points:
                 rows.append(('CHOICES', 'Offset copy', ('OFFSET_OUTLINE', ('-1 cm', '+1 cm', '+2 cm', '+5 cm'), '')))
+            if len(self.session.selected_patterns) > 1:
+                rows.append(('CHOICES', 'Align', ('ALIGN', ('Left', 'Center', 'Right'), '')))
+                rows.append(('CHOICES', 'Align vertically', ('ALIGN', ('Top', 'Middle', 'Bottom'), '')))
+                if len(self.session.selected_patterns) > 2:
+                    rows.append(('PAIR_ACTIONS', 'DISTRIBUTE_X', 'DISTRIBUTE_Y', 'Distribute H', 'Distribute V'))
         elif kind == 'SEAM_WARNING':
             pre = getattr(self, 'pending_transform', None) or {}
             report = pre.get('report') if isinstance(pre, dict) and 'report' in pre else pre
@@ -1495,6 +1515,32 @@ class MinimalCards:
             self.fit()
         elif key == 'TRACE_LOAD':
             bpy.ops.devil.load_trace_image('INVOKE_DEFAULT')
+        elif key == 'TRACE_ADD':
+            bpy.ops.devil.load_trace_image('INVOKE_DEFAULT', add=True)
+        elif key == 'TRACE_NEXT':
+            from .tracing import cycle_reference
+            if cycle_reference(scene):
+                self.message = 'Next reference image selected for editing.'
+        elif key == 'TRACE_REMOVE':
+            from .tracing import remove_reference
+            remove_reference(scene)
+            self.trace_drag = None
+            self.message = 'Reference image removed.'
+        elif key == 'TRACE_LOCK':
+            scene.dd_trace_locked = not scene.dd_trace_locked
+            self.trace_drag = None
+            self.message = 'Reference image locked.' if scene.dd_trace_locked else 'Reference image unlocked.'
+        elif key in {'TRACE_FLIP_X', 'TRACE_FLIP_Y'}:
+            name = 'dd_trace_flip_x' if key == 'TRACE_FLIP_X' else 'dd_trace_flip_y'
+            setattr(scene, name, not getattr(scene, name))
+        elif key == 'TRACE_DRAG':
+            if self.draft or self.gesture:
+                self.message = 'Finish or cancel drafting before moving the image.'
+            else:
+                scene.dd_trace_visible = True
+                self.trace_drag = 'ARMED'
+                self.card_kind = None
+                self.message = 'Drag the image on the canvas. Escape or right-click finishes.'
         elif key == 'TRACE_VISIBLE':
             scene.dd_trace_visible = not scene.dd_trace_visible
         elif key.startswith('TRACE_OPACITY_'):
@@ -1553,6 +1599,22 @@ class MinimalCards:
             self.perform_action(key)
             if not getattr(self, 'pending_transform', None):
                 self.card_kind = None
+        elif key == 'PATH_ACTIONS':
+            pattern = self.session.document.find(self.session.selected)
+            if pattern is not None and self.session.corner is not None:
+                vertex = pattern.path(self.session.path).vertices[self.session.corner].id
+                edge = next((edge for edge in self.session.document.edges(pattern.id, self.session.path)
+                             if vertex in (edge.start, edge.end)), None)
+                if edge is not None:
+                    self.session.segment = edge
+                    self.session.corner = None
+                    self.session.point_selection = []
+                    self.sync_selection()
+                    self.show_card('INTERNAL_EDGE', self.card_anchor)
+        elif key.startswith('ALIGN_') or key in {'DISTRIBUTE_X', 'DISTRIBUTE_Y'}:
+            mode = key.removeprefix('ALIGN_').upper()
+            self.run_edit(lambda: self.session.align_pieces(mode), 'Pieces distributed.' if key.startswith('DISTRIBUTE') else 'Pieces aligned.')
+            self.card_kind = None
         elif key.startswith('SET_SELECT_TARGET_'):
             choice = key.removeprefix('SET_SELECT_TARGET_')
             tgt = 'PATHS' if choice == 'Internal paths' else choice.upper()
@@ -1800,10 +1862,13 @@ class MinimalCards:
                             self.setting_drag['absolute'] = Rect(rect.x + 6 * scale, rect.y, rect.w - 12 * scale, rect.h)
                     elif key == 'MENU' and row[1] in HOVER_MENUS:
                         self.open_sub(row[1], rect, card[0])
-                    elif key not in {'INFO', 'AVATAR_FIELD'}:
+                    elif key == 'INFO':
+                        context.window_manager.clipboard = f'{row[1]}: {row[2]}' if row[2] else str(row[1])
+                        self.message = 'Row text copied.'
+                    elif key != 'AVATAR_FIELD':
                         action = row[1] if key == 'MENU' else key
                         self.minimal_action(action)
-                        if not action.startswith(('LOAD_','LIBRARY_','PAGE_LIBRARY')) and action not in {'GARMENT_FABRIC_MENU', 'PIECE_FABRIC_MENU', 'PIECE_DENSITY_MENU', 'PIECE_SIMULATION_MENU', 'SCROLL_WEAR_OVER', 'NAME', 'REFERENCE_IMAGE', 'MENU_LIBRARY', 'MENU_GARMENT', 'TRACE_CALIBRATION', 'TRACE_POSITION', *SUBMENUS} and not getattr(self, 'pending_transform', None):
+                        if not action.startswith(('LOAD_','LIBRARY_','PAGE_LIBRARY')) and action not in {'GARMENT_FABRIC_MENU', 'PIECE_FABRIC_MENU', 'PIECE_DENSITY_MENU', 'PIECE_SIMULATION_MENU', 'SCROLL_WEAR_OVER', 'NAME', 'REFERENCE_IMAGE', 'MENU_LIBRARY', 'MENU_GARMENT', 'TRACE_CALIBRATION', 'TRACE_POSITION', 'PATH_ACTIONS', *SUBMENUS} and not getattr(self, 'pending_transform', None):
                             self.card_kind = None
                     break
             return {'RUNNING_MODAL'}
@@ -1813,6 +1878,11 @@ class MinimalCards:
             context.window_manager.clipboard = self.error_message
             self.message = 'Message copied.'
             self.error_message = None
+            return {'RUNNING_MODAL'}
+        if (press and event.type == 'LEFTMOUSE' and self.message_rect is not None and self.message
+                and time.monotonic() < getattr(self, 'toast_until', 0) and self.message_rect.contains(*point)):
+            context.window_manager.clipboard = self.message
+            self.message = 'Message copied.'
             return {'RUNNING_MODAL'}
         if press and event.type == 'LEFTMOUSE' and self.seam_end_hit():
             return None
