@@ -8,6 +8,7 @@ import bpy
 from .canvas import Rect
 from . import budget, layering
 from .ui_system import MENU_CARDS, MinimalMetrics
+from .localization import translate
 from .controls import CONTROL_SETTINGS
 from .avatar_field import AvatarField, LABEL
 
@@ -21,7 +22,7 @@ def text_unscaled_width(text, size=11):
     if blf:
         try:
             blf.size(0, size)
-            return blf.dimensions(0, str(text))[0]
+            return blf.dimensions(0, translate(str(text)))[0]
         except Exception:
             pass
     return len(str(text)) * (size * 0.6)

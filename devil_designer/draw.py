@@ -16,6 +16,7 @@ from .minimal import SEAM_ACTIVE, SEAM_CONNECTED, SEAM_QUIET
 from .avatar_field import EYEDROPPER, LABEL, SEARCH, TEXT_OFFSET, TEXT_SIZE
 
 from .minimal import FLYOUT_TOOLS, STRIP_KEYS
+from .localization import translate
 from .ui_system import (MENU_CARDS,
     BG_BASE, BG_ELEVATED, BG_WELL, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, ACCENT, ACCENT_BG, ACCENT_BORDER, ACCENT_HOVER, BORDER, BORDER_SUBTLE, RADIUS_WINDOW, RADIUS_BADGE, Tooltip, ComponentRenderer, SURFACE_FLOATING, SURFACE_OUTLINE, SELECTION, TEXT_ON_ACCENT, MinimalMetrics,
     NativeField,
@@ -183,6 +184,7 @@ class Renderer:
         self.triangles(pts, color, [(0, i + 1, (i + 1) % n + 1) for i in range(n)])
 
     def text(self, x, y, label, size=11, color=TEXT, center=False, max_width=None):
+        label = translate(label)
         blf.size(0, size * self.s)
         if max_width is not None:
             original = label
@@ -1107,7 +1109,7 @@ class Renderer:
                         self.round_rect(control, ACCENT_BG if hover else ELEVATED, radius=metrics.menu_item if is_menu else metrics.regular)
                     val_str = str(value) if value else ''
                     blf.size(0, 10 * scale)
-                    val_w = blf.dimensions(0, val_str)[0] if val_str else 0
+                    val_w = blf.dimensions(0, translate(val_str))[0] if val_str else 0
                     icon_w = 22 * scale
                     val_x = control.x + control.w - icon_w - val_w
                     lbl_max = max(40 * scale, val_x - control.x - 8 * scale) if val_str else control.w - icon_w
@@ -1160,7 +1162,7 @@ class Renderer:
                         self.text(control.x + 8 * scale, control.y + 7 * scale, val_str, 9, TEXT_MUTED, max_width=control.w - 16 * scale)
                     else:
                         blf.size(0, 10 * scale)
-                        val_w = min(control.w * .62, blf.dimensions(0, val_str)[0]) if val_str else 0
+                        val_w = min(control.w * .62, blf.dimensions(0, translate(val_str))[0]) if val_str else 0
                         val_x = control.x + control.w - icon_w - val_w
                         lbl_max = max(40 * scale, val_x - control.x - 8 * scale) if val_str else control.w - icon_w
                         row_y = control.y + (control.h - 10 * scale) / 2
@@ -1180,7 +1182,7 @@ class Renderer:
             width = min(520 * scale, max(160 * scale, panel.w - 360 * scale))
             blf.size(0, 10 * self.s)
             lines = ['']
-            for word in ed.error_message.split():
+            for word in translate(ed.error_message).split():
                 candidate = (lines[-1] + ' ' + word).strip()
                 if blf.dimensions(0, candidate)[0] <= width - 24 * scale:
                     lines[-1] = candidate

@@ -246,6 +246,12 @@ panel-round-trip transfer that was replaced by exact in-mesh pose transfer.
    the current avatar and live simulation object.
 6. Retain transactional edits, undo/redo, save/reopen support, and the complete
    in-editor workflow as the data model expands.
+7. Every string the editor draws passes through one lookup keyed by its English
+   text. Each language is one JSON file in `devil_designer/locales`, named by
+   Blender locale (`ja_JP.json`) or language (`ja.json`). The active language
+   follows Blender's interface language when interface translation is on.
+   English is the source and the per-string fallback, so a partial file works
+   and a language without a file shows English. Japanese and Spanish ship first.
 
 ## Implementation coverage (0.5 development)
 
