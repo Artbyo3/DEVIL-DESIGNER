@@ -5,6 +5,21 @@ from devil_designer.sewing_preview import resolve_sewing, status
 
 
 class SewingPreviewTests(unittest.TestCase):
+    def test_normal_opposite_direction_seam_has_no_warning_flags(self):
+        session=Session()
+        session.add([(0,0),(.2,0),(.2,.3),(0,.3)])
+        session.add([(.4,0),(.6,0),(.6,.3),(.4,.3)])
+        doc=session.document
+        first,second=doc.patterns
+        session.sew(doc.edge(first.id,1),doc.edge(second.id,3))
+        seam=doc.seams[0]
+        self.assertTrue(seam.reverse)
+        record=status(doc,seam)
+        self.assertEqual(record['flags'],[])
+        self.assertFalse(record['warning'])
+        session.reverse_seam(seam.id)
+        self.assertEqual(status(doc,seam)['flags'],[])
+
     def test_exact_resolution_and_attribution(self):
         session = Session()
         session.add([(0, 0), (.2, 0), (.2, .3), (0, .3)])
@@ -37,7 +52,7 @@ class SewingPreviewTests(unittest.TestCase):
         self.assertAlmostEqual(record['mismatch'], 10)
         self.assertTrue(record['warning'])
         self.assertIn('Middle-only A 40-60%', record['flags'])
-        self.assertIn('B reversed', record['flags'])
+        self.assertNotIn('B reversed', record['flags'])
         self.assertIn('Gather warning; sewing allowed.', record['readout'])
         seam.b = seam.a
         seam.chain_b = seam.chain_a

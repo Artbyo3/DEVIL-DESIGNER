@@ -54,8 +54,6 @@ def status(document, seam):
                 flags.append(f'{prefix} {name} {100 * low:.0f}-{100 * high:.0f}%')
         elif any(abs(span.t1 - span.t0) < 1 - 1e-8 for span in chain):
             flags.append('Partial ' + name)
-    if seam.reverse:
-        flags.append('B reversed')
     return dict(mismatch=mismatch, flags=flags, warning=mismatch > 1,
                 readout=f'{mismatch:.1f}% · ' + ('Gather warning; sewing allowed.' if mismatch > 1 else 'Pass'))
 

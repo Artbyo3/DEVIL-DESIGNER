@@ -192,7 +192,7 @@ class ViewportSewing:
                 continue
             record = self.truth['records'].get(identity) if self.truth else None
             readout = record['readout'] if record else self.truth_error
-            flags = ' · '.join(record['flags']).replace('B reversed', 'Direction reversed') if record else ''
+            flags = ' · '.join(record['flags']) if record else ''
             color = (1, .67, .31, 1) if record and (record['warning'] or record['flags']) else (.75, .95, .92, 1)
             label_x, label_y = screen.x + 8, screen.y + 14
             while any(abs(label_x - before_x) < 320 and abs(label_y - before_y) < 26 for before_x, before_y in occupied):
@@ -252,7 +252,7 @@ class ViewportSewing:
             except ValueError:
                 continue
             record = self.truth['records'].get(seam.id) if self.truth else None
-            warning = not record or record['warning'] or any(flag != 'B reversed' for flag in record['flags'])
+            warning = not record or record['warning'] or bool(record['flags'])
             self.batches.append((seam.id, warning, batch_for_shader(self.shader, 'LINES', {'pos': positions})))
         self.visibility = None
         self.gesture_key = None

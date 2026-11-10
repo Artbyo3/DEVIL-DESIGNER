@@ -1281,7 +1281,7 @@ class Renderer:
     def seam_mismatch(self, ed, seam):
         preview = ed.viewport_sewing
         record = preview.truth['records'].get(seam.id) if preview.truth else None
-        return ed.session.document.seam_stats(seam)[3] > 1 or bool(record and any(flag != 'B reversed' for flag in record['flags']))
+        return ed.session.document.seam_stats(seam)[3] > 1 or bool(record and bool(record['flags']))
 
     def strip_key(self, row, shortcut):
         if shortcut:
@@ -1393,7 +1393,7 @@ class Renderer:
                     label_y += 18 * self.s
                 self.text(label_x, label_y, label, 10, notch_col, max_width=max(80 * self.s, c.x + c.w - label_x - 8 * self.s))
                 if record and record['flags']:
-                    self.text(label_x, label_y - 12 * self.s, ' · '.join(record['flags']).replace('B reversed', 'Direction reversed'), 10, notch_col, max_width=max(80 * self.s, c.x + c.w - label_x - 8 * self.s))
+                    self.text(label_x, label_y - 12 * self.s, ' · '.join(record['flags']), 10, notch_col, max_width=max(80 * self.s, c.x + c.w - label_x - 8 * self.s))
         for point, _, _, _ in ed.seam_end_points():
             self.dot(point, 5.5, (.3, .7, 1, 1))
         if ed.pen_points or ed.pending_strokes:
