@@ -57,7 +57,7 @@ def watchdog():
             print("Error reading report:", e)
         bpy.ops.wm.quit_blender()
         return None
-    timeout = 120 if test_name in {'gui_live_grab', 'gui_core_workflow', 'gui_matrix'} else 20
+    timeout = 120 if test_name in {'gui_live_grab', 'gui_live_brush', 'gui_core_workflow', 'gui_matrix'} else 20
     if time.time() - start_time > timeout:
         print("GUI TEST TIMED OUT waiting for report")
         bpy.ops.wm.quit_blender()

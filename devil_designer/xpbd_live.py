@@ -12,6 +12,12 @@ GRAB_RADIUS = .05
 RADIUS_RANGE = (.015, .15)
 PULL = 'PULL'
 PUSH = 'PUSH'
+FOLD = 'FOLD'
+SWEEP = 'SWEEP'
+BRUSH_TRAIL = {FOLD: 2.0, SWEEP: 1.0}
+BRUSH_RATE = .5
+BRUSH_WALK = 64
+STRENGTH_RANGE = (.2, 1.0)
 LIVE_VERTEX_BUDGET = 14000
 PIN_UNDO_LIMIT = 32
 
@@ -149,10 +155,94 @@ class ClothGrab:
     rebase: bool = False
     lifted: object = None
     undo_steps: list = field(default_factory=list)
+    strength: float = .6
+    stroke_vertex: int = -1
+    stroke_trail: object = None
+    links: object = None
 
     @property
     def held(self):
         return self.vertex >= 0
+
+    @property
+    def brushing(self):
+        return self.stroke_vertex >= 0
+
+    @property
+    def live_brush(self):
+        return self.mode in BRUSH_TRAIL
+
+    def scale_strength(self, factor):
+        self.strength = max(STRENGTH_RANGE[0], min(STRENGTH_RANGE[1], self.strength * factor))
+
+    def neighbours(self, vertex):
+        if self.links is None:
+            mesh = self.source.data
+            edges = np.empty(len(mesh.edges) * 2, dtype=np.int32)
+            mesh.edges.foreach_get('vertices', edges)
+            edges = edges.reshape(-1, 2)
+            pairs = np.concatenate((edges, edges[:, ::-1]))
+            pairs = pairs[np.argsort(pairs[:, 0], kind='stable')]
+            self.links = np.searchsorted(pairs[:, 0], np.arange(len(mesh.vertices) + 1)), pairs[:, 1]
+        starts, linked = self.links
+        return linked[starts[vertex]:starts[vertex + 1]].tolist()
+
+    def follow(self, context, origin, direction):
+        vertices = self.source.evaluated_get(context.evaluated_depsgraph_get()).data.vertices
+        matrix = self.source.matrix_world
+
+        def world(vertex):
+            return matrix @ vertices[vertex].co
+
+        def miss(vertex):
+            return (world(vertex) - origin).cross(direction).length_squared
+
+        vertex, best = self.stroke_vertex, miss(self.stroke_vertex)
+        for _ in range(BRUSH_WALK):
+            closer = min(((miss(candidate), candidate) for candidate in self.neighbours(vertex)), default=(best, vertex))
+            if closer[0] >= best:
+                break
+            best, vertex = closer
+        self.stroke_vertex = vertex
+        return origin + direction * (world(vertex) - origin).dot(direction)
+
+    def write_stroke(self, context, head, gain):
+        unit = max(1e-6, context.scene.unit_settings.scale_length)
+        reach = self.radius / unit
+        trail = self.stroke_trail - head
+        leash = reach * BRUSH_TRAIL[self.mode]
+        if trail.length > leash:
+            self.stroke_trail = head + trail * (leash / trail.length)
+        local = self.source.matrix_world.inverted()
+        xpbd.set_input(self.source, 'Brush Start', tuple(local @ self.stroke_trail))
+        xpbd.set_input(self.source, 'Brush End', tuple(local @ head))
+        xpbd.set_input(self.source, 'Brush Shape', (reach, gain, float(self.mode == SWEEP)))
+        self.source.update_tag()
+
+    def begin_stroke(self, context, vertex, point):
+        self.stroke_vertex = vertex
+        self.stroke_trail = point.copy()
+        self.write_stroke(context, point, self.strength * BRUSH_RATE)
+
+    def stroke_to(self, context, origin, direction):
+        if self.brushing:
+            self.write_stroke(context, self.follow(context, origin, direction.normalized()), self.strength * BRUSH_RATE)
+
+    def end_stroke(self, context):
+        if not self.brushing:
+            return
+        if self.alive:
+            self.write_stroke(context, self.stroke_trail, 0.0)
+        self.stroke_vertex = -1
+        self.stroke_trail = None
+
+    def pin_stroke(self, context):
+        unit = max(1e-6, context.scene.unit_settings.scale_length)
+        self.checkpoint()
+        count = pin_cloth(self.source, patch(self.source, self.stroke_vertex, self.radius / unit), evaluated_points(context, self.source))
+        if not count:
+            self.undo_steps.pop()
+        return count
 
     def pick(self, context, origin, direction):
         points = evaluated_points(context, self.source)

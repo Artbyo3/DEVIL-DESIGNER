@@ -180,6 +180,16 @@ preserve valid pair membership. Designs without pair records remain unchanged.
   straight into the running solver, so no new drape starts. They are kept through Re-drape and Keep, and
   Reset drape clears them. They never override pattern pins, tacks or frozen pieces. Pinned cloth shows as
   dots over the 3D view in every tool, and Ctrl+Z in Grab undoes the last pin change.
+- Fold and Sweep in the Grab flyout are live brushes for deliberate folds. Dragging along the playing drape
+  moves the cloth inside the ring with a smooth falloff: Fold draws it toward the stroke line so it gathers
+  into a fold, and Sweep carries it along with the stroke. The stroke is a short trailing segment behind the
+  cursor, two radii long for Fold and one for Sweep. The brush is three modifier inputs that feed the running
+  solver's pin constraint, the same path as Grab, so no drape restarts and nothing is rebuilt, and the cursor is kept on the cloth by walking mesh
+  neighbours from the last point instead of searching the whole mesh. Strength is set in the strip or with
+  Ctrl+Shift+wheel, radius as in Grab. W pins the cloth under the brush and the stroke continues around the
+  pin. Pattern pins, tacks, frozen pieces and cloth pins are never moved by the brush. Releasing switches the
+  brush off, and cloth that is free to relax settles back, so a fold that should stay is pinned with W during the stroke. Pinch and Steam remain the
+  pattern strokes that need a re-drape.
 - Pressing the cloth holds the grabbed cloth point itself, so a still hand does not move it. The solver
   substeps change once when the Grab tool opens, not at each press and release.
 - Keep runs a short high-substep refine, then checks the result against every

@@ -4,7 +4,7 @@ import bpy
 ASSET_FILE = 'geometry_nodes_dynamics_assets.blend'
 STOCK_GROUPS = ('XPBD Simulation', 'XPBD Solver', 'Gravity', 'Collider', 'Set Friction', 'Set Geometry Tags',
                 'Set Geo Updater - Deform Only')
-GROUP_VERSION = 4
+GROUP_VERSION = 5
 STOCK_PREFIX = 'DD Stock '
 CLOTH_GROUP = 'DD XPBD Cloth'
 SOLVER_GROUP = 'DD XPBD Solver'
@@ -262,6 +262,9 @@ def build_cloth_group(simulation):
     socket(tree, 'Grab Stride', 'INPUT', 'NodeSocketFloat', .015)
     socket(tree, 'Grab Reach', 'INPUT', 'NodeSocketFloat', .12)
     socket(tree, 'Grab Release', 'INPUT', 'NodeSocketFloat', -1.0)
+    socket(tree, 'Brush Start', 'INPUT', 'NodeSocketVector', (0.0, 0.0, 0.0))
+    socket(tree, 'Brush End', 'INPUT', 'NodeSocketVector', (0.0, 0.0, 0.0))
+    socket(tree, 'Brush Shape', 'INPUT', 'NodeSocketVector', (.05, 0.0, 0.0))
     socket(tree, 'Contact Passes', 'INPUT', 'NodeSocketInt', 1)
     socket(tree, 'Inner Substeps', 'INPUT', 'NodeSocketInt', 12)
     socket(tree, 'Iterations', 'INPUT', 'NodeSocketInt', 2)
@@ -341,10 +344,25 @@ def build_cloth_group(simulation):
     held = graph.logic('AND', graph.logic('AND', graph.compare('GREATER_EQUAL', out['Grab Index'], 0, 'INT'), graph.compare('GREATER_THAN', smooth, .001)),
                        graph.compare('GREATER_THAN', hold, 0.0))
     pinned = graph.attribute('dd_pinned', 'BOOLEAN')
+    brush_radius, brush_gain, brush_sweep = graph.node('ShaderNodeSeparateXYZ', out['Brush Shape']).outputs[:3]
+    stroke = graph.vector('SUBTRACT', out['Brush End'], out['Brush Start'])
+    along = graph.math('DIVIDE', graph.vector('DOT_PRODUCT', graph.vector('SUBTRACT', position, out['Brush Start']), stroke),
+                       graph.math('MAXIMUM', graph.vector('DOT_PRODUCT', stroke, stroke), 1e-9))
+    nearest = graph.vector('ADD', out['Brush Start'], graph.scale(stroke, graph.node('ShaderNodeClamp', along, 0.0, 1.0).outputs[0]))
+    cover = graph.math('MAXIMUM', graph.math('SUBTRACT', 1.0, graph.math('DIVIDE', graph.vector('DISTANCE', position, nearest),
+                                                                         graph.math('MAXIMUM', brush_radius, .001))), 0.0)
+    blend = graph.math('MULTIPLY', graph.math('MULTIPLY', cover, cover), graph.math('SUBTRACT', 3.0, graph.math('MULTIPLY', cover, 2.0)))
+    toward = graph.vector('SUBTRACT', nearest, position)
+    axis = graph.vector('NORMALIZE', stroke)
+    sideways = graph.vector('SUBTRACT', toward, graph.scale(axis, graph.vector('DOT_PRODUCT', toward, axis)))
+    gather = graph.switch('VECTOR', graph.compare('GREATER_THAN', brush_sweep, .5), sideways, graph.vector('SUBTRACT', out['Brush End'], nearest))
+    brushed = graph.logic('AND', graph.logic('NOT', pinned),
+                          graph.logic('AND', graph.compare('GREATER_THAN', brush_gain, 0.0), graph.compare('GREATER_THAN', blend, 0.0)))
+    shaped = graph.vector('ADD', position, graph.scale(gather, graph.math('MULTIPLY', blend, brush_gain)))
     pins = graph.bundle((('Type', 'STRING', 'Blender.Constraint.PinPosition'), ('filter', 'STRING', ''),
-                         ('selection', 'BOOLEAN', graph.logic('OR', pinned, held)),
-                         ('position', 'VECTOR', graph.switch('VECTOR', held, anchor, graph.vector('ADD', position, pull))),
-                         ('compliance', 'FLOAT', graph.switch('FLOAT', held, graph.attribute('dd_pin_compliance'), 0.0)),
+                         ('selection', 'BOOLEAN', graph.logic('OR', graph.logic('OR', pinned, held), brushed)),
+                         ('position', 'VECTOR', graph.switch('VECTOR', held, graph.switch('VECTOR', brushed, anchor, shaped), graph.vector('ADD', position, pull))),
+                         ('compliance', 'FLOAT', graph.switch('FLOAT', graph.logic('OR', held, brushed), graph.attribute('dd_pin_compliance'), 0.0)),
                          ('error_threshold', 'FLOAT', .001), ('lambda_attribute', 'STRING', '')))
 
     settling = graph.math('SUBTRACT', progress, 1.0)
