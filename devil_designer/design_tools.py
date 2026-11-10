@@ -5,7 +5,7 @@ from . import curves
 from .canvas import Rect
 from .ui_system import TRANSFORM_FRAME_PAD,TRANSFORM_KNOB_OFFSET,TRANSFORM_HIT_RADIUS,TRANSFORM_PIVOT_HIT_RADIUS
 from .core import update_auto_handles
-from .construction import chain_range,path_range,sew_reverse
+from .construction import chain_range,path_range,sew_reverse,ordered_sewing_chain
 
 class DesignTools:
     def initialize_design(self):
@@ -390,12 +390,15 @@ class DesignTools:
         if not self.mn_chain:
             self.message='Click at least one edge first.'
         elif self.mn_first is None:
-            self.mn_first=self.mn_chain;self.mn_chain=[]
+            try:self.mn_first=ordered_sewing_chain(self.session.document,self.mn_chain)
+            except ValueError as exc:
+                self.message=str(exc);return
+            self.mn_chain=[]
             self.message='Now click the partner edges, then press Enter.'
         else:
             doc=self.session.document
             try:
-                a=chain_range(doc,self.mn_first,0,1);b=chain_range(doc,self.mn_chain,0,1)
+                a=chain_range(doc,ordered_sewing_chain(doc,self.mn_first),0,1);b=chain_range(doc,ordered_sewing_chain(doc,self.mn_chain),0,1)
                 self.session.sew_chains(a,b,sew_reverse(doc,a,b,self._scene.dd_sew_reverse));self.persist()
                 self.seam_selected=doc.seams[-1].id;self.message=self.sewing_message(doc.seams[-1])
             except ValueError as exc:self.message=str(exc)

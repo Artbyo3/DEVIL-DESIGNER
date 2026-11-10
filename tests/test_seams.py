@@ -22,6 +22,39 @@ class SeamTests(unittest.TestCase):
         a,b = self.s.document.patterns
         self.a,self.b = self.s.document.edge(a.id,1),self.s.document.edge(b.id,3)
 
+    def test_mn_sewing_orders_reverse_clicks_and_wraparound(self):
+        for indices in ((1,0),(0,3),(3,2,1,0)):
+            with self.subTest(indices=indices):
+                editor=DummyEditor(self.s,DummyScene(dd_sew_reverse=True))
+                doc=self.s.document
+                first,second=doc.patterns
+                editor.mn_chain=[doc.edge(first.id,i) for i in indices]
+                editor.mn_commit()
+                expected=([3,0] if indices==(0,3) else sorted(indices))
+                self.assertEqual(editor.mn_first,[doc.edge(first.id,i) for i in expected])
+                editor.mn_chain=[doc.edge(second.id,i) for i in indices]
+                editor.mn_commit()
+                seam=doc.seams[-1]
+                for side in (0,1):
+                    chain=seam.side(side)
+                    self.assertTrue(all(a.end==b.start for a,b in zip(chain,chain[1:])))
+                self.s.remove_seam(seam.id)
+
+    def test_mn_sewing_refuses_disconnected_edges_on_either_side(self):
+        for bad_first in (True,False):
+            with self.subTest(bad_first=bad_first):
+                editor=DummyEditor(self.s,DummyScene(dd_sew_reverse=True))
+                doc=self.s.document
+                first,second=doc.patterns
+                before=doc.dumps()
+                editor.mn_chain=[doc.edge(first.id,i) for i in ((0,2) if bad_first else (1,0))]
+                editor.mn_commit()
+                if not bad_first:
+                    editor.mn_chain=[doc.edge(second.id,i) for i in (0,2)]
+                    editor.mn_commit()
+                self.assertIn('contiguous',editor.message)
+                self.assertEqual(doc.dumps(),before)
+
     def test_version_one_migrates_without_losing_ids(self):
         old = json.loads(self.s.document.dumps())
         old['version'] = 1

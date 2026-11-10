@@ -470,6 +470,27 @@ def _cut_intersection(start,end,cut_start,cut_end):
     return None
 
 
+def ordered_sewing_chain(document,chain):
+    if not chain:raise ValueError('Click at least one edge first.')
+    first=chain[0]
+    if any(edge.pattern!=first.pattern or edge.path!=first.path for edge in chain):
+        raise ValueError('Each sewing side must follow one connected path.')
+    edges=document.edges(first.pattern,first.path)
+    selected={edge.full() for edge in chain}
+    if len(selected)!=len(chain) or not selected.issubset(set(edges)):
+        raise ValueError('Choose each edge once on one connected path.')
+    path=document.find(first.pattern).path(first.path)
+    closed=first.path=='OUTER' or path.closed
+    starts=[i for i,edge in enumerate(edges) if edge in selected and
+            (i==0 and not closed or edges[(i-1)%len(edges)] not in selected)]
+    if not starts and len(selected)==len(edges):starts=[0]
+    if len(starts)!=1:raise ValueError('Select contiguous edges on each sewing side.')
+    start=starts[0]
+    ordered=[edges[(start+i)%len(edges)] for i in range(len(chain))]
+    if set(ordered)!=selected:raise ValueError('Select contiguous edges on each sewing side.')
+    return ordered
+
+
 def chain_range(document,chain,start,end):
     from .core import EdgeRef
     if not 0<=start<=1 or not 0<=end<=1 or abs(start-end)<1e-8:raise ValueError('Use a nonzero sewing range between 0 and 100 percent.')
