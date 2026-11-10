@@ -1,5 +1,7 @@
 # Issue #114: torso-removed avatars
 
+The owner chose options 3 and 4. They are implemented on `next/issue-114`; see "Fix" at the end.
+
 Reproduced on 2026-11-10 in real Blender 5.2.4, headless, from master `81ce681`. The issue text could not be read here because `gh` is not installed. The failure matches the "Hollow bodies" item in `reports/gn-xpbd/STATUS.md`.
 
 ## Fixture
@@ -52,3 +54,41 @@ Recommended: 3 now, plus 4 as an inexpensive addition, then 1 if artists without
 - The fixture is synthetic. Real avatars have separate head and hand meshes, non-planar rims and skinned poses. The intact control already refuses Keep at 120 frames, which is a fixture armpit contact, so this report cannot judge Keep quality.
 - Only the Tee starter was run. The Tank and Skirt depend on the same waist and hip volumes and are expected to fail the same way, but they were not run.
 - The issue text was not read, so the exact avatar and steps in the report are unverified.
+
+## Fix
+
+### What the artist sees now
+
+- **Torso deleted, fully or partly:** Simulate stops before any cloth moves: "This avatar has no torso surface for the cloth to rest on, so it would fall through. Choose a full body, or add a Collision modifier to its outfit, then Simulate again."
+- **Outfit with a Collision modifier:** the torso fit comes from the outfit wherever the avatar has no torso. Adding the modifier later refits automatically.
+- **Mask modifier or Shrink shape key:** fitting, measuring, the body guide, the collision body and the Keep check all use the body as if the Mask were off and the Shrink key at 0. The artist's Mask and key are left untouched.
+- **Keep:** if a drape falls or sinks because the torso is missing, Keep names the missing torso instead of blaming fit and placement.
+
+### Rules
+
+- A cross-section counts as torso only if its edges, seen from the body centre line, cover the full circle with no gap of a quarter turn or more. This works on low-poly loops, still accepts small holes, and rejects arms, legs and open rims. A height with no such section has no torso sample; it never borrows an arm or a leg.
+- The Simulate check slices 60–78 % of body height, limited to the heights the garment covers. It passes when any collision body (avatar, worn kept garments, Collision objects) surrounds the centre at every slice.
+- A Shrink shape key is any key whose name contains "shrink" (any case) that is active and not muted. Bodies are evaluated through a temporary copy, and only when one of these, or an enabled Mask modifier, is present.
+
+### After the fix (same fixture, Tee, 120 frames)
+
+| Variant | Before | After |
+| --- | --- | --- |
+| Intact (control) | Stays up; Keep refused (fixture armpit, 8 pts) | Identical numbers |
+| Torso deleted | Chest on an arm; falls to −15 m; "fell off" | Simulate stops with the guidance |
+| Mask modifier | Same as deleted | Chest fit identical to intact; stays up |
+| Shrink shape key | Placed 1.25 m wide; falls to −17 m | Chest fit identical to intact; stays up |
+| Edit-Mode hidden faces | Same as intact | Same as intact |
+| Belly band deleted | 15 pts sink; Keep refused 30 mm | Simulate stops with the guidance |
+| Front torso deleted | 50 pts sink; Keep refused 162 mm | Simulate stops with the guidance |
+| Deleted + outfit, no Collision | Falls | Simulate stops with the guidance |
+| Deleted + outfit with Collision | Chest on an arm; falls | Centred fit from the outfit; stays up, 0 pts in the hole |
+
+With the sleeveless Tank, the intact, Mask and Shrink avatars all Keep with 0 open seam pairs.
+
+### Remaining limits
+
+- Panel wrapping and intersection previews (`panel_cache.py`, `live_panels.py`) and the locked placement code still read the visible avatar. On a Masked avatar, the starter's start width differs by 7 mm.
+- On the Collision-outfit route, Keep can still refuse a few points as "inside" the avatar near the cut rims (Tee: 9 pts, 37 mm; Tank: 4 pts, 35 mm). That inside test is unreliable at open edges.
+- The torso test depends on the 60–78 % height band. Unusual proportions can move the torso out of that band.
+- Measurements use the avatar only, so a torso-removed avatar on the outfit route gets the standard height-based sizes.

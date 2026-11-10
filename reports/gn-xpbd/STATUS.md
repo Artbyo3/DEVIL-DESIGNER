@@ -36,7 +36,7 @@ Tee, Tank and Skirt were run through Simulate and Keep on five avatars with diff
 
 ## Open items
 
-- **Hollow bodies.** With the whole torso removed, starters measure too large and slide off, and Keep refuses. Cloth can also sink into the opening. A correctly sized garment stays up, though Keep may still refuse where cloth entered the hole.
+- **Hollow bodies.** Simulate now stops on an avatar with a deleted torso and asks for a full body or a Collision modifier on its outfit (#114). Mask modifiers and Shrink shape keys are ignored, so those bodies drape as if fully shown. On the outfit route, Keep may still refuse a few points near the cut rims.
 - **Hem corners.** Skirts crumple at one side of the hem, and Linen and Denim curl there.
 - **Small avatars.** The tee on the smallest avatar keeps with 1 open pair and one sleeve flipped up.
 - **Skirt stretch.** p99 about 1.14 at Keep, from the waist gripping the hips. Tee and Tank reach about 1.07.
