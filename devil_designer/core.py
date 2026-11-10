@@ -293,6 +293,7 @@ class Document:
         self.linked_pairs=linked_pairs or []
         self.custom_presets=custom_presets or {}
         self.elastics=[]
+        self.elastics_dropped=0
         self.joins=[]
         self.steam=[]
 
@@ -510,7 +511,9 @@ class Document:
         def elastic_valid(record):
             try:self.edge_vertices(EdgeRef(record['pattern'],record['start'],record['end'],path=record['path']));return True
             except ValueError:return False
-        self.elastics=[record for record in self.elastics if elastic_valid(record)]
+        kept=[record for record in self.elastics if elastic_valid(record)]
+        self.elastics_dropped+=len(self.elastics)-len(kept)
+        self.elastics=kept
         self.steam=[record for record in self.steam if self.find(record['pattern'])]
 
     def split_edge(self,edge,fraction=.5):
@@ -1059,14 +1062,14 @@ class Session(ConstructionMixin):
         before=self.document.dumps()
         before_sel=self.get_selection_state()
         old_seams={s.id for s in self.document.seams}
+        dropped_before=self.document.elastics_dropped
         self.last_repairs=0
         try:
             operation()
             synchronize(self.document,Document.loads(before),self.selected)
-            elastic_count=len(self.document.elastics)
             self.document.prune_seams()
             self.document.validate()
-            self.last_repairs=len(old_seams-{s.id for s in self.document.seams})+elastic_count-len(self.document.elastics)
+            self.last_repairs=len(old_seams-{s.id for s in self.document.seams})+max(0,self.document.elastics_dropped-dropped_before)
         except Exception:
             self.document=Document.loads(before)
             raise

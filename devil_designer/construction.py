@@ -375,6 +375,9 @@ class ConstructionMixin:
             for seam in self.document.seams:
                 seam.chain_a=tuple(remap(e) for e in seam.side(0));seam.chain_b=tuple(remap(e) for e in seam.side(1))
                 seam.a,seam.b=seam.chain_a[0],seam.chain_b[0]
+            for record in self.document.elastics:
+                moved=remap(EdgeRef(record['pattern'],record['start'],record['end'],path=record['path']))
+                record.update(pattern=moved.pattern,start=moved.start,end=moved.end,path=moved.path)
             for anchor in self.document.anchors:
                 if anchor.pattern==p.id and not p.contains((anchor.x,anchor.y)):anchor.pattern=new.id
         result=self.commit(apply);self.path='OUTER';self.corner=None;return result

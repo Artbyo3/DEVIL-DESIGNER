@@ -62,6 +62,86 @@ class PatternOperations(unittest.TestCase):
         self.assertEqual(session.document.elastics,[])
         self.assertEqual(session.last_repairs,1)
 
+    def elastic_edges_by_piece(self,session):
+        doc=session.document
+        found={}
+        for record in doc.elastics:
+            reference=next(e for e in doc.edges(record['pattern'],record['path'])
+                           if (e.start,e.end)==(record['start'],record['end']))
+            found.setdefault(record['pattern'],[]).append((record['shrink'],doc.edge_length(reference)))
+        return found
+
+    def assert_both_halves_keep_elastic(self,session,length):
+        doc=session.document
+        self.assertEqual(len(doc.patterns),2)
+        found=self.elastic_edges_by_piece(session)
+        self.assertEqual(sorted(found),sorted(p.id for p in doc.patterns))
+        self.assertTrue(all(shrink==20 for items in found.values() for shrink,_ in items))
+        self.assertAlmostEqual(sum(span for items in found.values() for _,span in items),length,places=5)
+        self.assertEqual(session.last_repairs,0)
+        self.assertEqual(len(Document.loads(doc.dumps()).elastics),len(doc.elastics))
+
+    def test_cut_along_path_keeps_both_halves_of_an_elastic_edge(self):
+        session=Session()
+        piece=square(session)
+        doc=session.document
+        session.set_elastic(doc.edge(piece.id,0),20)
+        length=doc.edge_length(doc.edge(piece.id,0))
+        session.add_path([(.08,0),(.08,.2)])
+        session.cut()
+        self.assert_both_halves_keep_elastic(session,length)
+
+    def test_knife_keeps_both_halves_of_an_elastic_edge(self):
+        session=Session()
+        piece=square(session)
+        doc=session.document
+        session.set_elastic(doc.edge(piece.id,0),20)
+        length=doc.edge_length(doc.edge(piece.id,0))
+        session.knife_cut([(.08,-.1),(.08,.3)])
+        self.assert_both_halves_keep_elastic(session,length)
+
+    def test_cut_carries_elastic_on_internal_paths_of_either_half(self):
+        moved=set()
+        for x in (.02,.15):
+            with self.subTest(x=x):
+                session=Session()
+                piece=square(session)
+                doc=session.document
+                session.add_path([(x,.05),(x+.03,.05)])
+                slit=piece.paths[-1]
+                session.set_elastic(doc.edge(piece.id,0,slit.id),20)
+                session.add_path([(.08,0),(.08,.2)])
+                session.cut()
+                self.assertEqual(len(doc.elastics),1)
+                self.assertEqual(session.last_repairs,0)
+                record=doc.elastics[0]
+                self.assertEqual(record['path'],slit.id)
+                self.assertIn(slit.id,[path.id for path in doc.find(record['pattern']).paths])
+                self.assertTrue(any((e.start,e.end)==(record['start'],record['end'])
+                                    for e in doc.edges(record['pattern'],record['path'])))
+                moved.add(record['pattern']!=piece.id)
+        self.assertEqual(moved,{True,False})
+
+    def test_dart_over_an_elastic_edge_reports_the_dropped_elastic(self):
+        session=Session()
+        piece=square(session)
+        doc=session.document
+        session.set_elastic(doc.edge(piece.id,2),20)
+        session.dart(doc.edge(piece.id,2),.3,.7,(.1,.1))
+        self.assertEqual(session.last_repairs,1)
+        self.assertEqual(len(doc.elastics),2)
+
+    def test_elastic_dropped_in_a_trial_copy_is_still_reported(self):
+        session=Session()
+        piece=square(session)
+        session.set_elastic(session.document.edge(piece.id,0),20)
+        staged=session._cut_trial()
+        staged.select_point(piece.id,'OUTER',0)
+        staged.delete()
+        self.assertEqual(staged.document.elastics,[])
+        session.commit(lambda:setattr(session,'document',staged.document))
+        self.assertEqual(session.last_repairs,1)
+
     def test_offset_path_adds_a_parallel_line(self):
         session = Session()
         square(session)
