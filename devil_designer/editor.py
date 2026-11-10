@@ -316,7 +316,7 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
             self.message = message if changed is not False else "Nothing to change."
             if self._scene.get('dd_arrangement_message'):self.message+=' '+self._scene['dd_arrangement_message']
             if self.session.last_repairs:
-                self.message += f" {self.session.last_repairs} affected sewing pair(s) removed; re-pair edited edges."
+                self.message += f" {self.session.last_repairs} affected sewing pair(s) or elastic edge(s) removed; review edited edges."
             return True
         except ValueError as exc:
             self.error_message = str(exc)

@@ -310,7 +310,7 @@ class DesignTools:
             self.persist();self.sync_selection()
             self.message='Done: '+action.replace('_',' ').lower()+'.'
             if scene.get('dd_arrangement_message'):self.message+=' '+scene['dd_arrangement_message']
-            if self.session.last_repairs:self.message+=f' {self.session.last_repairs} affected sewing pair(s) removed; re-pair edited edges.'
+            if self.session.last_repairs:self.message+=f' {self.session.last_repairs} affected sewing pair(s) or elastic edge(s) removed; review edited edges.'
         try:
             operation()
             return True

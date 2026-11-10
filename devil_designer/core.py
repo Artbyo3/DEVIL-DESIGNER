@@ -540,6 +540,13 @@ class Document:
         for seam in self.seams:
             sides=[[new for old in seam.side(i) for new in remap(old)] for i in (0,1)]
             seam.chain_a,seam.chain_b=tuple(sides[0]),tuple(sides[1]); seam.a,seam.b=sides[0][0],sides[1][0]
+        elastics=[]
+        for record in self.elastics:
+            reference=EdgeRef(record['pattern'],record['start'],record['end'],path=record['path'])
+            if reference==edge.full():
+                elastics.extend(dict(record,start=start,end=end) for start,end in ((a.id,v.id),(v.id,b.id)))
+            else:elastics.append(record)
+        self.elastics=elastics
         from .linked_editing import split_partner
         split_partner(self,edge,fraction,v)
         return v
@@ -1056,9 +1063,10 @@ class Session(ConstructionMixin):
         try:
             operation()
             synchronize(self.document,Document.loads(before),self.selected)
+            elastic_count=len(self.document.elastics)
             self.document.prune_seams()
             self.document.validate()
-            self.last_repairs=len(old_seams-{s.id for s in self.document.seams})
+            self.last_repairs=len(old_seams-{s.id for s in self.document.seams})+elastic_count-len(self.document.elastics)
         except Exception:
             self.document=Document.loads(before)
             raise
@@ -2102,6 +2110,9 @@ class Session(ConstructionMixin):
             for other in self.document.seams:
                 other.chain_a=tuple(remap(item) for item in other.side(0));other.chain_b=tuple(remap(item) for item in other.side(1))
                 other.a,other.b=other.chain_a[0],other.chain_b[0]
+            for record in self.document.elastics:
+                if record['pattern']==gone.id:
+                    record.update(pattern=keep.id,start=swap.get(record['start'],record['start']),end=swap.get(record['end'],record['end']))
             self.document.linked_pairs=[pair for pair in self.document.linked_pairs if gone.id not in pair['members']]
             self.document.patterns.remove(gone)
         result=self.commit(apply)

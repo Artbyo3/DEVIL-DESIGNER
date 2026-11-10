@@ -12,6 +12,56 @@ def square(session, x=0.0, size=.2):
 
 
 class PatternOperations(unittest.TestCase):
+    def test_elastic_survives_split_with_shrink_and_history(self):
+        for curved in (False,True):
+            with self.subTest(curved=curved):
+                session=Session()
+                if curved:session.add_ellipse((0,0),(.2,.3))
+                else:square(session)
+                doc=session.document
+                edge=doc.edge(session.selected,0)
+                session.set_elastic(edge,20)
+                length=doc.edge_length(edge)
+                session.split_segment_into(edge,3)
+                self.assertEqual(len(doc.elastics),3)
+                total=0
+                for record in doc.elastics:
+                    self.assertEqual(record['shrink'],20)
+                    reference=next(e for e in doc.edges(record['pattern'],record['path'])
+                                   if (e.start,e.end)==(record['start'],record['end']))
+                    total+=doc.edge_length(reference)
+                self.assertAlmostEqual(total,length,places=5)
+                self.assertEqual(session.last_repairs,0)
+                self.assertEqual(len(Document.loads(doc.dumps()).elastics),3)
+                session.history()
+                self.assertEqual(len(session.document.elastics),1)
+                session.history(True)
+                self.assertEqual(len(session.document.elastics),3)
+
+    def test_merge_preserves_absorbed_piece_elastic(self):
+        session=Session()
+        first=square(session)
+        second=square(session,.4)
+        doc=session.document
+        edge=doc.edge(second.id,0)
+        session.set_elastic(edge,20)
+        session.sew_chains([doc.edge(first.id,1)],[doc.edge(second.id,3)],True)
+        session.merge_pieces(doc.edge(first.id,1))
+        self.assertEqual(len(doc.elastics),1)
+        record=doc.elastics[0]
+        self.assertEqual(record['pattern'],first.id)
+        self.assertEqual(record['shrink'],20)
+        self.assertTrue(any((e.start,e.end)==(record['start'],record['end']) for e in doc.edges(first.id)))
+
+    def test_removed_elastic_is_reported_as_repair(self):
+        session=Session()
+        piece=square(session)
+        session.set_elastic(session.document.edge(piece.id,0),20)
+        session.select_point(piece.id,'OUTER',0)
+        session.delete()
+        self.assertEqual(session.document.elastics,[])
+        self.assertEqual(session.last_repairs,1)
+
     def test_offset_path_adds_a_parallel_line(self):
         session = Session()
         square(session)
