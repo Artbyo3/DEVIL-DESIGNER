@@ -2,6 +2,7 @@ import json
 import math
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 try:
     import bpy
 except ImportError:
@@ -54,6 +55,44 @@ class SeamTests(unittest.TestCase):
                     editor.mn_commit()
                 self.assertIn('contiguous',editor.message)
                 self.assertEqual(doc.dumps(),before)
+
+    def test_document_load_clears_every_old_selection_and_restores_history(self):
+        for action in ('STARTER_TANK','LIBRARY_LOAD'):
+            for kind in ('PIECES','POINTS','EDGES','PATHS'):
+                with self.subTest(action=action,kind=kind):
+                    session=Session()
+                    session.add([(0,0),(.2,0),(.2,.3),(0,.3)])
+                    session.add([(.4,0),(.6,0),(.6,.3),(.4,.3)])
+                    session.add_path([(.45,.1),(.55,.2)])
+                    session.acquisition_target=kind;session.select_all()
+                    session.placed_pivot=(5,5)
+                    before=session.document.dumps();selection=session.get_selection_state()
+                    scene=DummyScene(dd_avatar=None,dd_document=before,dd_library_selected=0)
+                    editor=DummyEditor(session,scene)
+                    for method in ('clear_interaction_references','update_reference','fit','choose_tool','refresh_library'):
+                        setattr(editor,method,lambda *args,**kwargs:None)
+                    editor.library_items=['saved']
+                    editor.library_previews={'saved':{'tags':[]}}
+                    loaded=Session();loaded.add([(1,0),(1.2,0),(1.2,.3),(1,.3)])
+                    library=SimpleNamespace(load=lambda *args:loaded.document)
+                    with patch.dict('sys.modules',{'devil_designer.library':library}),patch('devil_designer.library',library,create=True):
+                        self.assertTrue(editor.design_action(action),editor.message)
+                    new_id=session.document.patterns[0].id
+                    self.assertEqual(session.selected_patterns,{new_id})
+                    self.assertEqual(session.active_entity,('PIECE',new_id))
+                    self.assertFalse(session.selected_points or session.selected_edges or session.selected_paths)
+                    self.assertIsNone(session.placed_pivot)
+                    self.assertIsNotNone(session.selection_bounds())
+                    session.history()
+                    self.assertEqual(session.document.dumps(),before)
+                    restored=session.get_selection_state()
+                    self.assertEqual(set(restored.pop('point_selection')),set(selection.pop('point_selection')))
+                    self.assertEqual(restored,selection)
+                    session.history(True)
+                    self.assertEqual(session.selected_patterns,{new_id})
+                    count=len(session.document.patterns)
+                    session.delete()
+                    self.assertEqual(len(session.document.patterns),count-1)
 
     def test_version_one_migrates_without_losing_ids(self):
         old = json.loads(self.s.document.dumps())
@@ -494,6 +533,9 @@ class SeamTests(unittest.TestCase):
 
 
 class DummyScene(SimpleNamespace):
+    def __setitem__(self,key,value):
+        setattr(self,key,value)
+
     def get(self, key, default=None):
         return getattr(self, key, default)
 

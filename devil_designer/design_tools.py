@@ -132,15 +132,8 @@ class DesignTools:
                     from .measurements import estimate_body_measurements
                     measurements = estimate_body_measurements(scene.dd_avatar, scene)
                 starter_doc = generator(measurements, getattr(self.session.document, 'preset', 'COTTON'))
-                self.session.undo_stack.append(scene.dd_document)
-                self.session.redo_stack.clear()
                 self.clear_interaction_references()
-                self.session.document = starter_doc
-                self.session.selected = starter_doc.patterns[0].id if starter_doc.patterns else None
-                self.session.path = 'OUTER'
-                self.session.corner = None
-                self.session.segment = None
-                self.session.point_selection = []
+                self.session.replace_document(starter_doc)
                 self.persist()
                 if scene.dd_avatar:
                     self.reveal_3d()
@@ -301,10 +294,7 @@ class DesignTools:
                     self.library_tags=', '.join(metadata['tags'])
                     self.library_load_path=None
                     self.clear_interaction_references()
-                    self.session.undo_stack.append(before);self.session.redo_stack.clear()
-                    self.session.document=loaded;self.session.selected=loaded.patterns[0].id if loaded.patterns else None
-                    self.session.path='OUTER';self.session.corner=None;self.session.segment=None
-                    self.session.point_selection=[]
+                    self.session.replace_document(loaded)
                     self._stored=scene.dd_document;self.update_reference(bpy.context,align=True);self.fit()
             else:return
             self.persist();self.sync_selection()

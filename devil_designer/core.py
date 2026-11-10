@@ -2163,6 +2163,15 @@ class Session(ConstructionMixin):
         anchor=Anchor(self._selected,*point,kind,target,binding=binding)
         self.commit(lambda:self.document.anchors.append(anchor));return anchor
 
+    def replace_document(self,document):
+        self.undo_stack.append(self.document.dumps());self.undo_stack=self.undo_stack[-100:]
+        self._undo_selections.append(self.get_selection_state());self._undo_selections=self._undo_selections[-100:]
+        self.redo_stack.clear();self._redo_selections.clear()
+        self._committed_selection=None;self.last_repairs=0
+        self.document=document
+        self.clear_selection()
+        if document.patterns:self.select_piece(document.patterns[0].id)
+
     def history(self,redo=False):
         self.last_repairs=0
         source,target=(self.redo_stack,self.undo_stack) if redo else (self.undo_stack,self.redo_stack)
