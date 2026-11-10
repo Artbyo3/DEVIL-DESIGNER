@@ -1919,7 +1919,7 @@ class Session(ConstructionMixin):
         def apply():
             nodes[a].x,nodes[a].y=curves.mix((nodes[a].x,nodes[a].y),(nodes[b].x,nodes[b].y),.5)
             nodes.pop(b)
-        result=self.commit(apply);self.corner=a;self.point_selection=[];return result
+        result=self.commit(apply);self.select_point(p.id,self.path,a);self.point_selection=[];return result
 
     def offset(self,distance):
         p=self.document.find(self._selected)

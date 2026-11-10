@@ -11,6 +11,23 @@ class SelectionTests(unittest.TestCase):
         self.s = Session()
         self.s.add(SQUARE_A)
 
+    def test_merge_then_delete_removes_only_merged_point(self):
+        for indices in ((1,2),(0,5)):
+            with self.subTest(indices=indices):
+                session=Session()
+                session.add([(0,0),(.2,0),(.3,.1),(.2,.3),(0,.3),(-.1,.1)])
+                pattern=session.document.patterns[0]
+                for index in indices:
+                    session.select_point(pattern.id,'OUTER',index,toggle=True)
+                session.merge_points()
+                self.assertEqual(len(pattern.vertices),5)
+                self.assertEqual(session.selected_points,{(pattern.id,'OUTER',min(indices))})
+                self.assertFalse(session.can_merge_selected_points())
+                survivor_ids={vertex.id for index,vertex in enumerate(pattern.vertices) if index!=min(indices)}
+                session.delete()
+                self.assertEqual({vertex.id for vertex in pattern.vertices},survivor_ids)
+                self.assertEqual(len(pattern.vertices),4)
+
     def test_box_select_picks_points(self):
         p = self.s.document.patterns[0]
         self.s.acquisition_target = 'POINTS'
