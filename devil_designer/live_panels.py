@@ -1,5 +1,6 @@
 import json
 import math
+from contextlib import contextmanager
 from functools import wraps
 import bpy
 from bpy.app.handlers import persistent
@@ -11,13 +12,18 @@ from .panel_cache import wrapped_positions
 _busy=False
 
 
+@contextmanager
+def quiet():
+    global _busy
+    previous=_busy;_busy=True
+    try:yield
+    finally:_busy=previous
+
+
 def build_guard(operation):
     @wraps(operation)
     def guarded(*args,**kwargs):
-        global _busy
-        previous=_busy;_busy=True
-        try:return operation(*args,**kwargs)
-        finally:_busy=previous
+        with quiet():return operation(*args,**kwargs)
     return guarded
 
 

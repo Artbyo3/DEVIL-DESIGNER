@@ -19,6 +19,8 @@ QUAD_SHAPE_ANGLE = math.radians(40)
 
 OWNER = "Artbyo3/DEVIL-DESIGNER"
 LIVE_FRAMES = 1000000
+NO_TORSO_AT_SIMULATE = ('This avatar has no torso surface for the cloth to rest on, so it would fall through. '
+                        'Choose a full body, or add a Collision modifier to its outfit, then Simulate again.')
 
 
 def lock_timeline(scene):
@@ -428,6 +430,9 @@ def build_simulation(context):
             highest = max(v.co.y for v in panel.data.vertices)
             pin.extend(offset+v.index for v in panel.data.vertices if highest-v.co.y<.002/metres_per_unit(scene))
     scene.pop('dd_collision_warning',None)
+    from .arrangement import missing_torso
+    if missing_torso(context,layering.collision_bodies(scene),verts):
+        raise ValueError(NO_TORSO_AT_SIMULATE)
     count,depth=body_guard.embedded(context,layering.collision_bodies(scene),verts,metres_per_unit(scene))
     if count:
         scene['dd_collision_warning']=(f'{count} cloth points start inside the body, up to {depth*1000:.0f} mm deep. '

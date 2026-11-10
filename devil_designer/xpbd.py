@@ -126,8 +126,9 @@ def seam_rings(edges, seam, count, rings=1):
 
 
 def world_surface(context, source):
-    graph = context.evaluated_depsgraph_get()
-    mesh = bpy.data.meshes.new_from_object(source.evaluated_get(graph), depsgraph=graph)
+    from .body_surface import revealed
+    with revealed(context, source) as evaluated:
+        mesh = bpy.data.meshes.new_from_object(evaluated, depsgraph=context.evaluated_depsgraph_get())
     mesh.transform(source.matrix_world)
     return mesh
 
