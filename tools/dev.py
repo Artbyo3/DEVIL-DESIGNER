@@ -50,7 +50,7 @@ def do_tests():
 
     print("\n=== RUNNING REAL-BLENDER BACKGROUND & LOAD SMOKE SUITES ===")
     for t in ["blender_smoke.py", "blender_garment.py", "blender_advanced.py", "blender_silhouette.py",
-              "blender_density.py", "blender_arrangement.py", "blender_tack_binding.py", "blender_tracing.py", "blender_layering.py", "blender_piece_states.py", "blender_sewing_preview.py", "blender_xpbd.py", "blender_matrix.py"]:
+              "blender_density.py", "blender_arrangement.py", "blender_tack_binding.py", "blender_tracing.py", "blender_layering.py", "blender_piece_states.py", "blender_sewing_preview.py", "blender_xpbd.py", "blender_matrix.py", "blender_torso.py"]:
         if not run_cmd([BLENDER_PATH, "--background", "--factory-startup", "--python-exit-code", "1", "--python", f"tests/{t}"],
                        desc=f"Blender Background: {t}"):
             return False

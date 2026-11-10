@@ -6,6 +6,7 @@ from devil_designer.measurements import (
     torso_loop_circumference,
     estimate_body_measurements,
     tape_length,
+    surrounds,
 )
 
 
@@ -92,6 +93,29 @@ class MeasurementsTests(unittest.TestCase):
         ]
         c = torso_loop_circumference(segs, center_x=0.0)
         self.assertAlmostEqual(c, 4.0)
+
+    def test_arm_loops_beside_the_centre_are_not_a_torso(self):
+        arms = []
+        for centre in (-0.4, 0.4):
+            ring = [(centre + 0.05 * math.cos(i * math.tau / 12), 0.05 * math.sin(i * math.tau / 12)) for i in range(12)]
+            arms.extend(zip(ring, ring[1:] + ring[:1]))
+        self.assertEqual(torso_loop_circumference(arms, center_x=0.0), 0.0)
+
+    def test_surrounds_accepts_closed_rings_and_rejects_open_arcs(self):
+        def loop(points, closed=True):
+            return list(zip(points, points[1:] + (points[:1] if closed else [])))
+        square = [(-0.5, -0.5), (0.5, -0.5), (0.5, 0.5), (-0.5, 0.5)]
+        ring = [(0.15 * math.cos(i * math.tau / 24), 0.1 * math.sin(i * math.tau / 24)) for i in range(24)]
+        back = [(0.15 * math.cos(i * math.pi / 12), 0.1 * math.sin(i * math.pi / 12)) for i in range(13)]
+        arm = [(0.4 + 0.05 * math.cos(i * math.tau / 12), 0.05 * math.sin(i * math.tau / 12)) for i in range(12)]
+        holed = ring[:22]
+        self.assertTrue(surrounds(loop(square), 0.0))
+        self.assertTrue(surrounds(loop(ring), 0.0))
+        self.assertTrue(surrounds(loop(holed, closed=False), 0.0))
+        self.assertFalse(surrounds(loop(back, closed=False), 0.0))
+        self.assertFalse(surrounds(loop(arm), 0.0))
+        self.assertFalse(surrounds(loop(arm) + loop([(-x, y) for x, y in arm]), 0.0))
+        self.assertFalse(surrounds([], 0.0))
 
     def test_get_connected_loops_two_cylinders(self):
         segs1 = [
