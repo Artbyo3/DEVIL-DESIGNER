@@ -1,6 +1,7 @@
 import unittest
 from devil_designer.core import Document
 from devil_designer.starters import (
+    ARM_CLEARANCE,
     create_tee_starter,
     create_tank_starter,
     create_skirt_starter,
@@ -15,6 +16,23 @@ class StarterTests(unittest.TestCase):
         small = create_tee_starter(dict(measurements, height=100.0, waist_y=.93)).patterns[0].outline()
         width = lambda points: max(x for x, _ in points) - min(x for x, _ in points)
         self.assertLess(width(small), width(adult))
+
+    def test_short_avatar_tee_stops_at_the_neck_and_its_sleeves_clear_the_arm(self):
+        measurements = dict(chest=48.5, waist=44.5, hip=61.0, torso_length=16.0, shoulder_width=26.0, arm_length=31.5,
+                            height=107.5, waist_y=.703, neck_y=.865, arm_bottom_y=.782, arm_top_y=.827)
+        points = create_tee_starter(measurements).patterns[0].points
+        armpit, sleeve_bottom, sleeve_top = points[2][1], points[3][1], points[4][1]
+        self.assertLessEqual(max(y for _, y in points), .865)
+        self.assertGreaterEqual(sleeve_top, .827 + ARM_CLEARANCE - 1e-9)
+        self.assertLessEqual(sleeve_bottom, .782 - ARM_CLEARANCE + 1e-9)
+        self.assertLessEqual(armpit, sleeve_bottom)
+
+    def test_body_landmarks_that_already_clear_the_tee_leave_it_unchanged(self):
+        measurements = dict(chest=60.0, waist=47.0, hip=73.0, torso_length=17.5, shoulder_width=29.0, arm_length=50.5,
+                            height=151.0, waist_y=1.047)
+        plain = create_tee_starter(measurements).patterns[0].points
+        landmarks = create_tee_starter(dict(measurements, neck_y=1.40, arm_bottom_y=1.18, arm_top_y=1.22)).patterns[0].points
+        self.assertEqual(plain, landmarks)
 
     def test_starter_registry_completeness(self):
         self.assertIn('STARTER_TEE', STARTER_GENERATORS)

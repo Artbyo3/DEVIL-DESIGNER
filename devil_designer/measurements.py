@@ -10,6 +10,10 @@ ARMS_OUT_RATIO = 1.6
 SHOULDER_TO_CHEST = 1.45
 ARMPIT_JUMP = 1.15
 OPEN_SECTION_GAP = math.pi / 2
+ARM_STATION = (0.03, 0.10)
+ARM_MAX_THICKNESS = 0.12
+NECK_SEARCH = 0.15
+NECK_BIN = 0.01
 
 
 def surrounds(segments, center_x):
@@ -135,17 +139,48 @@ def tape_length(points):
     return sum(math.dist(first, second) for first, second in zip(hull, hull[1:] + hull[:1]))
 
 
-def single_torso_loop(mesh, matrix, z, ceiling, world_verts, center_x):
+def widest_torso_loop(mesh, matrix, z, ceiling, world_verts, center_x):
     step = max((ceiling - z) / 12, 1e-4)
-    level = z
-    while level < ceiling:
+    levels = [z + index * step for index in range(12) if z + index * step < ceiling] or [z]
+    found = []
+    for level in levels:
         segments = slice_mesh_z(mesh, matrix, level, world_verts=world_verts)
         components, points, edges = get_connected_loops(segments)
-        central = [comp for comp in components if surrounds(component_segments(comp, points, edges), center_x)]
-        if central:
-            return level, torso_loop_circumference(segments, center_x)
-        level += step
-    return z, torso_loop_circumference(slice_mesh_z(mesh, matrix, z, world_verts=world_verts), center_x)
+        if any(surrounds(component_segments(comp, points, edges), center_x) for comp in components):
+            found.append((level, torso_loop_circumference(segments, center_x)))
+    if found:
+        return max(found, key=lambda item: item[1])
+    return z, 0.0
+
+
+def arm_band(points, center_x, shoulder_half, low_z, total_height):
+    lateral = numpy.abs(points[:, 0] - center_x)
+    inner = shoulder_half + ARM_STATION[0] * total_height
+    outer = shoulder_half + ARM_STATION[1] * total_height
+    arm = points[(lateral > inner) & (lateral < outer) & (points[:, 2] > low_z + 0.5 * total_height)]
+    if not len(arm):
+        return None
+    bottom, top = float(arm[:, 2].min()), float(arm[:, 2].max())
+    if top - bottom > ARM_MAX_THICKNESS * total_height:
+        return None
+    return bottom, top
+
+
+def neck_base(points, center_x, shoulder_half, floor, total_height):
+    core = points[(numpy.abs(points[:, 0] - center_x) < shoulder_half) & (points[:, 2] > floor)
+                  & (points[:, 2] < floor + NECK_SEARCH * total_height)]
+    if not len(core):
+        return None
+    size = NECK_BIN * total_height
+    bins = ((core[:, 2] - floor) // size).astype(int)
+    widths = []
+    for index in numpy.unique(bins).tolist():
+        members = core[bins == index]
+        if len(members) >= 3:
+            widths.append((float(members[:, 0].max() - members[:, 0].min()), floor + (index + 0.5) * size))
+    if not widths:
+        return None
+    return min(widths)[1]
 
 
 def estimate_body_measurements(body, scene, reference=None):
@@ -244,7 +279,7 @@ def measure_mesh(body, mesh, scene, reference):
     chest_circ = torso_loop_circumference(c_segs, center_x)
     w_segs = slice_mesh_z(mesh, matrix, waist_z, world_verts=world_verts)
     waist_circ = torso_loop_circumference(w_segs, center_x)
-    hip_z, hip_circ = single_torso_loop(mesh, matrix, hip_z, waist_z, world_verts, center_x)
+    hip_z, hip_circ = widest_torso_loop(mesh, matrix, hip_z, waist_z, world_verts, center_x)
 
     if chest_w > 0 and shoulder_width > chest_w * ARMS_OUT_RATIO:
         shoulder_width = chest_w * SHOULDER_TO_CHEST
@@ -266,7 +301,12 @@ def measure_mesh(body, mesh, scene, reference):
             break
     inseam = crotch_z - low_z
 
-    neck_z = low_z + 0.81 * total_height
+    points = numpy.array([tuple(v) for v in world_verts], dtype=float)
+    arm = arm_band(points, center_x, shoulder_width / 2, low_z, total_height)
+    measured_neck = neck_base(points, center_x, shoulder_width / 2, arm[1], total_height) if arm else None
+    if measured_neck is not None and measured_neck <= chest_z:
+        measured_neck = None
+    neck_z = low_z + 0.81 * total_height if measured_neck is None else measured_neck
     torso_length = neck_z - waist_z
 
     arm_verts = [v for v in world_verts if abs(v.x - center_x) > 0.18 and v.z > low_z + 0.45 * total_height]
@@ -279,7 +319,14 @@ def measure_mesh(body, mesh, scene, reference):
     def r(val_m):
         return round(val_m * 100 * 2) / 2
 
+    def frame(z):
+        return (z - low_z) / total_height * ref_h
+
+    landmarks = {}
+    if measured_neck is not None:
+        landmarks.update(neck_y=frame(measured_neck), arm_bottom_y=frame(arm[0]), arm_top_y=frame(arm[1]))
     return {
+        **landmarks,
         'height': r(total_height),
         'shoulder_width': r(shoulder_width),
         'chest': r(chest_circ),
