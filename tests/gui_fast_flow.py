@@ -759,6 +759,21 @@ def check_interaction_regressions(workspace, event, point, check):
         workspace.gesture['candidate'], workspace.gesture['preflight'] = workspace.session.build_transform_candidate('MOVE', (0.03, 0.0))
         draw_selection_state('Live drag-move ghost with readout')
         workspace.cancel_gesture()
+        from devil_designer.linked_editing import clone_twin
+        workspace.session = Session()
+        workspace.session.add([(0, 0), (.4, 0), (.4, .5), (0, .5)])
+        source = workspace.session.document.find(workspace.session.selected)
+        twin = clone_twin(workspace.session)
+        partner = next(node for node in twin.vertices if node.id == workspace.session.document.linked_pairs[0]['mapping'][source.vertices[1].id])
+        workspace.session.clear_selection()
+        workspace.session.select_point(source.id, source.loops()[0][0], 1)
+        workspace.gesture = dict(mode='MOVE', start=(.4, 0.0), ref_pos=(.4, 0.0), delta=(.05, 0.0), moved=True)
+        snap = workspace.move_snap()
+        check(snap['targets'].snap((partner.x + .004, partner.y + .003), .01) is None,
+              'dragging a linked point does not snap to its twin partner left behind')
+        workspace.gesture['candidate'], workspace.gesture['preflight'] = workspace.session.build_transform_candidate('MOVE', (.05, 0.0))
+        draw_selection_state('Live linked-twin drag ghost')
+        workspace.cancel_gesture()
         workspace.card_kind = None
     finally:
         workspace.clear_interaction_references()

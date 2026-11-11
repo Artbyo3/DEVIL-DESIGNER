@@ -7,6 +7,7 @@ from .presets import valid_fabric
 
 EPS = 1e-10
 MAX_SPLIT_PARTS = 200
+MOVE_PROBE = 1e-3
 
 def uid():
     return uuid.uuid4().hex
@@ -1548,6 +1549,18 @@ class Session(ConstructionMixin):
             if pre['status']=='OK':pre=dict(status='WARN',can_include_sewn=False)
             pre.update(curve_deviation_mm=deviation*1000,auto_point_count=len(convert_keys),exact_candidate=exact_doc)
         return cand_doc,pre
+
+    def moving_vertex_ids(self):
+        nodes,_=self.resolve_selection()
+        moving={node.id for node in nodes.values()}
+        candidate,_=self.build_transform_candidate('MOVE',(MOVE_PROBE,MOVE_PROBE))
+        if candidate is not None:
+            for pattern in self.document.patterns:
+                other=candidate.find(pattern.id)
+                after={node.id:(node.x,node.y) for _,vlist,_,_ in other.loops() for node in vlist} if other else {}
+                for _,vlist,_,_ in pattern.loops():
+                    moving.update(node.id for node in vlist if node.id not in after or math.dist(after[node.id],(node.x,node.y))>1e-9)
+        return frozenset(moving)
 
     def move_selection(self,dx,dy,confirm=False,coalesce=False):
         if abs(dx)<1e-9 and abs(dy)<1e-9:return False

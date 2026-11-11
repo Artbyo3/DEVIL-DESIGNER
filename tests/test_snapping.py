@@ -2,6 +2,7 @@ import unittest
 
 from devil_designer import snapping
 from devil_designer.core import Session
+from devil_designer.linked_editing import clone_twin
 
 SQUARE = [(0.0, 0.0), (0.2, 0.0), (0.2, 0.3), (0.0, 0.3)]
 CROSSING = [(0.1, 0.2), (0.4, 0.2), (0.4, 0.5), (0.1, 0.5)]
@@ -49,6 +50,53 @@ class SnappingTests(unittest.TestCase):
         targets = snapping.Targets(self.session.document, frozenset({square.vertices[0].id}))
         self.assertIsNone(targets.snap((.05, .004), REACH))
         self.near(targets.snap((.2, .15), REACH), (.2, .15), snapping.MIDPOINT)
+
+
+class LinkedTwinSnapTests(unittest.TestCase):
+    def setUp(self):
+        self.session = Session()
+        self.session.add([(0, 0), (.4, 0), (.4, .5), (0, .5)])
+        self.source = self.session.document.find(self.session.selected)
+        self.twin = clone_twin(self.session)
+        pair = self.session.document.linked_pairs[0]
+        self.partner = next(node for node in self.twin.vertices if node.id == pair['mapping'][self.source.vertices[1].id])
+
+    def targets(self):
+        return snapping.Targets(self.session.document, self.session.moving_vertex_ids())
+
+    def test_twin_point_that_follows_a_dragged_point_is_not_a_target(self):
+        self.session.clear_selection()
+        self.session.select_point(self.source.id, self.source.loops()[0][0], 1)
+        old = (self.partner.x, self.partner.y)
+        self.assertIn(self.partner.id, self.session.moving_vertex_ids())
+        found = self.targets().snap((old[0] + .004, old[1] + .003), REACH)
+        self.assertIsNone(found)
+
+    def test_twin_points_that_stay_remain_targets(self):
+        self.session.clear_selection()
+        self.session.select_point(self.source.id, self.source.loops()[0][0], 1)
+        still = next(node for node in self.twin.vertices if node.id != self.partner.id and node.y > .4 and abs(node.x - self.partner.x) < 1e-9)
+        found = self.targets().snap((still.x + .003, still.y - .002), REACH)
+        self.assertEqual(found[1], snapping.POINT)
+        self.assertAlmostEqual(found[0][0], still.x, places=6)
+        self.assertAlmostEqual(found[0][1], still.y, places=6)
+
+    def test_twin_stays_a_target_while_its_whole_partner_moves(self):
+        self.session.clear_selection()
+        self.session.selected = self.source.id
+        moving = self.session.moving_vertex_ids()
+        self.assertEqual(moving, frozenset(node.id for node in self.source.vertices))
+        found = self.targets().snap((self.partner.x + .004, self.partner.y + .003), REACH)
+        self.assertEqual(found[1], snapping.POINT)
+
+    def test_unlinked_selection_moves_only_itself(self):
+        session = Session()
+        session.add(SQUARE)
+        session.add(CROSSING)
+        square = session.document.patterns[0]
+        session.clear_selection()
+        session.select_point(square.id, square.loops()[0][0], 0)
+        self.assertEqual(session.moving_vertex_ids(), frozenset({square.vertices[0].id}))
 
 
 if __name__ == '__main__':
