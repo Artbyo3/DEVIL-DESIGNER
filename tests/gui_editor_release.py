@@ -212,8 +212,8 @@ def run():
                 check((scene.frame_end,scene.render.fps,scene.render.fps_base,scene.sync_mode)==state['timeline'] and 'dd_timeline' not in scene,
                       'Keep after reopening finishes and leaves the timeline restored')
             else:
-                check('dd_timeline' in scene and scene.render.fps!=state['timeline'][1],
-                      'a Keep refused after reopening leaves the clock locked until Reset: '+str(active.message))
+                check((scene.frame_end,scene.render.fps,scene.render.fps_base,scene.sync_mode)==state['timeline'] and 'dd_timeline' not in scene,
+                      'a Keep refused after reopening restores the timeline it found: '+str(active.message))
                 state['refused']=active.message
         elif stage==7:
             active=workspace()

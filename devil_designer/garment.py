@@ -498,7 +498,18 @@ def keep_drape(context):
     if source.get('dd_signature')!=signature(scene,panels):
         raise ValueError("The patterns or arrangement changed. Reset and simulate the current version first.")
     require_body(scene)
+    found_locked = 'dd_timeline' in scene
     lock_timeline(scene)
+    try:
+        return refine_and_keep(context,source)
+    except Exception:
+        if not found_locked:
+            restore_timeline(scene)
+        raise
+
+
+def refine_and_keep(context,source):
+    scene = context.scene
     xpbd.refine(context,source)
     depsgraph = context.evaluated_depsgraph_get()
     mesh = bpy.data.meshes.new_from_object(source.evaluated_get(depsgraph),preserve_all_data_layers=True,depsgraph=depsgraph)

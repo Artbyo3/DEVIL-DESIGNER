@@ -1858,10 +1858,7 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         if self._closed:
             return
         self.end_shaping()
-        screen = bpy.context.screen
-        if screen is None or not screen.is_animation_playing:
-            from . import garment
-            garment.restore_timeline(self._scene)
+        self.release_timeline()
         self.cancel_pending_sub()
         self.avatar_field.close()
         self.avatar_field.release_surface()
@@ -1885,6 +1882,18 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
             pass
         if _active is self:
             _active = None
+
+    def release_timeline(self):
+        from . import garment
+        screen = bpy.context.screen
+        try:
+            if (screen is not None and screen.is_animation_playing
+                    and ('dd_timeline' in self._scene or garment.generated(self._scene, 'simulation'))):
+                garment.stop(bpy.context)
+            if screen is None or not screen.is_animation_playing:
+                garment.restore_timeline(self._scene)
+        except ReferenceError:
+            pass
 
     def cancel(self, context):
         self.cleanup()
