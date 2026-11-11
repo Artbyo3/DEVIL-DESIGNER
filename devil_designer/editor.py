@@ -1460,8 +1460,10 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         rects = {}
         if panel.w < 200 * s:
             return rects
-        s = min(s, (panel.w - 24 * s) / 186)
-        strip_w = min(panel.w - 24 * s, 186 * s)
+        live_brush = self.shaping is not None and self.shaping.live_brush
+        units = 302 if live_brush else 186
+        s = min(s, (panel.w - 24 * s) / units)
+        strip_w = min(panel.w - 24 * s, units * s)
         strip_x = round(panel.x + (panel.w - strip_w) / 2)
         strip_y = round(panel.y + panel.h - 44 * s)
         rects['STRIP_BOUNDS'] = Rect(strip_x, strip_y, strip_w, 36 * s)
@@ -1471,6 +1473,11 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         value_w = round(60 * s)
         rects['RADIUS_VALUE'] = Rect(minus_x + btn_w + 2 * s, strip_y + 4 * s, value_w, 28 * s)
         rects['RADIUS_PLUS'] = Rect(minus_x + btn_w + value_w + 4 * s, strip_y + 4 * s, btn_w, 28 * s)
+        if live_brush:
+            weaker_x = minus_x + 2 * btn_w + value_w + 10 * s
+            rects['STRENGTH_MINUS'] = Rect(weaker_x, strip_y + 4 * s, btn_w, 28 * s)
+            rects['STRENGTH_VALUE'] = Rect(weaker_x + btn_w + 2 * s, strip_y + 4 * s, value_w, 28 * s)
+            rects['STRENGTH_PLUS'] = Rect(weaker_x + btn_w + value_w + 4 * s, strip_y + 4 * s, btn_w, 28 * s)
         return rects
 
     def enable_shaping(self, context):
@@ -1497,6 +1504,7 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
     def end_shaping(self):
         if self.shaping is not None:
             if self.shaping.alive:
+                self.shaping.end_stroke(bpy.context)
                 self.shaping.release(bpy.context)
             self.shaping.disarm()
         if self.shape_cursor is not None:
@@ -1581,13 +1589,28 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                 if grab is not None:
                     grab.view_changed()
                 return {'PASS_THROUGH'}
-            if not grab.held:
+            if event.shift and grab.live_brush:
+                grab.scale_strength(RADIUS_STEP if event.type == 'WHEELUPMOUSE' else 1 / RADIUS_STEP)
+                self.message = f'Brush strength {grab.strength * 100:.0f}%'
+                self.overlay_cache_time = 0.0
+            elif not grab.held:
                 grab.scale_radius(RADIUS_STEP if event.type == 'WHEELUPMOUSE' else 1 / RADIUS_STEP)
                 self.message = f'Grab radius {grab.radius * 1000:.0f} mm'
                 self.overlay_cache_time = 0.0
             return {'RUNNING_MODAL'}
-        if self.card_kind and not grab.held:
+        if self.card_kind and not grab.held and not grab.brushing:
             return self.minimal_event(context, event) or {'RUNNING_MODAL'}
+        if grab.brushing:
+            if event.type == 'MOUSEMOVE':
+                grab.stroke_to(context, *self.pointer_ray())
+                return {'RUNNING_MODAL'}
+            if press and event.type == 'W':
+                self.message = 'Pinned under the brush. Keep dragging to shape around it.' if grab.pin_stroke(context) else 'That cloth is already held by a pattern pin, tack or freeze.'
+                return {'RUNNING_MODAL'}
+            if press and event.type == 'ESC' or event.type == 'LEFTMOUSE' and event.value == 'RELEASE':
+                grab.end_stroke(context)
+                self.message = 'Stroke finished. The cloth keeps the fold it can hold. W while dragging pins it.'
+                return {'RUNNING_MODAL'}
         if press and event.type == 'SPACE':
             if self.pending_strokes:
                 self.apply_strokes(context, grab)
@@ -1641,6 +1664,12 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                 elif strip['RADIUS_PLUS'].contains(*self.pointer):
                     grab.scale_radius(RADIUS_STEP)
                     self.message = f'Grab radius {grab.radius * 1000:.0f} mm'
+                elif 'STRENGTH_MINUS' in strip and strip['STRENGTH_MINUS'].contains(*self.pointer):
+                    grab.scale_strength(1 / RADIUS_STEP)
+                    self.message = f'Brush strength {grab.strength * 100:.0f}%'
+                elif 'STRENGTH_PLUS' in strip and strip['STRENGTH_PLUS'].contains(*self.pointer):
+                    grab.scale_strength(RADIUS_STEP)
+                    self.message = f'Brush strength {grab.strength * 100:.0f}%'
                 self.overlay_cache_time = 0.0
                 return {'RUNNING_MODAL'}
             origin, direction = self.pointer_ray()
@@ -1650,6 +1679,10 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                 return {'RUNNING_MODAL'}
             if event.ctrl:
                 self.message = 'Pin removed.' if grab.unpin_near(context, hit[0]) else 'No pin under the ring. Ctrl+click a pinned spot to free it.'
+                return {'RUNNING_MODAL'}
+            if grab.live_brush:
+                grab.begin_stroke(context, hit[0], hit[1])
+                garment.start_playback(context)
                 return {'RUNNING_MODAL'}
             if grab.mode in {'PINCH', 'STEAM'}:
                 self.brush_stretch = event.shift

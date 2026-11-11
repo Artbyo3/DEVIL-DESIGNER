@@ -405,17 +405,22 @@ class Renderer:
         bounds = rects.get('STRIP_BOUNDS')
         if not bounds or ed.shaping is None:
             return
-        scale = min(self.s, bounds.w / 186)
+        scale = min(self.s, bounds.h / 36)
         radius = ed.canvas_layout.metrics.menu_back
         self.round_rect(bounds, SURFACE_FLOATING, radius=radius)
         self.round_rect_outline(bounds, SURFACE_OUTLINE, radius=radius)
-        for key, label in (('RADIUS_MINUS', '-'), ('RADIUS_PLUS', '+')):
-            rect = rects[key]
+        for key, label in (('RADIUS_MINUS', '-'), ('RADIUS_PLUS', '+'), ('STRENGTH_MINUS', '-'), ('STRENGTH_PLUS', '+')):
+            rect = rects.get(key)
+            if rect is None:
+                continue
             self.round_rect(rect, ELEVATED if rect.contains(*ed.pointer) else BG_WELL, radius=4)
             self.text(rect.x + rect.w / 2, rect.y + 7 * scale, label, 13, TEXT, True)
         self.text(bounds.x + bounds.w - 28 * scale, bounds.y + 13 * scale, ed.shaping.mode.title(), 10, ACCENT, True)
         value = rects['RADIUS_VALUE']
         self.text(value.x + value.w / 2, value.y + 8 * scale, f'{ed.shaping.radius * 1000:.0f} mm', 10, TEXT_SUB, True)
+        strength = rects.get('STRENGTH_VALUE')
+        if strength is not None:
+            self.text(strength.x + strength.w / 2, strength.y + 8 * scale, f'{ed.shaping.strength * 100:.0f}%', 10, TEXT_SUB, True)
         self.text(bounds.x + 4 * scale, bounds.y - 18 * scale, ed.message, 10, TEXT, max_width=bounds.w - 8 * scale)
 
     def draw(self, ed):
