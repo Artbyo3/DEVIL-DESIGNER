@@ -84,6 +84,11 @@ def stop(context):
         bpy.ops.screen.animation_cancel(restore_frame=False)
 
 
+def drape_playing(context):
+    screen = context.screen
+    return bool(screen and screen.is_animation_playing and any(not obj.hide_get() for obj in generated(context.scene,'simulation')))
+
+
 def remember_drape(context):
     global _carried_drape
     scene = context.scene

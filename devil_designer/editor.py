@@ -19,6 +19,7 @@ RADIUS_STEP = 1.15
 BRUSH_SPACING = .6
 NON_KEYBOARD_TOKENS = ('MOUSE', 'TRACKPAD', 'TIMER', 'NDOF', 'WINDOW', 'PEN', 'ERASER', 'XR_', 'ACTIONZONE', 'EVT_', 'TEXTINPUT')
 _active = None
+PIN_DEPTH_MARGIN = .002
 
 
 def close_active():
@@ -44,6 +45,7 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
             _active.cleanup()
             return {'FINISHED'}
         self._area, self._window, self._scene = context.area, context.window, context.scene
+        self._scene_name = context.scene.name
         self._region = next(r for r in context.area.regions if r.type == 'WINDOW')
         try:
             self.session = Session(Document.loads(self._scene.dd_document))
@@ -213,6 +215,7 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         self.message = 'Full canvas restored.'
 
     def make_layout(self):
+        from . import garment
         region, space = self._region, self._area.spaces.active
         left = right = top = bottom = 0
         for r in self._area.regions:
@@ -233,7 +236,7 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         position = tuple(v * scale for v in self.window_rect) if self.window_rect else None
         layout = Layout(region.width, region.height, scale, self.full, max(0, left), max(0, right), top, bottom,
                         position=position)
-        minimal_layout(layout, bool(self.draft), bool(self.confirm_action), bpy.context.screen.is_animation_playing,
+        minimal_layout(layout, bool(self.draft), bool(self.confirm_action), garment.drape_playing(bpy.context),
                        kept=self.drape_document is not None or bool(layering.kept_garments(self._scene)),
                        stale=self.drape_document is not None and self.drape_document != self._scene.dd_document)
         self.place_tool_strip(layout)
@@ -486,7 +489,8 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         return True
 
     def workflow_action(self, button):
-        if button == 'SIMULATE' and bpy.context.screen.is_animation_playing:
+        from . import garment
+        if button == 'SIMULATE' and garment.drape_playing(bpy.context):
             button = 'STOP'
         blocker = self.workflow_blocker(button)
         self.error_message = None
@@ -561,6 +565,7 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         if context.area != self._area or context.region != self._region or context.window != self._window:
             return
         try:
+            self.reacquire_scene()
             self.canvas_layout = self.make_layout()
             if context.screen.is_animation_playing:
                 self.draw_cached_overlay()
@@ -612,7 +617,18 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
             self.message = self.error_message
             return {'RUNNING_MODAL'}
 
+    def reacquire_scene(self):
+        try:
+            self._scene_name = self._scene.name
+            return
+        except ReferenceError:
+            pass
+        scene = self._window.scene
+        if scene is not None and scene.name == self._scene_name:
+            self._scene = scene
+
     def handle_event(self, context, event):
+        self.reacquire_scene()
         if event.type == 'MOUSEMOVE' and self.tool == 'SHAPE' and self.shaping is not None and self.shaping.held:
             self.pointer = (event.mouse_x - self._region.x, event.mouse_y - self._region.y)
             self.shaping.drag(*self.pointer_ray())
@@ -1717,8 +1733,24 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         from .xpbd_live import pinned_world
         view = self._area.spaces.active.region_3d
         bounds = self.shaping_view_bounds()
-        pixels = [view3d_utils.location_3d_to_region_2d(self._region, view, point) for point in pinned_world(simulations[0])]
-        return [tuple(pixel) for pixel in pixels if pixel is not None and bounds.contains(*pixel)]
+        body = self._scene.dd_avatar
+        evaluated = body.evaluated_get(bpy.context.evaluated_depsgraph_get()) if body is not None and body.type == 'MESH' else None
+        inverse = evaluated.matrix_world.inverted_safe() if evaluated is not None else None
+        pins = []
+        for point in pinned_world(simulations[0]):
+            pixel = view3d_utils.location_3d_to_region_2d(self._region, view, point)
+            if pixel is None or not bounds.contains(*pixel):
+                continue
+            hidden = False
+            if evaluated is not None:
+                eye = view3d_utils.region_2d_to_origin_3d(self._region, view, pixel)
+                start, end = inverse @ eye, inverse @ point
+                reach = (end - start).length
+                if reach > 1e-9:
+                    margin = reach * PIN_DEPTH_MARGIN / max(1e-9, (point - eye).length)
+                    hidden = evaluated.ray_cast(start, end - start, distance=max(0.0, reach - margin))[0]
+            pins.append((tuple(pixel), not hidden))
+        return pins
 
     def brush_cloth(self, grab, vertex, world, stretch):
         try:

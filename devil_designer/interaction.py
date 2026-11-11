@@ -102,7 +102,8 @@ class OverlayControls:
         if self.draft and action not in {'FINISH_DRAFT', 'CANCEL_DRAFT', 'UNDO', 'REDO', 'POINT_APPLY'}:
             return 'Finish drawing or cancel before editing other garment data.'
         if action in {'SIMULATE', 'KEEP'}:
-            return self.workflow_blocker('STOP' if action == 'SIMULATE' and bpy.context.screen.is_animation_playing else action)
+            from . import garment
+            return self.workflow_blocker('STOP' if action == 'SIMULATE' and garment.drape_playing(bpy.context) else action)
         selected = self.session.document.find(self.session.selected)
         if action in {'DELETE_PIECE', 'DUPLICATE', 'UNFOLD', 'MIRROR_SEW', 'CUT', 'TRACE', 'PLACE', 'FLIP_H', 'FLIP_V'}:
             if selected is None and not self.session.selected_patterns and not self.session.selected_points and self.session.corner is None:

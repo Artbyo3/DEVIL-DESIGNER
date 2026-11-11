@@ -169,6 +169,19 @@ def advance():
             workspace.handle_event(bpy.context, event('LEFTMOUSE', moved, 'RELEASE'))
             workspace.draw_overlay()
             check(not workspace.error_message and len(workspace.cloth_pin_pixels()) > 0, 'cloth pins are drawn during live simulation')
+            view = state['area'].spaces.active.region_3d
+            placed = view.view_location.copy(), view.view_rotation.copy(), view.view_distance
+            pins = workspace.cloth_pin_pixels()
+            check(pins and all(seen for _, seen in pins), 'pins on the side facing the artist draw at full strength: ' + str(pins))
+            view.view_rotation = Quaternion((0, 0, 1), math.pi) @ Quaternion((1, 0, 0), math.pi / 2)
+            view.view_location = (0, 0, 1.2)
+            view.update()
+            pins = workspace.cloth_pin_pixels()
+            check(pins and not any(seen for _, seen in pins), 'pins behind the body are dimmed instead of drawing over it: ' + str(pins))
+            workspace.draw_overlay()
+            check(not workspace.error_message, 'dimmed pins draw without a render error')
+            view.view_location, view.view_rotation, view.view_distance = placed
+            view.update()
             return .6
         if step == 7:
             from devil_designer import xpbd_live

@@ -255,6 +255,25 @@ def run():
             check(point is not None and math.dist(point,state['corner'])<1e-9,'the first polygon click lands exactly on the snapped corner: '+str(point))
             active.cancel_gesture()
             garment.stop(bpy.context)
+            area,region=areas()
+            with bpy.context.temp_override(area=area,region=region):
+                bpy.ops.ed.undo_push(message='Before scene change')
+                scene.frame_current=scene.frame_current+7
+                body=scene.dd_avatar
+                body.location.x+=.25
+                bpy.ops.ed.undo_push(message='Scene change')
+                state['undo_document']=scene.dd_document
+                state['undo_result']=bpy.ops.ed.undo()
+            centre=(region.x+region.width//2,region.y+region.height//2)
+            bpy.context.window.event_simulate(type='MOUSEMOVE',value='NOTHING',x=centre[0],y=centre[1])
+        elif stage==10:
+            check(state['undo_result']=={'FINISHED'},"Blender's own undo ran over the 3D view: "+str(state['undo_result']))
+            survived("Blender's own undo over the 3D view")
+            active=workspace()
+            check(active._scene==bpy.context.scene and active._scene.dd_document==state['undo_document'],
+                  "after Blender's undo the editor works on the scene Blender restored")
+            active.renderer.draw(active)
+            check(not active.error_message,"the editor draws after Blender's undo: "+str(active.error_message))
             REPORT.write_text(json.dumps(dict(passed=state['passed'])),encoding='utf-8')
             return None
         state['stage']+=1

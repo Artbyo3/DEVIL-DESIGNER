@@ -121,22 +121,32 @@ def run():
             with bpy.context.temp_override(area=area,region=region):
                 arrangement.ensure_volumes(bpy.context)
             active=open_editor()
-            check(active.workflow_action('SIMULATE'),'Simulate starts the drape: '+str(active.message))
+            with bpy.context.temp_override(area=area,region=region):
+                bpy.ops.screen.animation_play()
         elif stage==1:
+            active=workspace()
+            check(bpy.context.screen.is_animation_playing and not garment.generated(scene,'simulation'),"the artist's own animation plays with no drape")
+            active.canvas_layout=active.make_layout()
+            check(active.canvas_layout.buttons['SIMULATE'][1]=='Simulate',
+                  "the Simulate button still reads Simulate while the artist's own animation plays: "+active.canvas_layout.buttons['SIMULATE'][1])
+            check(active.workflow_action('SIMULATE') and garment.generated(scene,'simulation'),'Simulate starts the drape: '+str(active.message))
+            active.canvas_layout=active.make_layout()
+            check(active.canvas_layout.buttons['SIMULATE'][1]=='Pause','the Simulate button reads Pause while the drape plays')
+        elif stage==2:
             check(bpy.context.screen.is_animation_playing and 'dd_timeline' in scene,'Simulate locks the timeline while the drape plays')
             press('D',ctrl=True,alt=True)
-        elif stage==2:
+        elif stage==3:
             check(workspace() is None,'Ctrl+Alt+D closes the editor mid-drape')
             restored(scene,'closing with Ctrl+Alt+D mid-drape')
             open_editor()
             play_drape()
-        elif stage==3:
+        elif stage==4:
             check(bpy.context.screen.is_animation_playing and 'dd_timeline' in scene,'the drape plays again with the timeline locked')
             state['area_type']=area.type
             x,y=region.x+region.width//2,region.y+region.height//2
             area.type='PROPERTIES'
             bpy.context.window.event_simulate(type='MOUSEMOVE',value='NOTHING',x=x,y=y)
-        elif stage==4:
+        elif stage==5:
             check(workspace() is None,'the editor closes when its 3D view goes away mid-drape')
             restored(scene,'closing because the 3D view went away mid-drape')
             active=open_editor()
