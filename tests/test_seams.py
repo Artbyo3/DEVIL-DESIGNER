@@ -9,7 +9,7 @@ except ImportError:
     from unittest.mock import MagicMock
     import sys
     sys.modules['bpy'] = MagicMock()
-from devil_designer.construction import sew_reverse
+from devil_designer.construction import chain_range,sew_reverse
 from devil_designer.core import Document, Session, EdgeRef
 from devil_designer.linked_editing import clone_twin, toggle_link
 from devil_designer.design_tools import DesignTools
@@ -40,6 +40,18 @@ class SeamTests(unittest.TestCase):
                     chain=seam.side(side)
                     self.assertTrue(all(a.end==b.start for a,b in zip(chain,chain[1:])))
                 self.s.remove_seam(seam.id)
+
+    def test_full_chain_range_stays_inside_each_edge_despite_float_rounding(self):
+        doc=self.s.document
+        first=doc.patterns[0]
+        chain=[doc.edge(first.id,0),doc.edge(first.id,1)]
+        lengths={chain[0].full():0.30000000000000004,chain[1].full():0.4000000000000001}
+        with patch.object(doc,'edge_length',lambda edge:lengths[edge.full()]),patch.object(doc,'chain_length',lambda edges:sum(lengths[e.full()] for e in edges)):
+            for start,end in ((0,1),(1,0)):
+                with self.subTest(start=start,end=end):
+                    result=chain_range(doc,chain,start,end)
+                    self.assertTrue(all(0<=t<=1 for edge in result for t in (edge.t0,edge.t1)))
+                    self.assertEqual(sorted((result[-1 if start==0 else 0].t0,result[-1 if start==0 else 0].t1)),[0.0,1.0])
 
     def test_mn_sewing_refuses_disconnected_edges_on_either_side(self):
         for bad_first in (True,False):

@@ -502,7 +502,7 @@ def chain_range(document,chain,start,end):
     for edge in chain:
         length=document.edge_length(edge);lo=max(low*total,at);hi=min(high*total,at+length)
         if hi-lo>1e-10:
-            a=(lo-at)/length;b=(hi-at)/length
+            a=min(1.0,max(0.0,(lo-at)/length));b=min(1.0,max(0.0,(hi-at)/length))
             result.append(EdgeRef(edge.pattern,edge.start,edge.end,edge.t0+(edge.t1-edge.t0)*a,
                                   edge.t0+(edge.t1-edge.t0)*b,edge.path))
         at+=length
