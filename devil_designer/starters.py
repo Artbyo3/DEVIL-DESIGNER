@@ -1,7 +1,14 @@
-from .core import Session, EdgeRef,arrangement_record
+import math
+
+from .core import Session, EdgeRef, Vertex, arrangement_record
 
 
 ADULT_HEIGHT = 150.0
+SKIRT_WAIST_EASE = 8.0
+SKIRT_HIP_EASE = 8.0
+SKIRT_HIP_DROP = 0.20
+SKIRT_MIN_FLARE = 0.05
+SKIRT_MAX_FLARE = 0.5
 
 
 def make_edge(doc, pattern_id, index, rev=False):
@@ -134,26 +141,35 @@ def create_tank_starter(measurements, fabric='COTTON', name='Tank', extra_length
     return s.document
 
 
+def skirt_arc(apex, radius, flare):
+    reach = 4 / 3 * math.tan(flare / 2) * radius
+    height = apex - radius * math.cos(flare)
+    left = Vertex(-radius * math.sin(flare), height)
+    right = Vertex(radius * math.sin(flare), height)
+    return left, right, (reach * math.cos(flare), -reach * math.sin(flare)), (-reach * math.cos(flare), -reach * math.sin(flare))
+
+
 def create_skirt_starter(measurements, fabric='COTTON'):
     m = measurements or {
         'waist': 80.0,
         'hip': 96.0,
     }
-    half_waist = (m['waist'] / 2 + 4.0) / 200
-    half_hip = (m['hip'] / 2 + 12.0) / 200
+    size = min(1.0, m.get('height', ADULT_HEIGHT) / ADULT_HEIGHT)
     skirt_len = 0.48
     waist_y = m.get('waist_y', 0.62 * (m['height'] / 100 if 'height' in m else 1.70))
-    base_y = max(0.0, waist_y - skirt_len)
+    hip_drop = waist_y - m['hip_y'] if 'hip_y' in m else SKIRT_HIP_DROP * size
+    hip_drop = min(max(hip_drop, SKIRT_HIP_DROP * size / 2), skirt_len * .8)
+    waist_arc = (m['waist'] + SKIRT_WAIST_EASE) / 400
+    hip_arc = (max(m['hip'], m['waist']) + SKIRT_HIP_EASE) / 400
+    flare = min(max((hip_arc - waist_arc) / hip_drop, SKIRT_MIN_FLARE), SKIRT_MAX_FLARE)
+    waist_radius = waist_arc / flare
+    apex = waist_y + waist_radius
+    hem_left, hem_right, hem_left.outgoing, hem_right.incoming = skirt_arc(apex, waist_radius + skirt_len, flare)
+    waist_left, waist_right, waist_left.incoming, waist_right.outgoing = skirt_arc(apex, waist_radius, flare)
+    front_pts = [hem_left, hem_right, waist_right, waist_left]
 
-    front_pts = [
-        (-half_hip, base_y),
-        (half_hip, base_y),
-        (half_waist, base_y + skirt_len),
-        (-half_waist, base_y + skirt_len),
-    ]
-
-    back_offset = 0.85
-    back_pts = [(x + back_offset, y) for x, y in front_pts]
+    back_offset = max(0.85, 2 * hem_right.x + 0.05)
+    back_pts = [Vertex(v.x + back_offset, v.y, incoming=v.incoming, outgoing=v.outgoing) for v in front_pts]
 
     s = Session()
     s.add(front_pts)

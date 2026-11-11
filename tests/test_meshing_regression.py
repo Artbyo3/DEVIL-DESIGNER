@@ -47,16 +47,16 @@ BASELINE = {
     },
     'skirt': {
         'Skirt front': {
-            'n_verts': 788,
-            'n_faces': 1471,
-            'n_uvs': 4413,
-            'sha256': '87926d2309767aecbdffe510854140f6f1400f9297af37c871a194fe187abdd4',
+            'n_verts': 825,
+            'n_faces': 1532,
+            'n_uvs': 4596,
+            'sha256': '8eaf7632d9ce9c1ec36558f75367c62fa9740057a725c3e5220017fae5fae612',
         },
         'Skirt back': {
-            'n_verts': 788,
-            'n_faces': 1471,
-            'n_uvs': 4413,
-            'sha256': 'b0f12f17a198a78459df313c26c17df71a9ccc4b62b3dc45dd9ac516c1230cec',
+            'n_verts': 825,
+            'n_faces': 1532,
+            'n_uvs': 4596,
+            'sha256': '59c422cca9e176fc4493b199e5c3be3b6b16cbab0e670bd66a049b9d2a56ba37',
         },
     },
     'ellipse': {

@@ -226,6 +226,7 @@ def test_keep_refine_and_guard(scene, body):
     print('STRETCH', round(live_stretch, 4), round(refined_stretch, 4), flush=True)
     check(refined_stretch < live_stretch, 'Keep refine reduces stretch')
     check(xpbd.input_slot(simulation, 'Inner Substeps').value == live_steps, 'refine restores live substeps')
+    check(xpbd.input_slot(simulation, 'Iterations').value < xpbd.REFINE_ITERATIONS, 'refine restores live solver iterations')
     original = [vertex.co.copy() for vertex in body.data.vertices]
     for vertex in body.data.vertices:
         vertex.co += vertex.normal * .03
@@ -281,6 +282,25 @@ def test_stiff_fabric_links():
     lengths = np.linalg.norm(rest[links[:, 0]] - rest[links[:, 1]], axis=1)
     check(len(links) > 0 and np.allclose(lengths, .04), 'stiff fabric links span two straight cloth edges')
     check(not len(xpbd.bend_links(rest, edges, np.zeros(len(rest), dtype=bool))), 'soft fabrics get no extra links')
+
+
+def test_seam_bridges():
+    side, step = 5, .02
+    grid = [(x * step, y * step) for y in range(side) for x in range(side)]
+    edges = [(y * side + x, y * side + x + 1) for y in range(side) for x in range(side - 1)]
+    edges += [(y * side + x, (y + 1) * side + x) for y in range(side - 1) for x in range(side)]
+    for same_side in (False, True):
+        other = [(x + 100.0, y) for x, y in grid]
+        rest = np.array([(x, y, 0.0) for x, y in grid + other])
+        seam_column = side - 1 if same_side else 0
+        seams = [(y * side + side - 1, side * side + y * side + seam_column) for y in range(side)]
+        cloth = np.array(edges + [(first + side * side, second + side * side) for first, second in edges])
+        all_edges = np.concatenate((cloth, np.array(seams)))
+        loose = np.arange(len(all_edges)) >= len(cloth)
+        links, lengths = xpbd.seam_links(rest, all_edges, loose)
+        crossing = (links < side * side).sum(axis=1) == 1
+        check(crossing.any() and np.allclose(lengths[crossing], 2 * step), 'seam bridges span the seam at the unfolded cloth length' + (' when both panels are sewn on the same side' if same_side else ''))
+    check(not len(xpbd.seam_links(rest, cloth, np.zeros(len(cloth), dtype=bool))[0]), 'unsewn panels get no seam bridges')
 
 
 def test_fell_off_guard(scene, body):
@@ -345,6 +365,7 @@ test_live_grab(scene)
 test_keep_refine_and_guard(scene, body)
 test_keep_with_faceless_seam_vertices(scene)
 test_stiff_fabric_links()
+test_seam_bridges()
 test_fell_off_guard(scene, body)
 test_reset_restores_timeline(scene)
 test_open_avatar_collision(scene)
