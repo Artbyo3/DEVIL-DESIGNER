@@ -355,6 +355,8 @@ def attach(context, obj, doc, panels, pieces, maps, plan, pinned, tacks):
     write(mesh, 'dd_weld_reach', 'FLOAT', 'POINT', np.full(count, WELD_REACH / unit))
     thickness = .006 / unit if scene.dd_self_collision else 0.0
     write(mesh, 'dd_self_thickness', 'FLOAT', 'POINT', np.full(count, thickness))
+    write(mesh, xpbd_nodes.SIDE_SIGN, 'FLOAT', 'POINT', np.zeros(count))
+    write(mesh, xpbd_nodes.SIDE_REST, 'FLOAT_VECTOR', 'POINT', np.zeros((count, 3)))
     write(mesh, 'dd_frame_time', 'FLOAT', 'POINT', np.full(count, 1 / SIM_FPS))
     write(mesh, 'dd_time_zero', 'FLOAT', 'POINT', np.full(count, scene.frame_start / SIM_FPS))
     held = np.zeros(count, dtype=bool)
