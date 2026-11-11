@@ -64,6 +64,26 @@ class StarterTests(unittest.TestCase):
             a, b, diff, pct = doc.seam_stats(seam)
             self.assertLess(diff, 0.005)
 
+    def test_skirt_panels_hang_level_and_clear_the_hips(self):
+        bodies = (None, dict(waist=38.0, hip=64.5, height=110.5, waist_y=.815, hip_y=.601),
+                  dict(waist=80.0, hip=45.0, height=154.0, waist_y=1.01, hip_y=.75))
+        for measurements in bodies:
+            doc = create_skirt_starter(measurements)
+            for pattern in doc.patterns:
+                hem, side, waist, other_side = (doc.edge_length(doc.edge(pattern.id, index)) for index in range(4))
+                self.assertAlmostEqual(side, other_side, places=6)
+                self.assertAlmostEqual(side, 0.48, delta=.001)
+                hem_curve = doc.edge_curve(doc.edge(pattern.id, 0))
+                side_curve = doc.edge_curve(doc.edge(pattern.id, 1))
+                hem_end = (hem_curve[3][0] - hem_curve[2][0], hem_curve[3][1] - hem_curve[2][1])
+                side_start = (side_curve[1][0] - side_curve[0][0], side_curve[1][1] - side_curve[0][1])
+                self.assertAlmostEqual(hem_end[0] * side_start[0] + hem_end[1] * side_start[1], 0.0, places=6)
+            body = measurements or dict(waist=80.0, hip=96.0, waist_y=1.054, hip_y=.854)
+            waist_girth = 2 * doc.edge_length(doc.edge(doc.patterns[0].id, 2)) * 100
+            hem_girth = 2 * doc.edge_length(doc.edge(doc.patterns[0].id, 0)) * 100
+            hip_girth = waist_girth + (hem_girth - waist_girth) * (body['waist_y'] - body['hip_y']) / .48
+            self.assertGreaterEqual(hip_girth, max(body['hip'], body['waist']) + 7.9)
+
     def test_side_seams_start_at_matching_height(self):
         for gen in (create_tee_starter, create_tank_starter, create_skirt_starter):
             doc = gen(None)

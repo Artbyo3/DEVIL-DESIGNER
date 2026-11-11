@@ -25,6 +25,7 @@ MIN_SUBSTEPS = 10
 SIM_FPS = 30
 LIVE_SUBSTEPS = 12
 REFINE_FRAMES = 40
+REFINE_ITERATIONS = 4
 CONTACT_RADIUS = .006
 GRAB_STRIDE = .05
 GRAB_REACH = .4
@@ -231,11 +232,14 @@ def strengthen(obj, vertices, multiplier):
 def refine(context, obj):
     scene = context.scene
     live = input_slot(obj, 'Inner Substeps').value
+    iterations = input_slot(obj, 'Iterations').value
     set_input(obj, 'Inner Substeps', max(live, scene.dd_quality))
+    set_input(obj, 'Iterations', max(iterations, REFINE_ITERATIONS))
     obj.update_tag()
     for _ in range(REFINE_FRAMES):
         scene.frame_set(scene.frame_current + 1)
     set_input(obj, 'Inner Substeps', live)
+    set_input(obj, 'Iterations', iterations)
     obj.update_tag()
 
 
@@ -260,6 +264,54 @@ def bend_links(rest, edges, stiff):
             if partner is not None and directions[partner] @ directions[row] < LINK_STRAIGHTNESS:
                 links.add((min(around[row], around[partner]), max(around[row], around[partner])))
     return np.array(sorted(links), dtype=np.int32).reshape(-1, 2)
+
+
+def seam_frame(flat, neighbors, partners, first, second):
+    for ahead in neighbors[first]:
+        behind = next((item for item in partners.get(ahead, ()) if item in neighbors[second]), None)
+        if behind is None:
+            continue
+        along_first = flat[ahead] - flat[first]
+        along_second = flat[behind] - flat[second]
+        turn = np.arctan2(along_first[1], along_first[0]) - np.arctan2(along_second[1], along_second[0])
+        rotation = np.array(((np.cos(turn), -np.sin(turn)), (np.sin(turn), np.cos(turn))))
+        sides = []
+        for center, along in ((first, along_first), (second, along_second)):
+            inside = [flat[item] - flat[center] for item in neighbors[center] if item not in partners]
+            if not inside:
+                return None
+            spread = np.mean(inside, axis=0)
+            sides.append(np.sign(along[0] * spread[1] - along[1] * spread[0]))
+        if sides[0] != sides[1]:
+            return rotation
+        axis = along_second / max(np.linalg.norm(along_second), 1e-12)
+        return rotation @ (2 * np.outer(axis, axis) - np.eye(2))
+    return None
+
+
+def seam_links(rest, edges, loose):
+    flat = rest[:, :2]
+    neighbors = [set() for _ in range(len(rest))]
+    for first, second in edges[~loose].tolist():
+        neighbors[first].add(second)
+        neighbors[second].add(first)
+    partners = {}
+    for first, second in edges[loose].tolist():
+        partners.setdefault(first, set()).add(second)
+        partners.setdefault(second, set()).add(first)
+    links = {}
+    for first, second in edges[loose].tolist():
+        frame = seam_frame(flat, neighbors, partners, first, second)
+        if frame is None:
+            continue
+        for near in neighbors[first] - partners.keys():
+            ahead = flat[near] - flat[first]
+            for far in neighbors[second] - partners.keys():
+                behind = frame @ (flat[far] - flat[second])
+                if ahead @ behind < LINK_STRAIGHTNESS * np.linalg.norm(ahead) * np.linalg.norm(behind):
+                    links.setdefault((min(near, far), max(near, far)), np.linalg.norm(ahead - behind))
+    pairs = sorted(links)
+    return np.array(pairs, dtype=np.int32).reshape(-1, 2), np.array([links[pair] for pair in pairs], dtype=float)
 
 
 def add_edges(mesh, links):
@@ -298,10 +350,12 @@ def attach(context, obj, doc, panels, pieces, maps, plan, pinned, tacks):
     edges = edges.reshape(-1, 2)
     loose = np.array([edge.is_loose for edge in mesh.edges], dtype=bool)
     near_seam = seam_rings(edges, loose, count)
-    links = bend_links(rest, edges[~loose], bending >= LINK_MIN_BENDING)
+    bridges, bridge_length = seam_links(rest, edges, loose)
+    links = np.concatenate((bend_links(rest, edges[~loose], bending >= LINK_MIN_BENDING), bridges))
     add_edges(mesh, links)
     edges = np.concatenate((edges, links))
     linked = np.concatenate((np.zeros(len(loose), dtype=bool), np.ones(len(links), dtype=bool)))
+    bridged = np.arange(len(edges)) >= len(edges) - len(bridges)
     loose = np.concatenate((loose, np.zeros(len(links), dtype=bool)))
     shrink = np.zeros(count)
     elastics = [record for record in doc.elastics if record['pattern'] in maps]
@@ -326,6 +380,7 @@ def attach(context, obj, doc, panels, pieces, maps, plan, pinned, tacks):
     span = (rest[edges[:, 1]] - rest[edges[:, 0]])[:, :2] * (1 - pair_grain[:, 2:])
     length = np.linalg.norm(span, axis=1)
     across, along = (np.square(span / np.maximum(length, 1e-12)[:, None])).T
+    length[bridged] = bridge_length
     grain_stiffness = along ** 2 + pair_grain[:, 0] * across ** 2 + pair_grain[:, 1] * (1 + pair_grain[:, 0]) * across * along
     length *= 1 - (shrink[edges[:, 0]] + shrink[edges[:, 1]]) * .5
     length[loose] = 0.0
@@ -334,9 +389,10 @@ def attach(context, obj, doc, panels, pieces, maps, plan, pinned, tacks):
     compliance = STRETCH_COMPLIANCE * 32.0 / (pair_stiffness * np.maximum(grain_stiffness, 1e-3))
     compliance[loose] = SEAM_COMPLIANCE
     compliance[linked] = LINK_COMPLIANCE * (LINK_MIN_BENDING / np.minimum(bending[edges[linked, 0]], bending[edges[linked, 1]])) ** 2
+    compliance[bridged] = LINK_COMPLIANCE * (LINK_MIN_BENDING / np.maximum(np.minimum(bending[bridges[:, 0]], bending[bridges[:, 1]]), LINK_MIN_BENDING)) ** 2
     write(mesh, 'rest_length', 'FLOAT', 'EDGE', length)
     write(mesh, 'dd_seam_start', 'FLOAT', 'EDGE', seam_start)
-    write(mesh, 'dd_seam', 'BOOLEAN', 'EDGE', loose)
+    write(mesh, 'dd_seam', 'BOOLEAN', 'EDGE', loose | bridged)
     write(mesh, 'dd_bend_link', 'BOOLEAN', 'EDGE', linked)
     write(mesh, 'dd_edge_compliance', 'FLOAT', 'EDGE', compliance)
     write(mesh, 'dd_rest_position', 'FLOAT_VECTOR', 'POINT', rest)
