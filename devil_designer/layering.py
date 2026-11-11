@@ -28,8 +28,11 @@ def wear_over_selection(scene):
     return [(obj.name,enabled) for obj,enabled in worn_garments(scene)]
 
 
+def collision_extras(scene):
+    return [obj for obj in scene.objects if obj.type=='MESH' and obj is not scene.dd_avatar and not obj.get('dd_kind')
+            and any(modifier.type=='COLLISION' and modifier.show_viewport for modifier in getattr(obj,'modifiers',()))]
+
+
 def collision_bodies(scene):
     worn=[obj for obj,enabled in worn_garments(scene) if enabled]
-    extras=[obj for obj in scene.objects if obj.type=='MESH' and obj is not scene.dd_avatar and not obj.get('dd_kind')
-            and any(modifier.type=='COLLISION' and modifier.show_viewport for modifier in obj.modifiers)]
-    return [scene.dd_avatar,*worn,*extras]
+    return [scene.dd_avatar,*worn,*collision_extras(scene)]

@@ -1,5 +1,6 @@
 import math
 from .measurements import estimate_body_measurements
+from .body_surface import revealed
 
 VIEWS = ('FRONT','BACK','LEFT','RIGHT')
 
@@ -85,31 +86,32 @@ class BodyReference:
         if body.type!='MESH' or body not in list(scene.objects):
             self.error='Choose a body mesh in this scene.'
             return True
-        evaluated=None
         try:
-            depsgraph=context.evaluated_depsgraph_get()
-            evaluated=body.evaluated_get(depsgraph)
-            mesh=evaluated.to_mesh()
-            if mesh is None or not mesh.polygons:
-                raise ValueError('The selected body has no surface faces.')
-            mesh.calc_loop_triangles()
-            unit=max(1e-6,scene.unit_settings.scale_length)
-            matrix=evaluated.matrix_world
-            world=[tuple((matrix @ v.co)*unit) for v in mesh.vertices]
-            used=sorted({i for tri in mesh.loop_triangles for i in tri.vertices})
-            mapping={index:new for new,index in enumerate(used)}
-            self.vertices,self.bounds=project_vertices([world[i] for i in used],scene.dd_reference_view)
-            self.triangles=[tuple(mapping[i] for i in tri.vertices) for tri in mesh.loop_triangles]
-            if not self.bounds or self.bounds[1][1]<=1e-8:
-                raise ValueError('The body has no usable height in this view.')
+            with revealed(context,body) as evaluated:
+                mesh=evaluated.to_mesh()
+                try:
+                    self.read_surface(scene,evaluated,mesh)
+                finally:
+                    evaluated.to_mesh_clear()
         except (ValueError,RuntimeError,ReferenceError) as exc:
             self.vertices,self.triangles,self.bounds=[],[],None
             self._measurements=None
             self.error=str(exc)
-        finally:
-            if evaluated is not None:
-                evaluated.to_mesh_clear()
         return True
+
+    def read_surface(self,scene,evaluated,mesh):
+        if mesh is None or not mesh.polygons:
+            raise ValueError('The selected body has no surface faces.')
+        mesh.calc_loop_triangles()
+        unit=max(1e-6,scene.unit_settings.scale_length)
+        matrix=evaluated.matrix_world
+        world=[tuple((matrix @ v.co)*unit) for v in mesh.vertices]
+        used=sorted({i for tri in mesh.loop_triangles for i in tri.vertices})
+        mapping={index:new for new,index in enumerate(used)}
+        self.vertices,self.bounds=project_vertices([world[i] for i in used],scene.dd_reference_view)
+        self.triangles=[tuple(mapping[i] for i in tri.vertices) for tri in mesh.loop_triangles]
+        if not self.bounds or self.bounds[1][1]<=1e-8:
+            raise ValueError('The body has no usable height in this view.')
 
     def corners(self,x=0,y=0):
         if not self.bounds:
