@@ -412,7 +412,7 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
             nodes = self.session.resolve_selection()[0]
             start = self.gesture['start']
             source = min(((node.x, node.y) for node in nodes.values()), key=lambda spot: math.dist(spot, start), default=start)
-            self.gesture['snap'] = dict(source=source, targets=snapping.Targets(self.session.document, frozenset(node.id for node in nodes.values())))
+            self.gesture['snap'] = dict(source=source, targets=snapping.Targets(self.session.document, self.session.moving_vertex_ids()))
         return self.gesture['snap']
 
     def pivot_candidate(self):
