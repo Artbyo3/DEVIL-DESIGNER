@@ -27,6 +27,10 @@ not replace the source patterns with their triangulated approximation.
   midpoints, edges and crossings of every piece within 10 pixels, with a marker that
   names the target. A move snaps the moving point nearest the cursor, and geometry
   that is itself moving is never a target. Otherwise positions snap to the 1 cm grid.
+  Pin, Tack and dart apex clicks use the same snapping, and a snap that would land
+  outside the fabric (for example on a hole outline) falls back to the grid point or
+  the exact click. Dart base clicks and the double-click edge split take a snap only
+  when it lies on the clicked edge away from its ends.
 - Display live segment lengths while drawing and editing, including curve arc
   lengths, so edges can be compared before sewing.
 - Keep measurement, displayed curves, sewing, and meshing consistent by sharing

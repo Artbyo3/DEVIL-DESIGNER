@@ -520,9 +520,9 @@ class DesignTools:
 
     def design_canvas_click(self,event):
         doc=self.session.document
-        point=self.world_pointer(event)
         if self.tool=='TACK_FABRIC':
             p,_=self.design_hit()
+            point=self.fabric_point(event,p) if p is not None else None
             if p is None or not p.contains(point):raise ValueError('Click inside the fabric.')
             if self.pending_join is None:
                 self.pending_join=(p.id,*point);self.message='Now click the point to tie it to.'
@@ -546,6 +546,7 @@ class DesignTools:
                     self.select_anchor(anchor);self.message='Anchor selected. Delete removes this pin or tack.';return
             p,index=self.design_hit()
             if p is None:raise ValueError('Click inside the fabric to add a pin or tack.')
+            point=self.fabric_point(event,p)
             self.session.selected=p.id
             if self.tool=='PIN':
                 anchor=self.session.add_anchor(point);self.select_anchor(anchor);self.persist();self.message='Pin added.'
@@ -555,10 +556,11 @@ class DesignTools:
                 edge=self.design_hit_edge()
                 if edge is None or edge.path!='OUTER':raise ValueError('Click the dart mouth on an outer segment.')
                 if self.dart_base and self.dart_base[0][0]!=edge:raise ValueError('Pick both dart base points on the same segment.')
-                t,_=curves.closest_fraction(doc.edge_curve(edge),point)
+                t=self.edge_click_fraction(event,edge)
                 self.dart_base.append((edge,t));self.message='Click the other base point.' if len(self.dart_base)==1 else 'Click the dart apex inside the pattern.'
             else:
                 (edge,a),(_,b)=self.dart_base
+                point=self.fabric_point(event,doc.find(edge.pattern))
                 self.session.dart(edge,a,b,point);self.persist();self.dart_base=[];self.message='Dart created with automatic closing sewing.'
 
     def preview_pattern(self,pattern):

@@ -52,6 +52,45 @@ class SnappingTests(unittest.TestCase):
         self.near(targets.snap((.2, .15), REACH), (.2, .15), snapping.MIDPOINT)
 
 
+class ClickSnapTests(unittest.TestCase):
+    def setUp(self):
+        self.session = Session()
+        self.session.add([(0.0, 0.0), (.4, 0.0), (.4, .4), (0.0, .4)])
+        self.session.add_path([(.1, .1), (.2, .1), (.2, .2), (.1, .2)], True)
+        self.session.cut()
+        self.piece = self.session.document.patterns[0]
+        self.targets = snapping.Targets(self.session.document)
+
+    def test_pin_snaps_to_a_point_inside_the_fabric(self):
+        self.session.add_path([(.3, .3), (.35, .35)])
+        targets = snapping.Targets(self.session.document)
+        found = targets.snap((.302, .303), REACH)
+        self.assertEqual(found[1], snapping.POINT)
+        self.assertEqual(snapping.fabric_spot(self.piece, (found[0], (.3, .3), (.302, .303))), found[0])
+
+    def test_snap_onto_a_hole_outline_is_skipped_for_the_click(self):
+        found = self.targets.snap((.204, .15), REACH)
+        self.assertIsNotNone(found)
+        self.assertFalse(self.piece.contains(found[0]))
+        self.assertEqual(snapping.fabric_spot(self.piece, (found[0], (.2, .15), (.204, .15))), (.204, .15))
+
+    def test_nothing_inside_returns_none(self):
+        self.assertIsNone(snapping.fabric_spot(self.piece, ((.15, .15), None, (.5, .5))))
+
+    def test_edge_snap_gives_the_fraction_on_that_edge(self):
+        edge = self.session.document.edge(self.piece.id, 0)
+        control = self.session.document.edge_curve(edge)
+        found = self.targets.snap((.204, -.003), REACH)
+        self.assertEqual(found[1], snapping.MIDPOINT)
+        self.assertAlmostEqual(snapping.edge_fraction(control, found[0], REACH), .5, places=6)
+
+    def test_edge_snap_at_a_corner_or_off_the_edge_is_skipped(self):
+        edge = self.session.document.edge(self.piece.id, 0)
+        control = self.session.document.edge_curve(edge)
+        self.assertIsNone(snapping.edge_fraction(control, (0.0, 0.0), REACH))
+        self.assertIsNone(snapping.edge_fraction(control, (.2, .1), REACH))
+
+
 class LinkedTwinSnapTests(unittest.TestCase):
     def setUp(self):
         self.session = Session()

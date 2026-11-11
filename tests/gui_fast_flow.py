@@ -1,4 +1,5 @@
 import json
+import math
 from pathlib import Path
 import sys
 import traceback
@@ -998,6 +999,88 @@ def check_arrangement_controls(workspace,event,check):
         workspace.canvas_layout=workspace.make_layout()
 
 
+def check_click_snapping(workspace, event, check):
+    from devil_designer import snapping
+    from devil_designer.core import Session
+
+    original_session, original_tool, original_snap = workspace.session, workspace.tool, workspace.snap
+    original_view = (workspace.view.cx, workspace.view.cy, workspace.view.zoom)
+    original_full = workspace.full
+    session = Session()
+    session.add([(0, 0), (.41, 0), (.41, .41), (0, .41)])
+    session.add_path([(.1, .1), (.2, .1), (.2, .2), (.1, .2)], True)
+    session.cut()
+    session.add_path([(.303, .307), (.36, .36)])
+    workspace.session = session
+    workspace.clear_interaction_references()
+    workspace.persist()
+    workspace.fit()
+    workspace.snap = True
+    piece = session.document.patterns[0]
+
+    def pixel(world, offset=(3, 2)):
+        workspace.canvas_layout = workspace.make_layout()
+        x, y = workspace.view.screen(world, workspace.canvas_layout.canvas)
+        return x + offset[0], y + offset[1]
+
+    def press(world, offset=(3, 2), value='PRESS'):
+        spot = pixel(world, offset)
+        workspace.handle_event(bpy.context, event('MOUSEMOVE', spot, 'NOTHING'))
+        workspace.handle_event(bpy.context, event('LEFTMOUSE', spot, value))
+        if value == 'PRESS':
+            workspace.handle_event(bpy.context, event('LEFTMOUSE', spot, 'RELEASE'))
+
+    try:
+        workspace.choose_tool('PIN')
+        spot = pixel((.303, .307))
+        workspace.handle_event(bpy.context, event('MOUSEMOVE', spot, 'NOTHING'))
+        check(workspace.snap_marker is not None and workspace.snap_marker[1] == snapping.POINT,
+              'hovering the Pin tool near a point shows its snap marker: ' + str(workspace.snap_marker))
+        press((.303, .307))
+        anchor = session.document.anchors[-1]
+        check(math.dist((anchor.x, anchor.y), (.303, .307)) < 1e-9, 'a Pin click snaps onto a nearby point: ' + str((anchor.x, anchor.y)))
+        press((.2, .15), (4, 0))
+        anchor = session.document.anchors[-1]
+        check(len(session.document.anchors) == 2 and piece.contains((anchor.x, anchor.y)),
+              'a Pin snap that would land on a hole outline is skipped and the pin stays in the fabric: ' + str((anchor.x, anchor.y)))
+        workspace.choose_tool('TACK')
+        press((.36, .36))
+        check(workspace.pending_tack is not None and math.dist(workspace.pending_tack[1], (.36, .36)) < 1e-9,
+              'a Tack click snaps onto a nearby point: ' + str(workspace.pending_tack))
+        workspace.pending_tack = None
+        workspace.tool = 'TACK_FABRIC'
+        press((.2, .15), (4, 0))
+        check(workspace.pending_join is not None and piece.contains(workspace.pending_join[1:]),
+              'a fabric Tack next to a hole outline is placed instead of failing the inside check: ' + str(workspace.message))
+        workspace.pending_join = None
+        workspace.choose_tool('DART')
+        press((.205, 0))
+        check(len(workspace.dart_base) == 1 and abs(workspace.dart_base[0][1] - .5) < 1e-6,
+              'the first dart base click snaps to the outline midpoint: ' + str(workspace.dart_base))
+        workspace.dart_base = []
+        workspace.choose_tool('SELECT')
+        top = session.document.edge(piece.id, 2)
+        middle = session.document.edge_point(top, .5)
+        press(middle, (3, 1), 'DOUBLE_CLICK')
+        nodes = session.document.find(piece.id).path('OUTER').vertices
+        check(len(nodes) == 5 and any(math.dist((node.x, node.y), middle) < 1e-9 for node in nodes),
+              'a double-click edge split snaps to the edge midpoint: ' + str([(node.x, node.y) for node in nodes]))
+        check(not workspace.error_message, 'click snapping raises no editor error: ' + str(workspace.error_message))
+    finally:
+        workspace.clear_interaction_references()
+        workspace.dart_base = []
+        workspace.pending_tack = None
+        workspace.pending_join = None
+        workspace.session = original_session
+        workspace.persist()
+        workspace.snap = original_snap
+        if original_full and not workspace.full:
+            workspace.restore_canvas()
+        workspace.view.cx, workspace.view.cy, workspace.view.zoom = original_view
+        workspace.choose_tool(original_tool)
+        workspace.canvas_layout = workspace.make_layout()
+
+
 def run():
     passed = []
 
@@ -1103,6 +1186,7 @@ def run():
 
             canvas_point = (workspace.canvas_layout.canvas.x + workspace.canvas_layout.canvas.w / 2, workspace.canvas_layout.canvas.y + 80)
             check_interaction_regressions(workspace, event, canvas_point, check)
+            check_click_snapping(workspace, event, check)
 
             workspace.choose_tool('RECTANGLE')
             for start, end in [((-.4, 0), (-.1, .4)), ((.1, 0), (.4, .4))]:

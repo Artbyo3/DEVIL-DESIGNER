@@ -406,9 +406,43 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
             self.snap_cache = (self.session.document, self._stored, snapping.Targets(self.session.document))
         return self.snap_cache[2]
 
+    def snap_reach(self):
+        return snapping.SNAP_PIXELS * self.canvas_layout.scale / self.view.zoom
+
     def geometry_snap(self, point, targets):
-        self.snap_marker = targets.snap(point, snapping.SNAP_PIXELS * self.canvas_layout.scale / self.view.zoom)
+        self.snap_marker = targets.snap(point, self.snap_reach())
         return self.snap_marker
+
+    def fabric_point(self, event, pattern):
+        raw = self.view.world(self.pointer, self.canvas_layout.canvas)
+        snapped = self.world_pointer(event, geometry=True)
+        marker = self.snap_marker
+        spot = snapping.fabric_spot(pattern, (snapped, self.world_pointer(event), raw)) or raw
+        self.snap_marker = marker if marker is not None and spot == snapped else None
+        return spot
+
+    def edge_click_fraction(self, event, edge):
+        control = self.session.document.edge_curve(edge)
+        if self.snap != event.ctrl:
+            found = self.geometry_snap(self.view.world(self.pointer, self.canvas_layout.canvas), self.design_snap_targets())
+            fraction = snapping.edge_fraction(control, found[0], self.snap_reach()) if found else None
+            if fraction is not None:
+                return fraction
+            self.snap_marker = None
+        return curves.closest_fraction(control, self.world_pointer(event))[0]
+
+    def click_snap_preview(self, event):
+        if self.tool == 'DART' and len(self.dart_base) < 2:
+            edge = self.design_hit_edge()
+            if edge is not None and edge.path == 'OUTER':
+                self.edge_click_fraction(event, edge)
+                return
+        else:
+            pattern, _ = self.design_hit()
+            if pattern is not None:
+                self.fabric_point(event, pattern)
+                return
+        self.snap_marker = None
 
     def move_snap(self):
         if 'snap' not in self.gesture:
@@ -718,10 +752,7 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
             edge = self.design_hit_edge()
             if edge:
                 self.cancel_gesture()
-                click_pt = self.world_pointer(event)
-                control = self.session.document.edge_curve(edge)
-                frac, _ = curves.closest_fraction(control, click_pt)
-                frac = max(0.01, min(0.99, frac))
+                frac = max(0.01, min(0.99, self.edge_click_fraction(event, edge)))
                 new_v = [None]
                 def apply_split():
                     v = self.session.document.split_edge(edge, frac)
@@ -1285,6 +1316,8 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                     self.preview = [self.world_pointer(event, prev_pt, geometry=True)]
         elif event.type == 'MOUSEMOVE' and canvas and not self.gesture and self.tool in {'POLYGON', 'INTERNAL', 'KNIFE', 'RECTANGLE', 'ELLIPSE'}:
             self.world_pointer(event, geometry=True)
+        elif event.type == 'MOUSEMOVE' and canvas and not self.gesture and self.tool in {'PIN', 'TACK', 'TACK_FABRIC', 'DART'}:
+            self.click_snap_preview(event)
         if self.seam_selected and press and event.type == 'B':
             self.run_edit(lambda: self.session.reverse_seam(self.seam_selected), 'Seam direction reversed.')
             return {'RUNNING_MODAL'}

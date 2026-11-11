@@ -9,6 +9,8 @@ EDGE = 'EDGE'
 RANK = {POINT: 0, INTERSECTION: 1, MIDPOINT: 2}
 LABELS = {POINT: 'Point', MIDPOINT: 'Midpoint', INTERSECTION: 'Intersection', EDGE: 'Edge'}
 SNAP_PIXELS = 10
+EDGE_END_MARGIN = .01
+ON_EDGE_SHARE = .05
 
 
 def nearest_on_line(line, point):
@@ -86,3 +88,14 @@ class Targets:
         if near:
             return min(near, key=lambda item: item[0])[1], EDGE
         return None
+
+
+def fabric_spot(pattern, candidates):
+    return next((spot for spot in candidates if spot is not None and pattern.contains(spot)), None)
+
+
+def edge_fraction(control, spot, reach):
+    fraction, distance = curves.closest_fraction(control, spot)
+    if distance <= reach * ON_EDGE_SHARE and EDGE_END_MARGIN < fraction < 1 - EDGE_END_MARGIN:
+        return fraction
+    return None
