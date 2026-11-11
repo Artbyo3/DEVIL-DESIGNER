@@ -444,6 +444,32 @@ def test_shell_size_is_bounded(scene):
     scene.dd_avatar = avatar
 
 
+def drape_with_self_collision(scene, enabled):
+    scene.dd_self_collision = enabled
+    body = torso(24, 16)
+    simulation = wrapped_tube(scene, body)
+    run_frames(scene, 10)
+    started = time.perf_counter()
+    run_frames(scene, 40)
+    spent = time.perf_counter() - started
+    drape = points(simulation).copy()
+    fresh(scene)
+    bpy.data.objects.remove(body, do_unlink=True)
+    return spent, drape
+
+
+def test_self_collision_off_skips_self_contact(scene):
+    pin_top, enabled = scene.dd_pin_top, scene.dd_self_collision
+    scene.dd_pin_top = True
+    drape_with_self_collision(scene, True)
+    with_self, _ = drape_with_self_collision(scene, True)
+    without_self, drape = drape_with_self_collision(scene, False)
+    scene.dd_pin_top, scene.dd_self_collision = pin_top, enabled
+    print('SELF CONTACT MS', round(with_self * 1000, 1), round(without_self * 1000, 1), flush=True)
+    check(without_self < with_self * .94, 'turning self collision off makes the live drape cheaper')
+    check(np.isfinite(drape).all() and float(drape[:, 2].min()) > .3, 'cloth without self collision still drapes on the body')
+
+
 def test_contact_gate_matches_exact_contact(scene):
     pin_top = scene.dd_pin_top
     scene.dd_pin_top = True
@@ -489,6 +515,7 @@ test_open_avatar_collision(scene)
 test_paired_panels_stay_on_their_side(scene, body)
 test_pins_and_tacks(scene, body)
 test_shell_size_is_bounded(scene)
+test_self_collision_off_skips_self_contact(scene)
 test_contact_gate_matches_exact_contact(scene)
 test_dense_body_costs_like_a_light_one(scene)
 devil_designer.unregister()

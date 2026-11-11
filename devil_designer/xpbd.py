@@ -498,6 +498,7 @@ def attach(context, obj, doc, panels, pieces, maps, plan, pinned, tacks):
     set_input(obj, 'Body Shell', bake_shell(context, collider))
     set_input(obj, 'Gravity', tuple(component / unit for component in scene.gravity))
     set_input(obj, 'Inner Substeps', LIVE_SUBSTEPS)
+    set_input(obj, 'Self Contact', scene.dd_self_collision)
     set_input(obj, 'Grab Stride', GRAB_STRIDE / unit)
     set_input(obj, 'Grab Reach', GRAB_REACH / unit)
     obj.update_tag()

@@ -4,7 +4,7 @@ import bpy
 ASSET_FILE = 'geometry_nodes_dynamics_assets.blend'
 STOCK_GROUPS = ('XPBD Simulation', 'XPBD Solver', 'Gravity', 'Collider', 'Set Friction', 'Set Geometry Tags',
                 'Set Geo Updater - Deform Only')
-GROUP_VERSION = 7
+GROUP_VERSION = 8
 STOCK_PREFIX = 'DD Stock '
 CLOTH_GROUP = 'DD XPBD Cloth'
 SOLVER_GROUP = 'DD XPBD Solver'
@@ -122,7 +122,7 @@ def load_stock_groups():
 
 def socket(tree, name, in_out, socket_type, default=None):
     item = tree.interface.new_socket(name, in_out=in_out, socket_type=socket_type)
-    if socket_type in {'NodeSocketFloat', 'NodeSocketInt', 'NodeSocketVector'}:
+    if socket_type in {'NodeSocketFloat', 'NodeSocketInt', 'NodeSocketVector', 'NodeSocketBool'}:
         item.structure_type = 'SINGLE'
     if default is not None:
         item.default_value = default
@@ -226,6 +226,7 @@ def build_contact_group():
     socket(tree, 'Geometry', 'INPUT', 'NodeSocketGeometry')
     socket(tree, 'Body', 'INPUT', 'NodeSocketGeometry')
     socket(tree, 'Body Proxy', 'INPUT', 'NodeSocketGeometry')
+    socket(tree, 'Self Contact', 'INPUT', 'NodeSocketBool', True)
     socket(tree, 'Geometry', 'OUTPUT', 'NodeSocketGeometry')
     graph = Graph(tree)
     source = tree.nodes.new('NodeGroupInput')
@@ -266,7 +267,8 @@ def build_contact_group():
     odd = graph.compare('GREATER_THAN', graph.math('FLOORED_MODULO', frame_number, 2.0), .5)
     body_stage = graph.switch('GEOMETRY', odd, geometry, stored.outputs[0])
 
-    moved = graph.switch('GEOMETRY', odd, self_contact(graph, geometry, position, normal, velocity), body_stage)
+    contact_stage = graph.switch('GEOMETRY', source.outputs['Self Contact'], geometry, self_contact(graph, geometry, position, normal, velocity))
+    moved = graph.switch('GEOMETRY', odd, contact_stage, body_stage)
 
     partner = graph.attribute('dd_partner', 'INT')
     across = graph.node('GeometryNodeFieldAtIndex', settings={'data_type': 'FLOAT_VECTOR', 'domain': 'POINT'})
@@ -292,6 +294,7 @@ def build_solver_group(contact):
     socket(tree, 'Inner Substeps', 'INPUT', 'NodeSocketInt', 4)
     socket(tree, 'Body', 'INPUT', 'NodeSocketGeometry')
     socket(tree, 'Body Proxy', 'INPUT', 'NodeSocketGeometry')
+    socket(tree, 'Self Contact', 'INPUT', 'NodeSocketBool', True)
     nodes = tree.nodes
     nodes['Switch'].inputs['Switch'].default_value = True
     step = nodes['XPBD Solver Test Wrapper.001']
@@ -305,6 +308,7 @@ def build_solver_group(contact):
     tree.links.new(fetched.outputs['Item'], solved.inputs['Geometry'])
     tree.links.new(source.outputs['Body'], solved.inputs['Body'])
     tree.links.new(source.outputs['Body Proxy'], solved.inputs['Body Proxy'])
+    tree.links.new(source.outputs['Self Contact'], solved.inputs['Self Contact'])
     stored = graph.node('NodeStoreBundleItem', settings={'socket_type': 'GEOMETRY'}, Path=GEOMETRY_PATH)
     tree.links.new(step.outputs['World'], stored.inputs['Bundle'])
     tree.links.new(solved.outputs['Geometry'], stored.inputs['Item'])
@@ -318,12 +322,14 @@ def build_simulation_group(solver):
     socket(tree, 'Inner Substeps', 'INPUT', 'NodeSocketInt', 4)
     socket(tree, 'Body', 'INPUT', 'NodeSocketGeometry')
     socket(tree, 'Body Proxy', 'INPUT', 'NodeSocketGeometry')
+    socket(tree, 'Self Contact', 'INPUT', 'NodeSocketBool', True)
     node = tree.nodes['XPBD Solver']
     node.node_tree = solver
     source = tree.nodes.new('NodeGroupInput')
     tree.links.new(source.outputs['Inner Substeps'], node.inputs['Inner Substeps'])
     tree.links.new(source.outputs['Body'], node.inputs['Body'])
     tree.links.new(source.outputs['Body Proxy'], node.inputs['Body Proxy'])
+    tree.links.new(source.outputs['Self Contact'], node.inputs['Self Contact'])
     return tree
 
 
@@ -335,6 +341,7 @@ def build_cloth_group(simulation):
     socket(tree, 'Body', 'INPUT', 'NodeSocketObject')
     socket(tree, 'Body Shell', 'INPUT', 'NodeSocketObject')
     socket(tree, 'Body Proxy', 'INPUT', 'NodeSocketObject')
+    socket(tree, 'Self Contact', 'INPUT', 'NodeSocketBool', True)
     socket(tree, 'Grab Handle', 'INPUT', 'NodeSocketObject')
     socket(tree, 'Grab Index', 'INPUT', 'NodeSocketInt', -1)
     socket(tree, 'Grab Radius', 'INPUT', 'NodeSocketFloat', .05)
@@ -458,7 +465,7 @@ def build_cloth_group(simulation):
     world = graph.bundle((('Cloth', 'BUNDLE', cloth),))
 
     proxy = graph.node('GeometryNodeObjectInfo', out['Body Proxy'], settings={'transform_space': 'RELATIVE'}).outputs['Geometry']
-    solved = graph.group(simulation, World=world, Substeps=out['Contact Passes'], Inner_Substeps=out['Inner Substeps'], Body=body, Body_Proxy=proxy,
+    solved = graph.group(simulation, World=world, Substeps=out['Contact Passes'], Inner_Substeps=out['Inner Substeps'], Body=body, Body_Proxy=proxy, Self_Contact=out['Self Contact'],
                          Constraint_Steps=out['Iterations'], Time_Scale=1.0, Solver_Output_Path='SolverData')
     result = graph.node('NodeGetBundleItem', settings={'socket_type': 'GEOMETRY'}, Path=GEOMETRY_PATH)
     tree.links.new(solved.outputs['World'], result.inputs['Bundle'])

@@ -173,6 +173,7 @@ def quality(simulation):
 def apply_variant(simulation, variant, body, shell, far):
     xpbd.set_input(simulation, 'Body', far if variant in {'no_surface', 'no_collision'} else body)
     xpbd.set_input(simulation, 'Body Shell', None if variant in {'no_shell', 'no_collision'} else shell)
+    xpbd.set_input(simulation, 'Self Contact', variant != 'no_self')
     simulation.update_tag()
 
 
