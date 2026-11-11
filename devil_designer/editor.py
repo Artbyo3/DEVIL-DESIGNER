@@ -386,7 +386,7 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                         'POLYGON': "Click corners. Click the first corner or press Enter to close.",
                         'RECTANGLE': "Drag on the canvas to create a rectangular pattern.",
                         'ELLIPSE': 'Drag an ellipse; edit its Bezier handles with V.',
-                        'INTERNAL': 'Click internal points. Enter makes a line; click its first point for a closed shape.',
+                        'INTERNAL': 'Click internal points. Enter makes a line; click its first point for a closed shape. Drag a line point to move it.',
                         'PIN': 'Click fabric to pin it. Click an existing pin to select it.',
                         'PIN_BOX': 'Drag over fabric to pin an area.',
                         'PIN_EDGE': 'Click an edge to pin along it.',
@@ -478,6 +478,51 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
 
     def hit(self):
         return self.design_hit()
+
+    def draft_click(self, event, settle=False):
+        if self.tool == 'INTERNAL' and not self.draft and self.session.selected is None:
+            owner, _ = self.hit()
+            if owner:
+                self.session.selected = owner.id
+                self.session.path = 'OUTER'
+        first_pt = (self.draft[0].x, self.draft[0].y) if (self.draft and hasattr(self.draft[0], 'x')) else (self.draft[0] if self.draft else None)
+        if len(self.draft) >= 3 and first_pt and math.dist(self.pointer, self.view.screen(first_pt, self.canvas_layout.canvas)) < 12 * self.canvas_layout.scale:
+            self.finish_polygon(True)
+            return
+        prev_pt = (self.draft[-1].x, self.draft[-1].y) if (self.draft and hasattr(self.draft[-1], 'x')) else (self.draft[-1] if self.draft else None)
+        point = self.world_pointer(event, prev_pt, geometry=True)
+        outline_edge = self.design_hit_edge() if self.tool == 'INTERNAL' else None
+        if outline_edge is not None and outline_edge.path == 'OUTER':
+            document = self.session.document
+            point = document.edge_point(outline_edge, curves.closest_fraction(document.edge_curve(outline_edge), point)[0])
+        if not self.draft or math.dist(point, prev_pt) > 1e-6:
+            v = Vertex(point[0], point[1], point_type='CORNER')
+            self.draft.append(v)
+            self.preview = [point]
+            self.gesture = None if settle else dict(mode='DRAFT_POINT', vertex=v, start=point, moved=False)
+
+    def internal_point_grab(self):
+        pattern, corner = self.hit()
+        if pattern is None or corner is None or self.hit_path == 'OUTER' or self.hit_handle:
+            return None
+        return dict(mode='PATH_GRAB', pattern=pattern.id, path=self.hit_path, corner=corner, pointer=self.pointer,
+                    start=self.view.world(self.pointer, self.canvas_layout.canvas))
+
+    def path_grab_event(self, event):
+        grab = self.gesture
+        if event.type == 'MOUSEMOVE':
+            if math.dist(self.pointer, grab['pointer']) <= 4 * self.canvas_layout.scale:
+                return {'RUNNING_MODAL'}
+            vertex = self.session.document.find(grab['pattern']).path(grab['path']).vertices[grab['corner']]
+            self.session.select_point(grab['pattern'], grab['path'], grab['corner'], toggle=False)
+            self.sync_selection()
+            self.gesture = dict(mode='MOVE', start=grab['start'], ref_pos=(vertex.x, vertex.y), delta=(0.0, 0.0), moved=False)
+            return None
+        self.gesture = None
+        if event.type == 'LEFTMOUSE' and event.value == 'RELEASE':
+            self.draft_click(event, settle=True)
+            return {'RUNNING_MODAL'}
+        return None
 
     def hit_edge(self):
         return self.design_hit_edge()
@@ -839,6 +884,10 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
             return {'FINISHED'}
         if event.ctrl and event.type == 'S':
             return {'PASS_THROUGH'}
+        if self.gesture and self.gesture.get('mode') == 'PATH_GRAB':
+            grabbed = self.path_grab_event(event)
+            if grabbed is not None:
+                return grabbed
         if self.gesture and self.gesture.get('mode') == 'DRAFT_POINT':
             if event.type not in {'MOUSEMOVE', 'LEFTMOUSE'} or (event.type == 'LEFTMOUSE' and press):
                 self.gesture = None
@@ -1352,26 +1401,11 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                     self.draft.append(point)
                     self.preview = [point]
             elif self.tool in {'POLYGON', 'INTERNAL'}:
-                if self.tool == 'INTERNAL' and not self.draft and self.session.selected is None:
-                    owner, _ = self.hit()
-                    if owner:
-                        self.session.selected = owner.id
-                        self.session.path = 'OUTER'
-                first_pt = (self.draft[0].x, self.draft[0].y) if (self.draft and hasattr(self.draft[0], 'x')) else (self.draft[0] if self.draft else None)
-                if len(self.draft) >= 3 and first_pt and math.dist(self.pointer, self.view.screen(first_pt, self.canvas_layout.canvas)) < 12 * self.canvas_layout.scale:
-                    self.finish_polygon(True)
+                grab = self.internal_point_grab() if self.tool == 'INTERNAL' and not self.draft else None
+                if grab:
+                    self.gesture = grab
                 else:
-                    prev_pt = (self.draft[-1].x, self.draft[-1].y) if (self.draft and hasattr(self.draft[-1], 'x')) else (self.draft[-1] if self.draft else None)
-                    point = self.world_pointer(event, prev_pt, geometry=True)
-                    outline_edge = self.design_hit_edge() if self.tool == 'INTERNAL' else None
-                    if outline_edge is not None and outline_edge.path == 'OUTER':
-                        document = self.session.document
-                        point = document.edge_point(outline_edge, curves.closest_fraction(document.edge_curve(outline_edge), point)[0])
-                    if not self.draft or math.dist(point, prev_pt) > 1e-6:
-                        v = Vertex(point[0], point[1], point_type='CORNER')
-                        self.draft.append(v)
-                        self.preview = [point]
-                        self.gesture = dict(mode='DRAFT_POINT', vertex=v, start=point, moved=False)
+                    self.draft_click(event)
             elif self.tool in {'RECTANGLE', 'ELLIPSE', 'PIN_BOX'}:
                 if self._scene.dd_internal_mode:
                     owner, _ = self.hit()

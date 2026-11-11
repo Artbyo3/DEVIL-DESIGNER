@@ -76,6 +76,10 @@ preserve valid pair membership. Designs without pair records remain unchanged.
 - Internal lines and closed internal shapes, distinct from the outer boundary.
 - Sew to internal geometry or cut along it, including princess seams and slits.
 - Trace existing geometry into a new pattern.
+- Edit internal lines in place with the Internal tool: drag a line point to move it,
+  double-click a line to add a point, Delete removes the selected point, and a plain
+  click on a line point still starts a new line there. Right-click anywhere along a line
+  opens its cut, fold, offset and split actions.
 - A dart tool that defines its legs and automatically creates its closing sewing.
 - Support self-sewing within a piece where needed for darts; the current ban on
   all same-pattern sewing cannot remain a universal rule.

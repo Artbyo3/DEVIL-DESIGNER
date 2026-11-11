@@ -1163,7 +1163,7 @@ class MinimalCards:
         return {'RECTANGLE': 'Drag to draw a panel / Shift for a square',
                 'ELLIPSE': 'Drag to draw an ellipse / Shift for a circle',
                 'POLYGON': 'Click to draw / Click the first point or Enter to finish',
-                'INTERNAL': 'Click to draw an internal path / Enter to finish',
+                'INTERNAL': 'Click to draw an internal path / Enter to finish / Drag a point to move it / Double-click a line to add a point',
                 'PIN': 'Click a pattern point to pin or unpin',
                 'PIN_BOX': 'Drag over fabric to pin an area',
                 'PIN_EDGE': 'Click an edge to pin along it',
