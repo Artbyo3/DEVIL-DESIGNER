@@ -151,6 +151,19 @@ class ReferenceStackTests(unittest.TestCase):
         self.assertTrue(tracing.inside(tilted, (1, 1)))
         self.assertFalse(tracing.inside(tilted, (.05, .05)))
 
+    def test_corner_scale_keeps_the_image_center_and_aspect(self):
+        width, origin = tracing.scaled_about_center(2, (400, 200), (-1, 3), 1.5)
+        self.assertAlmostEqual(width, 3)
+        self.assertAlmostEqual(origin[0] + width / 2, 0)
+        self.assertAlmostEqual(origin[1] + width * 200 / 400 / 2, 3.5)
+        with self.assertRaises(ValueError):
+            tracing.scaled_about_center(2, (400, 200), (0, 0), 0)
+
+    def test_knob_rotation_follows_the_pointer_snaps_and_wraps(self):
+        self.assertAlmostEqual(tracing.turned(0, (0, 0), (0, 10), (-10, 0)), 90)
+        self.assertAlmostEqual(tracing.turned(10, (0, 0), (0, 10), (-10, 1), 15.0), 90)
+        self.assertAlmostEqual(tracing.turned(170, (0, 0), (0, 10), (-10, 0)), -100)
+
 
 class DrawingTests(unittest.TestCase):
     def setUp(self):
@@ -201,6 +214,19 @@ class DrawingTests(unittest.TestCase):
         self.load.side_effect = ValueError('Reference image not found. Choose the file again.')
         self.assertFalse(tracing.draw_reference(self.ed, self.renderer))
         self.assertIn('Choose the file again', self.scene.dd_trace_error)
+
+    def test_a_missing_second_image_is_reported_not_skipped_silently(self):
+        self.scene.dd_trace_stack = '[{"path": "C:/refs/back.png"}]'
+        def load(path, retry=False):
+            if path.endswith('back.png'):
+                raise ValueError('Reference image not found. Choose the file again with Load image.')
+            return SimpleNamespace(size=(400, 200))
+        self.load.side_effect = load
+        self.assertTrue(tracing.draw_reference(self.ed, self.renderer))
+        self.assertIn('back.png', self.scene.dd_trace_error)
+        self.load.side_effect = None
+        self.assertTrue(tracing.draw_reference(self.ed, self.renderer))
+        self.assertEqual(self.scene.dd_trace_error, '')
 
     def test_gpu_failure_restores_blend_and_success_clears_error(self):
         self.batch_factory.return_value.draw.side_effect = RuntimeError('GPU error')

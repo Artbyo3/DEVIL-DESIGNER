@@ -47,6 +47,8 @@ with tempfile.TemporaryDirectory(prefix='tracing-', dir=prepare_scratch()) as di
     check(math.isclose(tracing.calibrate(scene, (0, 3), (0, 3.5)), 1), 'measured calibration ignores Blender display unit scaling')
     check(math.isclose(scene.dd_trace_x, -0.5), 'calibration keeps first picked endpoint fixed')
     scene.dd_trace_visible = False
+    scene.dd_trace_rotation, scene.dd_trace_flip_x, scene.dd_trace_locked = 30.0, True, True
+    tracing.write_stack(scene, [dict(tracing.ENTRY_FIELDS, path=image_path, x=2.0, opacity=.8, rotation=-15.0, flip_y=True)])
     bpy.ops.wm.save_as_mainfile(filepath=blend_path)
     tracing._images.clear()
     bpy.ops.wm.open_mainfile(filepath=blend_path)
@@ -55,6 +57,12 @@ with tempfile.TemporaryDirectory(prefix='tracing-', dir=prepare_scratch()) as di
     check(math.isclose(scene.dd_trace_width, 1) and math.isclose(scene.dd_trace_x, -0.5) and math.isclose(scene.dd_trace_y, 3), 'size and position survive reopening')
     check(math.isclose(scene.dd_trace_opacity, 0.6, rel_tol=1e-6) and math.isclose(scene.dd_trace_length, 0.25), 'opacity and measured distance survive reopening')
     check(tracing.load_image(scene.dd_trace_path).size[:] == (8, 4), 'image is restored from path with an empty runtime cache')
+    check(math.isclose(scene.dd_trace_rotation, 30) and scene.dd_trace_flip_x and scene.dd_trace_locked, 'rotation, mirroring and lock survive reopening')
+    second = tracing.stack(scene)
+    check(len(second) == 1 and second[0]['path'] == image_path and math.isclose(second[0]['x'], 2) and math.isclose(second[0]['opacity'], .8)
+          and math.isclose(second[0]['rotation'], -15) and second[0]['flip_y'], 'every other reference image and its own placement and opacity survive reopening')
+    scene.dd_trace_locked = False
+    tracing.write_stack(scene, [])
     scene.dd_trace_path = str(Path(directory) / 'missing.png')
     check(not tracing.reference_corners(scene) and 'not found' in scene.dd_trace_error, 'missing reference presents a recoverable artist message')
     for image in list(bpy.data.images):

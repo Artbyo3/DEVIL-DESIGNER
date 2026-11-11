@@ -688,6 +688,19 @@ class Renderer:
                                   frame['knob'][1] + math.sin(step * math.tau / 20) * (TRANSFORM_KNOB_RADIUS + 1.5) * s) for step in range(21)]
                     self.lines(knob_ring, TRANSFORM_FRAME, 1.0, True)
 
+                trace = ed.trace_frame()
+                if trace is not None:
+                    trace_hover = ed.trace_frame_hit(trace)
+                    self.lines(trace['corners'] + [trace['corners'][0]], TRANSFORM_FRAME, 1.0, True)
+                    self.lines([trace['stem'], trace['knob']], TRANSFORM_FRAME, 1.0)
+                    half = TRANSFORM_HANDLE_SIZE * s / 2
+                    for corner in trace['corners']:
+                        hot = trace_hover == 'SCALE' and math.dist(ed.pointer, corner) <= TRANSFORM_HIT_RADIUS * s
+                        square = Rect(corner[0] - half, corner[1] - half, 2 * half, 2 * half)
+                        self.round_rect(square, TRANSFORM_HANDLE_HOVER if hot else TRANSFORM_HANDLE, radius=1)
+                        self.round_rect_outline(square, TRANSFORM_FRAME, radius=1, width=1.0)
+                    self.dot(trace['knob'], TRANSFORM_KNOB_RADIUS, TRANSFORM_HANDLE_HOVER if trace_hover == 'ROTATE' else TRANSFORM_HANDLE)
+
                 if ed.session.has_selection() and not (gesture and gesture.get('mode') == 'SET_PIVOT'):
                     p_screen = view.screen(ed.session.get_pivot(), c)
                     arm = (9 if hover == 'PIVOT' else 6) * s

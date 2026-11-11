@@ -125,6 +125,23 @@ def image_corners(width, image_size, position, rotation=0.0):
                   center_y + (x - center_x) * sine + (y - center_y) * cosine) for x, y in corners)
 
 
+def scaled_about_center(width, image_size, position, factor):
+    if not math.isfinite(factor) or factor <= 0:
+        raise ValueError('Drag the corner away from the image center.')
+    height = width * image_size[1] / image_size[0]
+    center_x, center_y = position[0] + width / 2, position[1] + height / 2
+    scaled = max(width * factor, 0.000001)
+    return scaled, (center_x - scaled / 2, center_y - scaled * image_size[1] / image_size[0] / 2)
+
+
+def turned(rotation, center, start, now, step=0.0):
+    angle = rotation + math.degrees(math.atan2(now[1] - center[1], now[0] - center[0])
+                                    - math.atan2(start[1] - center[1], start[0] - center[0]))
+    if step:
+        angle = round(angle / step) * step
+    return (angle + 180.0) % 360.0 - 180.0
+
+
 def inside(corners, point):
     signs = [(bx - ax) * (point[1] - ay) - (by - ay) * (point[0] - ax) >= 0
              for (ax, ay), (bx, by) in zip(corners, corners[1:] + corners[:1])]
@@ -234,21 +251,26 @@ def draw_entry(ed, renderer, entry):
 
 def draw_reference(ed, renderer):
     scene = ed._scene
+    missing = []
     for entry in stack(scene):
         if entry['visible'] and entry['opacity'] > 0:
             try:
                 draw_entry(ed, renderer, entry)
             except (ValueError, RuntimeError, ReferenceError):
-                continue
-    if not scene.dd_trace_visible or scene.dd_trace_opacity <= 0 or not scene.dd_trace_path:
-        return False
-    try:
-        draw_entry(ed, renderer, active_entry(scene))
-    except (ValueError, RuntimeError, ReferenceError) as error:
-        scene.dd_trace_error = str(error) if isinstance(error, ValueError) else 'Could not display the reference image. Try Load image again.'
-        return False
-    scene.dd_trace_error = ''
-    return True
+                missing.append(Path(entry['path']).name)
+    shown = False
+    active_error = ''
+    if scene.dd_trace_visible and scene.dd_trace_opacity > 0 and scene.dd_trace_path:
+        try:
+            draw_entry(ed, renderer, active_entry(scene))
+            shown = True
+        except (ValueError, RuntimeError, ReferenceError) as error:
+            active_error = str(error) if isinstance(error, ValueError) else 'Could not display the reference image. Try Load image again.'
+    notes = [active_error] if active_error else []
+    if missing:
+        notes.append('Reference image not found: ' + ', '.join(missing) + '. Use Next image, then Replace image.')
+    scene.dd_trace_error = ' '.join(notes)
+    return shown
 
 
 def _make_operator(bpy):

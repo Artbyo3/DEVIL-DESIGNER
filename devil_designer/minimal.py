@@ -714,7 +714,7 @@ class MinimalCards:
                     ('INFO', 'Scale only', 'Cannot correct photo distortion')]
         elif kind == 'TRACE_POSITION':
             title = 'Image placement'
-            rows = [('TRACE_DRAG', 'Move on canvas', 'Drag the image'),
+            rows = [('TRACE_DRAG', 'Place on canvas', 'Drag, corners scale, knob rotates'),
                     ('SLIDER', 'dd_trace_width', 'Width'), ('SLIDER', 'dd_trace_x', 'X position'),
                     ('SLIDER', 'dd_trace_y', 'Y position'), ('SLIDER', 'dd_trace_rotation', 'Rotation'),
                     ('PAIR_ACTIONS', 'TRACE_FLIP_X', 'TRACE_FLIP_Y', 'Mirror H', 'Mirror V'),
@@ -1546,7 +1546,7 @@ class MinimalCards:
                 scene.dd_trace_visible = True
                 self.trace_drag = 'ARMED'
                 self.card_kind = None
-                self.message = 'Drag the image on the canvas. Escape or right-click finishes.'
+                self.message = 'Drag the image to move it, a corner to scale it, or the knob to rotate it. Shift snaps rotation. Escape finishes.'
         elif key == 'TRACE_VISIBLE':
             scene.dd_trace_visible = not scene.dd_trace_visible
         elif key.startswith('TRACE_OPACITY_'):

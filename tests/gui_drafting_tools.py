@@ -87,6 +87,99 @@ def internal_paths(workspace, send, click, screen, check):
     workspace.cancel_gesture()
 
 
+def reference_images(workspace, send, click, screen, check):
+    import math
+    import tempfile
+    from devil_designer import tracing
+    from devil_designer.core import Document, Session
+    from tools.workspace import prepare_scratch
+    scene = bpy.context.scene
+    folder = Path(tempfile.mkdtemp(prefix='references-', dir=prepare_scratch()))
+    files = []
+    for name, size in (('front.png', (8, 4)), ('back.png', (6, 3))):
+        image = bpy.data.images.new(name, width=size[0], height=size[1], alpha=True)
+        image.generated_color = (.8, .3, .2, 1)
+        image.filepath_raw = str(folder / name)
+        image.file_format = 'PNG'
+        image.save()
+        bpy.data.images.remove(image)
+        files.append(str(folder / name))
+    workspace.clear_interaction_references()
+    workspace.session = Session(Document())
+    workspace.session.add([(0, 0), (.4, 0), (.4, .5), (0, .5)])
+    workspace.persist()
+    workspace.choose_tool('SELECT')
+    check(bpy.ops.devil.load_trace_image(filepath=files[0]) == {'FINISHED'}, 'a reference image loads')
+    scene.dd_trace_width, scene.dd_trace_x, scene.dd_trace_y, scene.dd_trace_rotation = .4, -.1, .05, 0.0
+    workspace.fit()
+
+    def world_center():
+        corners = tracing.reference_corners(scene)
+        return (sum(x for x, _ in corners) / 4, sum(y for _, y in corners) / 4)
+
+    def drag(start, end, **modifiers):
+        send('MOUSEMOVE', start, **modifiers)
+        send('LEFTMOUSE', start, **modifiers)
+        middle = ((start[0] + end[0]) / 2, (start[1] + end[1]) / 2)
+        send('MOUSEMOVE', middle, **modifiers)
+        send('MOUSEMOVE', end, **modifiers)
+        workspace.error_message = None
+        workspace.renderer.draw(workspace)
+        check(not workspace.error_message, 'the reference image draws while a placement handle is dragged')
+        send('LEFTMOUSE', end, 'RELEASE', **modifiers)
+
+    workspace.minimal_action('TRACE_DRAG')
+    frame = workspace.trace_frame()
+    check(workspace.trace_drag == 'ARMED' and frame is not None, 'Place on canvas shows a frame with handles around the image')
+    workspace.error_message = None
+    workspace.renderer.draw(workspace)
+    check(not workspace.error_message, 'the placement frame draws')
+    before_center = world_center()
+    corner, center = frame['corners'][2], frame['center']
+    drag(corner, (center[0] + (corner[0] - center[0]) * 1.5, center[1] + (corner[1] - center[1]) * 1.5))
+    check(abs(scene.dd_trace_width - .6) < .004, 'dragging a corner scales the image directly')
+    check(math.dist(world_center(), before_center) < 1e-3, 'corner scaling keeps the image centered')
+    frame = workspace.trace_frame()
+    knob, center = frame['knob'], frame['center']
+    turned = (center[0] - (knob[1] - center[1]), center[1] + (knob[0] - center[0]))
+    drag(knob, turned)
+    check(abs(scene.dd_trace_rotation - 90) < 1, 'dragging the knob rotates the image directly')
+    frame = workspace.trace_frame()
+    knob, center = frame['knob'], frame['center']
+    tilt = math.radians(37)
+    offset = (knob[0] - center[0], knob[1] - center[1])
+    drag(knob, (center[0] + offset[0] * math.cos(tilt) - offset[1] * math.sin(tilt),
+                center[1] + offset[0] * math.sin(tilt) + offset[1] * math.cos(tilt)), shift=True)
+    check(abs(scene.dd_trace_rotation % 15) < 1e-6 or abs(scene.dd_trace_rotation % 15 - 15) < 1e-6,
+          'Shift snaps knob rotation to 15 degree steps')
+    before = (scene.dd_trace_x, scene.dd_trace_y)
+    center = workspace.trace_frame()['center']
+    drag(center, (center[0] + 40, center[1] + 20))
+    check(scene.dd_trace_x > before[0] and scene.dd_trace_y > before[1], 'dragging inside the image still moves it')
+    send('ESC', center)
+    check(workspace.trace_drag is None and workspace.trace_frame() is None, 'Escape finishes placement and hides the handles')
+    scene.dd_trace_locked = True
+    workspace.minimal_action('TRACE_DRAG')
+    width = scene.dd_trace_width
+    drag(center, (center[0] + 60, center[1]))
+    check(workspace.trace_frame() is None and scene.dd_trace_width == width, 'a locked image shows no handles and does not move')
+    scene.dd_trace_locked = False
+    workspace.trace_drag = None
+    placement = (scene.dd_trace_x, scene.dd_trace_y, scene.dd_trace_width, scene.dd_trace_rotation)
+    check(bpy.ops.devil.load_trace_image(filepath=files[1]) == {'FINISHED'}, 'Replace image loads another file')
+    check(scene.dd_trace_path == files[1] and (scene.dd_trace_x, scene.dd_trace_y, scene.dd_trace_width, scene.dd_trace_rotation) == placement,
+          'replacing the image keeps its position, scale and rotation')
+    scene.dd_trace_stack = json.dumps([dict(tracing.ENTRY_FIELDS, path=str(folder / 'moved-away.png'))])
+    workspace.error_message = None
+    workspace.renderer.draw(workspace)
+    check('moved-away.png' in scene.dd_trace_error, 'a missing second image is reported, not skipped')
+    send('TIMER', center)
+    check('moved-away.png' in workspace.message, 'the missing image is announced on the canvas without opening the image menu')
+    scene.dd_trace_stack = '[]'
+    scene.dd_trace_path = ''
+    workspace.renderer.draw(workspace)
+
+
 def math_close(vertex, point):
     return abs(vertex.x - point[0]) < 1e-6 and abs(vertex.y - point[1]) < 1e-6
 
@@ -123,6 +216,7 @@ def run():
                 return workspace.view.screen(point, workspace.canvas_layout.canvas)
 
             internal_paths(workspace, send, click, screen, check)
+            reference_images(workspace, send, click, screen, check)
             workspace.cleanup()
         report = {'passed': passed}
     except Exception:

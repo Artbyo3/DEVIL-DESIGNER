@@ -817,6 +817,8 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
                 self.refresh_library()
                 self._area.tag_redraw()
             self._timer_ticks = getattr(self, '_timer_ticks', 0) + 1
+            if self.announce_reference():
+                self._area.tag_redraw()
             if self._timer_ticks % 10 == 0 and self.update_reference(context):
                 self._area.tag_redraw()
             return {'PASS_THROUGH'}
@@ -1615,20 +1617,46 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
             return {'RUNNING_MODAL'}
         if (press and event.type == 'LEFTMOUSE' and canvas and not self.canvas_layout.rail.contains(*self.pointer)
                 and not any(card[0].contains(*self.pointer) for card in self.visible_cards())):
-            self.trace_drag = dict(start=self.view.world(self.pointer, self.canvas_layout.canvas),
-                                   origin=(scene.dd_trace_x, scene.dd_trace_y))
+            frame = self.trace_frame()
+            self.trace_drag = dict(handle=self.trace_frame_hit(frame) if frame else 'MOVE', pointer=self.pointer,
+                                   center=frame['center'] if frame else self.pointer,
+                                   start=self.view.world(self.pointer, self.canvas_layout.canvas),
+                                   origin=(scene.dd_trace_x, scene.dd_trace_y), width=scene.dd_trace_width,
+                                   rotation=scene.dd_trace_rotation)
             return {'RUNNING_MODAL'}
         if isinstance(self.trace_drag, dict):
             if event.type == 'MOUSEMOVE':
-                point = self.view.world(self.pointer, self.canvas_layout.canvas)
-                scene.dd_trace_x = self.trace_drag['origin'][0] + point[0] - self.trace_drag['start'][0]
-                scene.dd_trace_y = self.trace_drag['origin'][1] + point[1] - self.trace_drag['start'][1]
+                self.place_reference(event)
                 return {'RUNNING_MODAL'}
             if event.type == 'LEFTMOUSE' and event.value == 'RELEASE':
+                done = {'ROTATE': 'Image rotated', 'SCALE': 'Image scaled'}.get(self.trace_drag['handle'], 'Image moved')
                 self.trace_drag = 'ARMED'
-                self.message = 'Image moved. Drag again, or press Escape to finish.'
+                self.message = done + '. Drag the image, a corner or the knob again, or press Escape to finish.'
                 return {'RUNNING_MODAL'}
         return None
+
+    def place_reference(self, event):
+        from . import tracing
+        scene = self._scene
+        drag = self.trace_drag
+        if drag['handle'] == 'ROTATE':
+            scene.dd_trace_rotation = tracing.turned(drag['rotation'], drag['center'], drag['pointer'], self.pointer, 15.0 if event.shift else 0.0)
+        elif drag['handle'] == 'SCALE':
+            reach = math.dist(drag['pointer'], drag['center'])
+            if reach < 1e-6:
+                return
+            try:
+                size = tracing.load_image(scene.dd_trace_path).size[:]
+                width, origin = tracing.scaled_about_center(drag['width'], size, drag['origin'], math.dist(self.pointer, drag['center']) / reach)
+            except (ValueError, ReferenceError) as error:
+                self.message = str(error)
+                return
+            scene.dd_trace_width = width
+            scene.dd_trace_x, scene.dd_trace_y = origin
+        else:
+            point = self.view.world(self.pointer, self.canvas_layout.canvas)
+            scene.dd_trace_x = drag['origin'][0] + point[0] - drag['start'][0]
+            scene.dd_trace_y = drag['origin'][1] + point[1] - drag['start'][1]
 
     def shortcut_belongs_to_blender(self, event, panel):
         if panel or self.tool in {'SHAPE', 'PEN'} or self.pen_mode or event.type == 'NONE' or any(token in event.type for token in NON_KEYBOARD_TOKENS):

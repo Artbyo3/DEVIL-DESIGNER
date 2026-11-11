@@ -16,6 +16,7 @@ class DesignTools:
         self.cut_preview=None
         self.trace_points=None
         self.trace_drag=None
+        self.reference_notice=''
         self.mn_sewing=False
         self.mn_chain=[]
         self.mn_first=None
@@ -682,6 +683,35 @@ class DesignTools:
         top=(rect.x+rect.w/2,rect.y+rect.h)
         return dict(rect=rect,corners=[(rect.x,rect.y),(rect.x+rect.w,rect.y),(rect.x+rect.w,rect.y+rect.h),(rect.x,rect.y+rect.h)],
                     stem=top,knob=(top[0],top[1]+TRANSFORM_KNOB_OFFSET*scale),pivot=self.view.screen(self.session.get_pivot(),c))
+
+    def trace_frame(self):
+        from . import tracing
+        scene=self._scene
+        if self.trace_drag is None or scene.dd_trace_locked or not scene.dd_trace_visible or not scene.dd_trace_path:return None
+        try:corners=tracing.entry_corners(tracing.active_entry(scene))[1]
+        except (ValueError,ReferenceError):return None
+        c=self.canvas_layout.canvas;scale=self.canvas_layout.scale
+        screen=[self.view.screen(point,c) for point in corners]
+        center=(sum(x for x,_ in screen)/4,sum(y for _,y in screen)/4)
+        top=((screen[2][0]+screen[3][0])/2,(screen[2][1]+screen[3][1])/2)
+        reach=math.dist(top,center)
+        direction=((top[0]-center[0])/reach,(top[1]-center[1])/reach) if reach>1e-6 else (0.0,1.0)
+        return dict(corners=screen,center=center,stem=top,knob=(top[0]+direction[0]*TRANSFORM_KNOB_OFFSET*scale,top[1]+direction[1]*TRANSFORM_KNOB_OFFSET*scale))
+
+    def trace_frame_hit(self,frame=None):
+        frame=frame or self.trace_frame()
+        if frame is None:return None
+        scale=self.canvas_layout.scale
+        if math.dist(self.pointer,frame['knob'])<=TRANSFORM_HIT_RADIUS*scale:return 'ROTATE'
+        if any(math.dist(self.pointer,corner)<=TRANSFORM_HIT_RADIUS*scale for corner in frame['corners']):return 'SCALE'
+        return 'MOVE'
+
+    def announce_reference(self):
+        error=self._scene.dd_trace_error
+        if error==self.reference_notice:return False
+        self.reference_notice=error
+        if error:self.message=error
+        return bool(error)
 
     def transform_frame_hit(self,frame=None):
         frame=frame or self.transform_frame()

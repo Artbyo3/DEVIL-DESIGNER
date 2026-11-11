@@ -147,9 +147,9 @@ Fold settings do not change how darts are made or add a dart-depth cap. A deep d
 2. Place the image and adjust its opacity.
 3. Open **Set measured scale** and set **Known length** in centimetres.
 4. Choose **Pick length endpoints**, then click two known points to set the image scale.
-5. In **Image placement**, choose **Move on canvas** and drag the image, or set its width, position, and rotation. **Mirror H** and **Mirror V** flip it, for example to trace the other side.
+5. In **Image placement**, choose **Place on canvas**. Drag the image to move it, a corner to scale it, or the knob above it to rotate it (hold Shift for 15 degree steps), then press Escape. You can also type its width, position, and rotation. **Mirror H** and **Mirror V** flip it, for example to trace the other side.
 6. Choose **Add image** to place another reference, such as a back view or a detail photo, beside the first. **Next image** picks which one you edit. Each image keeps its own placement, scale, and opacity.
-7. **Lock** keeps the image from moving. **Replace image** swaps the file and keeps its placement and scale. References are saved with the Blender file.
+7. **Lock** keeps the image from moving. **Replace image** swaps the file and keeps its placement and scale. References are saved with the Blender file. If an image file goes missing, the canvas names it so you can replace it.
 
 <figure class="dd-shot" id="shot-draft-trace-reference" data-shot='{"action":"Calibrate reference image scale with known-length endpoints","ui_state":"Loaded trace image with calibration endpoints and scale numeric input controls","framing":"close-up","aspect_ratio":"4:3"}' data-shot-framing="close-up" aria-labelledby="shot-draft-trace-reference-caption">
   <div class="dd-shot__frame"><span class="dd-shot__icon" aria-hidden="true"></span><span class="dd-shot__label">Screenshot coming soon</span></div>
