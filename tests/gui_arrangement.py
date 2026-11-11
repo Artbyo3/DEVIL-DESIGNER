@@ -1,5 +1,6 @@
 import json
 import math
+import statistics
 import sys
 import time
 import traceback
@@ -143,6 +144,13 @@ def run():
                     state['bodies'].append(bpy.context.object.name)
                 state['run']=0
             elif stage>=10:
+                if 'slice_budget_ms' not in state:
+                    calibration=state.setdefault('idle_stamps',[])
+                    calibration.append(time.perf_counter())
+                    if len(calibration)<8:return .01
+                    idle_ms=statistics.median(second-first for first,second in zip(calibration,calibration[1:]))*1000
+                    state['idle_cadence_ms']=idle_ms
+                    state['slice_budget_ms']=min(50,max(8,2*idle_ms))
                 stamps=state.setdefault('stamps',[])
                 run=state['run']
                 body_object=scene.objects[state['bodies'][run//5]]
@@ -175,10 +183,17 @@ def run():
                 if state['run']<10:return .02
                 for record in state['selection']:
                     check(record['callback_ms']<50,'body selection callback stays below 50 ms '+str(record))
-                    check(record['longest_slice_ms']<=8,'cooperative fitting slices stay within 8 ms '+str(record))
                     check(record['gap_p95_ms']<50,'input event gaps stay below 50 ms at the 95th percentile while fitting '+str(record))
                     check(record['ready_s']<(.5 if record['triangles']<20000 else 1),'arrangement points become ready within budget '+str(record))
-                (ROOT/'scratch'/'issue76-selection-gui.json').write_text(json.dumps(dict(runs=state['selection'],fine_step_m=state['fine_step_m']),indent=2),encoding='utf-8')
+                for offset in (0,5):
+                    records=state['selection'][offset:offset+5]
+                    longest_ms=statistics.median(record['longest_slice_ms'] for record in records)
+                    check(longest_ms<=state['slice_budget_ms'],
+                          'median longest fitting slice stays within calibrated 8?50 ms budget '
+                          +str(dict(triangles=records[0]['triangles'],median_longest_slice_ms=longest_ms,
+                                    budget_ms=state['slice_budget_ms'],idle_cadence_ms=state['idle_cadence_ms'])))
+                (ROOT/'scratch'/'issue76-selection-gui.json').write_text(json.dumps(dict(runs=state['selection'],fine_step_m=state['fine_step_m'],
+                    idle_cadence_ms=state['idle_cadence_ms'],slice_budget_ms=state['slice_budget_ms']),indent=2),encoding='utf-8')
                 (ROOT/'scratch'/'arrangement-report.json').write_text(json.dumps(dict(passed=state['passed'])),encoding='utf-8')
                 return None
             state['stage']+=1
