@@ -173,7 +173,8 @@ preserve valid pair membership. Designs without pair records remain unchanged.
   the body side, and extra width stands out as a flap so the panels cannot cross.
 - Grab cloth while it simulates. Pull follows the hand in the view plane, Push
   presses along the surface normal, and radius is set by Ctrl+wheel or the strip. The wheel alone zooms the view.
-  Releasing eases the hand out over a quarter second instead of dropping the cloth in one frame.
+  Releasing softens the hold over about half a second instead of dropping the cloth: the held cloth
+  stays tied to its own last position by a link that weakens every frame, so it returns in small even steps.
 - Cloth pins hold the cloth where the artist put it while the simulation keeps running. W while holding
   pins the cloth inside the ring, and Pin mode pins on release. Dragging a pinned spot moves it, Ctrl+click
   frees the pins under the ring, and Remove pins in the Grab flyout frees all of them. Cloth pins are written

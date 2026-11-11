@@ -4,7 +4,7 @@ import bpy
 ASSET_FILE = 'geometry_nodes_dynamics_assets.blend'
 STOCK_GROUPS = ('XPBD Simulation', 'XPBD Solver', 'Gravity', 'Collider', 'Set Friction', 'Set Geometry Tags',
                 'Set Geo Updater - Deform Only')
-GROUP_VERSION = 4
+GROUP_VERSION = 5
 STOCK_PREFIX = 'DD Stock '
 CLOTH_GROUP = 'DD XPBD Cloth'
 SOLVER_GROUP = 'DD XPBD Solver'
@@ -12,7 +12,9 @@ SIMULATION_GROUP = 'DD XPBD Simulation'
 CONTACT_GROUP = 'DD Self Contact'
 GEOMETRY_PATH = 'Cloth/Geometry'
 SHELL_FRICTION = .5
-GRAB_EASE = .25
+GRAB_EASE_START = 2.0e-6
+GRAB_EASE_RATE = 15.0
+GRAB_EASE_END = 1.0e-2
 
 
 class Graph:
@@ -334,17 +336,17 @@ def build_cloth_group(simulation):
     grip = graph.node('ShaderNodeClamp', graph.math('SUBTRACT', 1.0, graph.math('DIVIDE', distance_to_hand, graph.math('MAXIMUM', out['Grab Reach'], .001))), 0.0, 1.0).outputs[0]
     stride = graph.math('MULTIPLY', graph.math('MINIMUM', distance_to_hand, out['Grab Stride']), grip)
     since_release = graph.math('SUBTRACT', seconds, out['Grab Release'])
-    easing = graph.node('ShaderNodeClamp', graph.math('SUBTRACT', 1.0, graph.math('DIVIDE', since_release, GRAB_EASE)), 0.0, 1.0).outputs[0]
-    released = graph.switch('FLOAT', graph.compare('LESS_THAN', since_release, 0.0), easing, 0.0)
-    hold = graph.switch('FLOAT', graph.compare('LESS_THAN', out['Grab Release'], 0.0), released, 1.0)
-    pull = graph.scale(graph.vector('NORMALIZE', reach), graph.math('MULTIPLY', graph.math('MULTIPLY', stride, smooth), hold))
+    gripping = graph.compare('LESS_THAN', out['Grab Release'], 0.0)
+    slack = graph.math('MULTIPLY', graph.math('EXPONENT', graph.math('MULTIPLY', since_release, GRAB_EASE_RATE)), GRAB_EASE_START)
+    easing = graph.logic('AND', graph.compare('GREATER_EQUAL', since_release, 0.0), graph.compare('LESS_THAN', slack, GRAB_EASE_END))
+    pull = graph.scale(graph.vector('NORMALIZE', reach), graph.math('MULTIPLY', graph.math('MULTIPLY', stride, smooth), graph.switch('FLOAT', gripping, 0.0, 1.0)))
     held = graph.logic('AND', graph.logic('AND', graph.compare('GREATER_EQUAL', out['Grab Index'], 0, 'INT'), graph.compare('GREATER_THAN', smooth, .001)),
-                       graph.compare('GREATER_THAN', hold, 0.0))
+                       graph.logic('OR', gripping, easing))
     pinned = graph.attribute('dd_pinned', 'BOOLEAN')
     pins = graph.bundle((('Type', 'STRING', 'Blender.Constraint.PinPosition'), ('filter', 'STRING', ''),
                          ('selection', 'BOOLEAN', graph.logic('OR', pinned, held)),
                          ('position', 'VECTOR', graph.switch('VECTOR', held, anchor, graph.vector('ADD', position, pull))),
-                         ('compliance', 'FLOAT', graph.switch('FLOAT', held, graph.attribute('dd_pin_compliance'), 0.0)),
+                         ('compliance', 'FLOAT', graph.switch('FLOAT', held, graph.attribute('dd_pin_compliance'), graph.switch('FLOAT', gripping, slack, 0.0))),
                          ('error_threshold', 'FLOAT', .001), ('lambda_attribute', 'STRING', '')))
 
     settling = graph.math('SUBTRACT', progress, 1.0)

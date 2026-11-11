@@ -157,10 +157,22 @@ def test_live_grab(scene):
     check((moved - start).length > .03, 'pulled cloth follows the hand')
     grab.release(bpy.context)
     check(not grab.held and xpbd.input_slot(simulation, 'Grab Release').value >= 0, 'release starts easing the hand out')
-    run_frames(scene, 1)
-    eased = Vector(points(simulation)[index].tolist())
-    check((eased - moved).length < .03, 'released cloth does not snap back in one frame')
-    run_frames(scene, 20)
+    window = math.ceil(math.log(xpbd_nodes.GRAB_EASE_END / xpbd_nodes.GRAB_EASE_START) / xpbd_nodes.GRAB_EASE_RATE * scene.render.fps) + 6
+    last = points(simulation).copy()
+    hand_steps, cloth_steps = [], []
+    for _ in range(window):
+        run_frames(scene, 1)
+        now = points(simulation).copy()
+        travel = np.linalg.norm(now - last, axis=1)
+        hand_steps.append(float(travel[index]))
+        cloth_steps.append(float(travel.max()))
+        last = now
+    print('RELEASE HAND MM', ' '.join(f'{step * 1000:.2f}' for step in hand_steps), flush=True)
+    print('RELEASE CLOTH MM', ' '.join(f'{step * 1000:.2f}' for step in cloth_steps), flush=True)
+    check(max(hand_steps) < .008, 'released cloth never jumps under the hand on any frame of the ease')
+    check(max(abs(second - first) for first, second in zip(hand_steps, hand_steps[1:])) < .003, 'no frame of the release stands out against its neighbours')
+    check(max(cloth_steps) < .015, 'no part of the cloth snaps on any frame of the release')
+    check((Vector(last[index].tolist()) - moved).length > .02, 'released cloth does return instead of staying frozen')
     check(all(math.isfinite(value) for value in points(simulation).ravel()), 'cloth keeps simulating after release')
     grab.begin(bpy.context, index, Vector(points(simulation)[index].tolist()), Vector((0, -1, 0)), Vector((0, 1, 0)))
     grab.drag(target + Vector((0, -2, 0)), Vector((0, 1, 0)))
