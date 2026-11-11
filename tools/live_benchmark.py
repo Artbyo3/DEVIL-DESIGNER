@@ -15,7 +15,7 @@ from tools.dev import BLENDER_PATH
 from tools.workspace import prepare_scratch
 
 SCRIPT = ROOT / 'tools' / 'live_benchmark_blender.py'
-VARIANTS = ['full', 'no_shell', 'no_surface', 'no_collision']
+VARIANTS = ['full', 'no_shell', 'no_surface', 'no_collision', 'no_self']
 PANELS = [3, 10, 20, 30]
 SPREAD_LIMIT = .05
 
@@ -70,7 +70,7 @@ def rows(runs):
     summary = []
     for (mode, body, panels, variant), entry in sorted(table.items()):
         medians = entry['medians']
-        summary.append(dict(mode=mode, body=body, panels=panels, variant=variant, median_ms=float(np.median(medians)),
+        summary.append(dict(mode=mode, body=body, panels=panels, variant=variant, median_ms=float(np.median(medians)), mean_ms=float(np.mean(entry['samples'])),
                             p95_ms=float(np.percentile(entry['samples'], 95)), run_medians=medians,
                             spread=float((max(medians) - min(medians)) / min(medians)) if len(medians) > 1 else 0.0,
                             python_ms=float(np.median(entry['python'])), interval_ms=float(np.median(entry['intervals'])) if entry['intervals'] else None,
@@ -87,12 +87,13 @@ def lookup(summary, mode, body, panels, variant):
 def cost_map(summary, panels):
     result = []
     for count in panels:
-        full, shell, surface, bare = (lookup(summary, 'headless', 'dense', count, variant) for variant in VARIANTS)
-        if None in (full, shell, surface, bare):
+        full, shell, surface, bare, alone = (lookup(summary, 'headless', 'dense', count, variant) for variant in VARIANTS)
+        if None in (full, shell, surface, bare, alone):
             continue
-        result.append(dict(panels=count, cloth_vertices=full['cloth_vertices'], frame_ms=full['median_ms'],
-                           solver_ms=bare['median_ms'] - full['python_ms'], shell_ms=full['median_ms'] - shell['median_ms'],
-                           true_surface_ms=full['median_ms'] - surface['median_ms'], python_ms=full['python_ms']))
+        self_contact = full['mean_ms'] - alone['mean_ms']
+        result.append(dict(panels=count, cloth_vertices=full['cloth_vertices'], frame_ms=full['median_ms'], mean_ms=full['mean_ms'],
+                           solver_ms=bare['mean_ms'] - self_contact - full['python_ms'], self_contact_ms=self_contact,
+                           shell_ms=full['mean_ms'] - shell['mean_ms'], true_surface_ms=full['mean_ms'] - surface['mean_ms'], python_ms=full['python_ms']))
     return result
 
 
@@ -102,10 +103,10 @@ def report(summary, panels):
         print(f"{row['mode']:<9} {row['body']:<6} {row['panels']:>6} {row['variant']:<12} {row['median_ms']:7.1f} {row['p95_ms']:6.1f} "
               f"{row['spread'] * 100:5.1f}% {row['python_ms']:6.2f} {row['seam_gap_max_mm']:11.2f} {row['stretch_p99']:11.3f} {row['cloth_vertices']:5d}"
               + (f"  delivered {row['interval_ms']:.1f} ms" if row['interval_ms'] else ''))
-    print('\ncost map (headless, dense body, ms per frame; shell and true-surface are ablation deltas)')
-    print('panels verts  frame  solver  shell  true_surface  python')
+    print('\ncost map (headless, dense body, mean ms per frame; every part is an ablation delta)')
+    print('panels verts median   mean  solver  self_contact  shell  true_surface  python')
     for row in cost_map(summary, panels):
-        print(f"{row['panels']:>6} {row['cloth_vertices']:5d} {row['frame_ms']:6.1f} {row['solver_ms']:7.1f} {row['shell_ms']:6.1f} {row['true_surface_ms']:13.1f} {row['python_ms']:7.2f}")
+        print(f"{row['panels']:>6} {row['cloth_vertices']:5d} {row['frame_ms']:6.1f} {row['mean_ms']:6.1f} {row['solver_ms']:7.1f} {row['self_contact_ms']:13.1f} {row['shell_ms']:6.1f} {row['true_surface_ms']:13.1f} {row['python_ms']:7.2f}")
     light, dense = lookup(summary, 'headless', 'light', panels[0], 'full'), lookup(summary, 'headless', 'dense', panels[0], 'full')
     if light and dense:
         print(f"\ndensity penalty at {panels[0]} panels: {dense['median_ms'] - light['median_ms']:.1f} ms "
