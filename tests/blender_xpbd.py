@@ -412,6 +412,38 @@ def test_dense_body_costs_like_a_light_one(scene):
     check(max(sizes.values()) <= xpbd.PROXY_TRIANGLES, 'every body gets a contact proxy of bounded size')
 
 
+SHELL_CEILING = 10000
+
+
+def shell_offset_mm(context, body):
+    collider = xpbd.bake_collider(context)
+    shell = xpbd.bake_shell(context, collider)
+    count = xpbd.triangle_count(shell.data)
+    solid = collider.modifiers.new('Reference Solid', 'SOLIDIFY')
+    solid.thickness, solid.offset = xpbd.SHELL_THICKNESS, -1
+    voxel = collider.modifiers.new('Reference Shell', 'REMESH')
+    voxel.mode, voxel.voxel_size = 'VOXEL', xpbd.SHELL_VOXEL
+    reference = xpbd.evaluated_mesh(context, collider)
+    apart = max(xpbd.deviation(reference, shell.data), xpbd.deviation(shell.data, reference))
+    garment.remove_objects([collider, shell])
+    bpy.data.meshes.remove(reference)
+    return count, apart * 1000
+
+
+def test_shell_size_is_bounded(scene):
+    avatar = scene.dd_avatar
+    for name, segments, rings in (('dense torso', 256, 138), ('demo avatar', 0, 0)):
+        body = torso(segments, rings) if segments else avatar
+        scene.dd_avatar = body
+        count, apart = shell_offset_mm(bpy.context, body)
+        print('SHELL', name, count, round(apart, 3), flush=True)
+        check(count <= SHELL_CEILING, f'the {name} collision shell stays under {SHELL_CEILING} triangles whatever the avatar size')
+        check(apart < 1.5, f'the bounded {name} shell stays within 1.5 mm of the voxel shell')
+        if segments:
+            bpy.data.objects.remove(body, do_unlink=True)
+    scene.dd_avatar = avatar
+
+
 def test_contact_gate_matches_exact_contact(scene):
     pin_top = scene.dd_pin_top
     scene.dd_pin_top = True
@@ -456,6 +488,7 @@ test_reset_restores_timeline(scene)
 test_open_avatar_collision(scene)
 test_paired_panels_stay_on_their_side(scene, body)
 test_pins_and_tacks(scene, body)
+test_shell_size_is_bounded(scene)
 test_contact_gate_matches_exact_contact(scene)
 test_dense_body_costs_like_a_light_one(scene)
 devil_designer.unregister()

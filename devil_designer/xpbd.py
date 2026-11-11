@@ -34,6 +34,7 @@ WELD_REACH = .06
 SHELL_VOXEL = .005
 SHELL_THICKNESS = .015
 PROXY_TRIANGLES = 3000
+SHELL_TRIANGLES = 8000
 GATE_PAD = .002
 
 
@@ -138,27 +139,55 @@ def world_surface(context, source):
 
 
 def bake_collider(context):
-    from . import garment, layering
+    from . import layering
     scene = context.scene
-    bodies = layering.collision_bodies(scene)
     merged = bmesh.new()
-    for source in bodies:
+    for source in layering.collision_bodies(scene):
         surface = world_surface(context, source)
         merged.from_mesh(surface)
         bpy.data.meshes.remove(surface)
     mesh = bpy.data.meshes.new('DD Collision Body')
     merged.to_mesh(mesh)
     merged.free()
-    collider = bpy.data.objects.new('DD Collision Body', mesh)
-    garment.collection(scene).objects.link(collider)
-    garment.tag(collider, 'collider')
-    collider.hide_render = True
-    collider.hide_set(True)
-    return collider
+    return hidden_collider(scene, 'DD Collision Body', mesh)
+
+
+def evaluated_mesh(context, obj):
+    obj.hide_set(False)
+    context.view_layer.update()
+    graph = context.evaluated_depsgraph_get()
+    mesh = bpy.data.meshes.new_from_object(obj.evaluated_get(graph), depsgraph=graph)
+    obj.hide_set(True)
+    return mesh
+
+
+def triangle_count(mesh):
+    mesh.calc_loop_triangles()
+    return len(mesh.loop_triangles)
+
+
+def decimated(context, obj, target):
+    count = triangle_count(obj.data)
+    if count <= target:
+        return None
+    decimate = obj.modifiers.new('DD Decimate', 'DECIMATE')
+    decimate.ratio = target / count
+    mesh = evaluated_mesh(context, obj)
+    obj.modifiers.remove(decimate)
+    return mesh
+
+
+def hidden_collider(scene, name, mesh):
+    from . import garment
+    obj = bpy.data.objects.new(name, mesh)
+    garment.collection(scene).objects.link(obj)
+    garment.tag(obj, 'collider')
+    obj.hide_render = True
+    obj.hide_set(True)
+    return obj
 
 
 def bake_shell(context, collider):
-    from . import garment
     scene = context.scene
     unit = max(1e-6, scene.unit_settings.scale_length)
     solid = collider.modifiers.new('DD Shell Solid', 'SOLIDIFY')
@@ -168,18 +197,14 @@ def bake_shell(context, collider):
     remesh.mode = 'VOXEL'
     remesh.voxel_size = SHELL_VOXEL / unit
     remesh.use_smooth_shade = False
-    collider.hide_set(False)
-    context.view_layer.update()
-    graph = context.evaluated_depsgraph_get()
-    mesh = bpy.data.meshes.new_from_object(collider.evaluated_get(graph), depsgraph=graph)
+    mesh = evaluated_mesh(context, collider)
     collider.modifiers.remove(remesh)
     collider.modifiers.remove(solid)
-    collider.hide_set(True)
-    shell = bpy.data.objects.new('DD Collision Shell', mesh)
-    garment.collection(scene).objects.link(shell)
-    garment.tag(shell, 'collider')
-    shell.hide_render = True
-    shell.hide_set(True)
+    shell = hidden_collider(scene, 'DD Collision Shell', mesh)
+    bounded = decimated(context, shell, SHELL_TRIANGLES)
+    if bounded is not None:
+        shell.data = bounded
+        bpy.data.meshes.remove(mesh)
     return shell
 
 
@@ -190,7 +215,7 @@ def surface_points(mesh):
 
 
 def deviation(dense, coarse):
-    coarse.calc_loop_triangles()
+    triangle_count(coarse)
     corners = np.empty(len(coarse.loop_triangles) * 3, dtype=np.int32)
     coarse.loop_triangles.foreach_get('vertices', corners)
     tree = BVHTree.FromPolygons(surface_points(coarse).tolist(), corners.reshape(-1, 3).tolist(), all_triangles=True)
@@ -198,30 +223,9 @@ def deviation(dense, coarse):
 
 
 def bake_proxy(context, collider):
-    from . import garment
-    scene = context.scene
-    dense = collider.data
-    dense.calc_loop_triangles()
-    count = len(dense.loop_triangles)
-    if count > PROXY_TRIANGLES:
-        decimate = collider.modifiers.new('DD Proxy', 'DECIMATE')
-        decimate.ratio = PROXY_TRIANGLES / count
-        collider.hide_set(False)
-        context.view_layer.update()
-        graph = context.evaluated_depsgraph_get()
-        mesh = bpy.data.meshes.new_from_object(collider.evaluated_get(graph), depsgraph=graph)
-        collider.modifiers.remove(decimate)
-        collider.hide_set(True)
-        gap = deviation(dense, mesh)
-    else:
-        mesh = dense.copy()
-        gap = 0.0
-    proxy = bpy.data.objects.new('DD Collision Proxy', mesh)
-    garment.collection(scene).objects.link(proxy)
-    garment.tag(proxy, 'collider')
-    proxy.hide_render = True
-    proxy.hide_set(True)
-    return proxy, gap
+    mesh = decimated(context, collider, PROXY_TRIANGLES)
+    gap = 0.0 if mesh is None else deviation(collider.data, mesh)
+    return hidden_collider(context.scene, 'DD Collision Proxy', collider.data.copy() if mesh is None else mesh), gap
 
 
 def restart_from_pose(obj):
