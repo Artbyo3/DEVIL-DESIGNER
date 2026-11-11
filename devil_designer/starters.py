@@ -2,6 +2,7 @@ from .core import Session, EdgeRef,arrangement_record
 
 
 ADULT_HEIGHT = 150.0
+ARM_CLEARANCE = 0.01
 
 
 def make_edge(doc, pattern_id, index, rev=False):
@@ -31,26 +32,34 @@ def create_tee_starter(measurements, fabric='COTTON', name='Tee', sleeve_scale=1
     sleeve_opening = (0.10 if sleeve_scale == 1.0 else 0.17) * size
     waist_y = m.get('waist_y', 0.62 * (m['height'] / 100 if 'height' in m else 1.70))
     base_y = max(0.0, waist_y - 0.15)
+    top = min(base_y + torso_h, m.get('neck_y', base_y + torso_h))
+    sleeve_top = top - 0.04
+    sleeve_bottom = sleeve_top - sleeve_opening
+    armpit = top - armhole_drop
+    if 'arm_top_y' in m:
+        sleeve_top = min(top - 0.02, max(sleeve_top, m['arm_top_y'] + ARM_CLEARANCE))
+        sleeve_bottom = min(sleeve_bottom, m['arm_bottom_y'] - ARM_CLEARANCE)
+        armpit = min(armpit, sleeve_bottom)
 
     front_pts = [
         (-half_waist, base_y),
         (half_waist, base_y),
-        (half_chest, base_y + torso_h - armhole_drop),
-        (half_sh + sleeve_ext, base_y + torso_h - 0.04 - sleeve_opening),
-        (half_sh + sleeve_ext, base_y + torso_h - 0.04),
-        (half_sh, base_y + torso_h - 0.02),
-        (neck_w, base_y + torso_h),
-        (0.0, base_y + torso_h - 0.08),
-        (-neck_w, base_y + torso_h),
-        (-half_sh, base_y + torso_h - 0.02),
-        (-(half_sh + sleeve_ext), base_y + torso_h - 0.04),
-        (-(half_sh + sleeve_ext), base_y + torso_h - 0.04 - sleeve_opening),
-        (-half_chest, base_y + torso_h - armhole_drop),
+        (half_chest, armpit),
+        (half_sh + sleeve_ext, sleeve_bottom),
+        (half_sh + sleeve_ext, sleeve_top),
+        (half_sh, top - 0.02),
+        (neck_w, top),
+        (0.0, top - 0.08),
+        (-neck_w, top),
+        (-half_sh, top - 0.02),
+        (-(half_sh + sleeve_ext), sleeve_top),
+        (-(half_sh + sleeve_ext), sleeve_bottom),
+        (-half_chest, armpit),
     ]
 
     back_offset = 0.85
     back_pts = [(x + back_offset, y) for x, y in front_pts]
-    back_pts[7] = (back_offset, base_y + torso_h - 0.02)
+    back_pts[7] = (back_offset, top - 0.02)
 
     s = Session()
     s.add(front_pts)

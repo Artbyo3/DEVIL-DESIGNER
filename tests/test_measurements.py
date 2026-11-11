@@ -1,6 +1,10 @@
 import math
 import unittest
+import numpy
 from devil_designer.measurements import (
+    arm_band,
+    neck_base,
+    widest_torso_loop,
     slice_mesh_z,
     get_connected_loops,
     torso_loop_circumference,
@@ -62,7 +66,59 @@ class MockScene:
         self.unit_settings = MockUnitSettings(scale_length)
 
 
+def tube(verts, polys, centre_x, radius, levels, sides=16):
+    first = len(verts)
+    for z in levels:
+        for i in range(sides):
+            angle = i * math.tau / sides
+            verts.append(MockVertex(centre_x + radius * math.cos(angle), radius * math.sin(angle), z))
+    for layer in range(len(levels) - 1):
+        for i in range(sides):
+            low = first + layer * sides
+            high = low + sides
+            polys.append(MockPolygon([low + i, low + (i + 1) % sides, high + (i + 1) % sides, high + i]))
+
+
+def t_pose_points(height, neck_z, arm_bottom, arm_top):
+    rows = []
+    for z in numpy.linspace(0.5 * height, neck_z - 0.02, 30):
+        rows += [(x, 0.0, z) for x in numpy.linspace(-0.12, 0.12, 9)]
+    for z in numpy.linspace(neck_z - 0.01, neck_z + 0.01, 3):
+        rows += [(x, 0.0, z) for x in numpy.linspace(-0.03, 0.03, 5)]
+    for z in numpy.linspace(neck_z + 0.03, height, 20):
+        rows += [(x, 0.0, z) for x in numpy.linspace(-0.08, 0.08, 7)]
+    for x in numpy.linspace(0.13, 0.48, 40):
+        for z in numpy.linspace(arm_bottom, arm_top, 5):
+            rows += [(x, 0.0, z), (-x, 0.0, z)]
+    return numpy.array(rows)
+
+
 class MeasurementsTests(unittest.TestCase):
+    def test_short_avatar_arm_band_and_neck_come_from_the_body(self):
+        height = 1.07
+        points = t_pose_points(height, 0.865, 0.79, 0.83)
+        band = arm_band(points, 0.0, 0.13, 0.0, height)
+        self.assertAlmostEqual(band[0], 0.79, places=3)
+        self.assertAlmostEqual(band[1], 0.83, places=3)
+        self.assertAlmostEqual(neck_base(points, 0.0, 0.13, band[1], height), 0.865, delta=0.011)
+
+    def test_lowered_arms_are_not_read_as_a_sleeve_band(self):
+        height = 1.07
+        points = t_pose_points(height, 0.865, 0.45, 0.83)
+        self.assertIsNone(arm_band(points, 0.0, 0.13, 0.0, height))
+
+    def test_hip_is_the_widest_torso_loop_not_a_small_outline_below_it(self):
+        verts, polys = [], []
+        tube(verts, polys, 0.0, 0.07, [0.70, 0.80])
+        tube(verts, polys, 0.0, 0.15, [0.78, 1.00])
+        tube(verts, polys, -0.12, 0.06, [0.40, 0.80])
+        tube(verts, polys, 0.12, 0.06, [0.40, 0.80])
+        mesh = MockMesh(verts, polys)
+        world = [MockMatrix() @ v.co for v in verts]
+        level, girth = widest_torso_loop(mesh, MockMatrix(), 0.72, 0.98, world, 0.0)
+        self.assertGreater(level, 0.78)
+        self.assertGreater(girth, 0.9)
+
     def test_slice_mesh_z_box(self):
         verts = [
             MockVertex(-0.5, -0.5, 0.0),
