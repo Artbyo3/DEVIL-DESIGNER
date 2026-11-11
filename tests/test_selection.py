@@ -28,6 +28,56 @@ class SelectionTests(unittest.TestCase):
                 self.assertEqual({vertex.id for vertex in pattern.vertices},survivor_ids)
                 self.assertEqual(len(pattern.vertices),4)
 
+    def internal_path_session(self,points,closed):
+        session=Session()
+        session.add([(0,0),(.6,0),(.6,.6),(0,.6)])
+        pattern=session.document.patterns[0]
+        path=session.add_path(points,closed)
+        return session,pattern,path
+
+    def select_path_points(self,session,pattern,path,indices):
+        session.clear_selection()
+        for index in indices:
+            session.select_point(pattern.id,path.id,index,toggle=True)
+
+    def test_open_internal_line_ends_do_not_merge(self):
+        session,pattern,path=self.internal_path_session([(.1,.1),(.2,.3),(.4,.3),(.5,.1)],False)
+        before=[(v.x,v.y) for v in path.vertices]
+        self.select_path_points(session,pattern,path,(0,3))
+        self.assertFalse(session.can_merge_selected_points())
+        with self.assertRaises(ValueError):session.merge_points()
+        with self.assertRaises(ValueError):session.merge_points([0,3])
+        self.assertEqual([(v.x,v.y) for v in path.vertices],before)
+
+    def test_two_point_open_line_survives_merge_attempt(self):
+        session,pattern,path=self.internal_path_session([(.1,.1),(.5,.4)],False)
+        self.select_path_points(session,pattern,path,(0,1))
+        self.assertFalse(session.can_merge_selected_points())
+        with self.assertRaises(ValueError):session.merge_points()
+        self.assertEqual(len(path.vertices),2)
+        self.assertEqual([(v.x,v.y) for v in path.vertices],[(.1,.1),(.5,.4)])
+        self.assertFalse(path.closed)
+
+    def test_open_internal_line_neighbours_still_merge(self):
+        session,pattern,path=self.internal_path_session([(.1,.1),(.2,.3),(.4,.3),(.5,.1)],False)
+        self.select_path_points(session,pattern,path,(1,2))
+        self.assertTrue(session.can_merge_selected_points())
+        session.merge_points()
+        self.assertEqual(len(path.vertices),3)
+        self.assertEqual(session.selected_points,{(pattern.id,path.id,1)})
+
+    def test_closed_internal_path_wraparound_merge(self):
+        session,pattern,path=self.internal_path_session([(.1,.1),(.3,.1),(.3,.3),(.1,.3)],True)
+        first,last=path.vertices[0],path.vertices[3]
+        expected=((first.x+last.x)/2,(first.y+last.y)/2)
+        self.select_path_points(session,pattern,path,(0,3))
+        self.assertTrue(session.can_merge_selected_points())
+        session.merge_points()
+        self.assertEqual(len(path.vertices),3)
+        self.assertAlmostEqual(path.vertices[0].x,expected[0])
+        self.assertAlmostEqual(path.vertices[0].y,expected[1])
+        self.assertEqual(session.selected_points,{(pattern.id,path.id,0)})
+
     def test_box_select_picks_points(self):
         p = self.s.document.patterns[0]
         self.s.acquisition_target = 'POINTS'
