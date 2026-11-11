@@ -1,6 +1,7 @@
 import bmesh
 import bpy
 import numpy as np
+from mathutils.bvhtree import BVHTree
 
 from . import seam_shrink, xpbd_nodes
 from .presets import air_damping, resolve_preset
@@ -32,6 +33,9 @@ GRAB_REACH = .4
 WELD_REACH = .06
 SHELL_VOXEL = .005
 SHELL_THICKNESS = .015
+PROXY_TRIANGLES = 3000
+SHELL_TRIANGLES = 8000
+GATE_PAD = .002
 
 
 def modifier(obj):
@@ -135,27 +139,55 @@ def world_surface(context, source):
 
 
 def bake_collider(context):
-    from . import garment, layering
+    from . import layering
     scene = context.scene
-    bodies = layering.collision_bodies(scene)
     merged = bmesh.new()
-    for source in bodies:
+    for source in layering.collision_bodies(scene):
         surface = world_surface(context, source)
         merged.from_mesh(surface)
         bpy.data.meshes.remove(surface)
     mesh = bpy.data.meshes.new('DD Collision Body')
     merged.to_mesh(mesh)
     merged.free()
-    collider = bpy.data.objects.new('DD Collision Body', mesh)
-    garment.collection(scene).objects.link(collider)
-    garment.tag(collider, 'collider')
-    collider.hide_render = True
-    collider.hide_set(True)
-    return collider
+    return hidden_collider(scene, 'DD Collision Body', mesh)
+
+
+def evaluated_mesh(context, obj):
+    obj.hide_set(False)
+    context.view_layer.update()
+    graph = context.evaluated_depsgraph_get()
+    mesh = bpy.data.meshes.new_from_object(obj.evaluated_get(graph), depsgraph=graph)
+    obj.hide_set(True)
+    return mesh
+
+
+def triangle_count(mesh):
+    mesh.calc_loop_triangles()
+    return len(mesh.loop_triangles)
+
+
+def decimated(context, obj, target):
+    count = triangle_count(obj.data)
+    if count <= target:
+        return None
+    decimate = obj.modifiers.new('DD Decimate', 'DECIMATE')
+    decimate.ratio = target / count
+    mesh = evaluated_mesh(context, obj)
+    obj.modifiers.remove(decimate)
+    return mesh
+
+
+def hidden_collider(scene, name, mesh):
+    from . import garment
+    obj = bpy.data.objects.new(name, mesh)
+    garment.collection(scene).objects.link(obj)
+    garment.tag(obj, 'collider')
+    obj.hide_render = True
+    obj.hide_set(True)
+    return obj
 
 
 def bake_shell(context, collider):
-    from . import garment
     scene = context.scene
     unit = max(1e-6, scene.unit_settings.scale_length)
     solid = collider.modifiers.new('DD Shell Solid', 'SOLIDIFY')
@@ -165,19 +197,35 @@ def bake_shell(context, collider):
     remesh.mode = 'VOXEL'
     remesh.voxel_size = SHELL_VOXEL / unit
     remesh.use_smooth_shade = False
-    collider.hide_set(False)
-    context.view_layer.update()
-    graph = context.evaluated_depsgraph_get()
-    mesh = bpy.data.meshes.new_from_object(collider.evaluated_get(graph), depsgraph=graph)
+    mesh = evaluated_mesh(context, collider)
     collider.modifiers.remove(remesh)
     collider.modifiers.remove(solid)
-    collider.hide_set(True)
-    shell = bpy.data.objects.new('DD Collision Shell', mesh)
-    garment.collection(scene).objects.link(shell)
-    garment.tag(shell, 'collider')
-    shell.hide_render = True
-    shell.hide_set(True)
+    shell = hidden_collider(scene, 'DD Collision Shell', mesh)
+    bounded = decimated(context, shell, SHELL_TRIANGLES)
+    if bounded is not None:
+        shell.data = bounded
+        bpy.data.meshes.remove(mesh)
     return shell
+
+
+def surface_points(mesh):
+    points = np.empty(len(mesh.vertices) * 3, dtype=np.float64)
+    mesh.vertices.foreach_get('co', points)
+    return points.reshape(-1, 3)
+
+
+def deviation(dense, coarse):
+    triangle_count(coarse)
+    corners = np.empty(len(coarse.loop_triangles) * 3, dtype=np.int32)
+    coarse.loop_triangles.foreach_get('vertices', corners)
+    tree = BVHTree.FromPolygons(surface_points(coarse).tolist(), corners.reshape(-1, 3).tolist(), all_triangles=True)
+    return max((tree.find_nearest(point)[3] for point in surface_points(dense).tolist()), default=0.0)
+
+
+def bake_proxy(context, collider):
+    mesh = decimated(context, collider, PROXY_TRIANGLES)
+    gap = 0.0 if mesh is None else deviation(collider.data, mesh)
+    return hidden_collider(context.scene, 'DD Collision Proxy', collider.data.copy() if mesh is None else mesh), gap
 
 
 def restart_from_pose(obj):
@@ -404,7 +452,8 @@ def attach(context, obj, doc, panels, pieces, maps, plan, pinned, tacks):
     write(mesh, 'dd_damping', 'FLOAT', 'POINT', damping)
     write(mesh, 'radius', 'FLOAT', 'POINT', np.full(count, CONTACT_RADIUS / unit))
     write(mesh, 'dd_contact_weight', 'FLOAT', 'POINT', np.where(near_seam, 0.0, 1.0))
-    write(mesh, 'dd_body_margin', 'FLOAT', 'POINT', np.full(count, scene.dd_skin_offset / unit))
+    margin = scene.dd_skin_offset / unit
+    write(mesh, 'dd_body_margin', 'FLOAT', 'POINT', np.full(count, margin))
     write(mesh, 'dd_body_grip', 'FLOAT', 'POINT', np.full(count, scene.dd_friction))
     write(mesh, 'dd_body_step', 'FLOAT', 'POINT', np.full(count, BODY_STEP / unit))
     partner = np.full(count, -1, dtype=np.int32)
@@ -446,9 +495,13 @@ def attach(context, obj, doc, panels, pieces, maps, plan, pinned, tacks):
     tag_generated(handle, 'collider')
     collider = bake_collider(context)
     set_input(obj, 'Body', collider)
+    proxy, gap = bake_proxy(context, collider)
+    set_input(obj, 'Body Proxy', proxy)
+    write(mesh, 'dd_body_gate', 'FLOAT', 'POINT', np.full(count, gap + margin / xpbd_nodes.ALIGNED + GATE_PAD / unit))
     set_input(obj, 'Body Shell', bake_shell(context, collider))
     set_input(obj, 'Gravity', tuple(component / unit for component in scene.gravity))
     set_input(obj, 'Inner Substeps', LIVE_SUBSTEPS)
+    set_input(obj, 'Self Contact', scene.dd_self_collision)
     set_input(obj, 'Grab Stride', GRAB_STRIDE / unit)
     set_input(obj, 'Grab Reach', GRAB_REACH / unit)
     obj.update_tag()
