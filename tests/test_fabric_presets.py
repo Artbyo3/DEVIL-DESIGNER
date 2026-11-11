@@ -1,7 +1,7 @@
 import json
 import unittest
 from devil_designer.core import Document, Session
-from devil_designer.presets import FABRIC_DEFAULTS, PRESETS, resolve_preset
+from devil_designer.presets import FABRIC_DEFAULTS, PRESETS, air_damping, resolve_preset
 
 SQUARE = [(0, 0), (.3, 0), (.3, .4), (0, .4)]
 
@@ -10,6 +10,13 @@ class FabricPresetTests(unittest.TestCase):
     def test_resolve_preset_builtin(self):
         for name, expected in PRESETS.items():
             self.assertEqual(resolve_preset(name), {**FABRIC_DEFAULTS, **expected})
+
+    def test_air_damping_lifts_only_fabrics_lighter_than_cotton(self):
+        damping = {name: air_damping(values['density']) for name, values in PRESETS.items()}
+        self.assertAlmostEqual(damping['SILK'], 2.0)
+        for name in ('KNIT', 'COTTON', 'LINEN', 'DENIM', 'LEATHER'):
+            self.assertEqual(damping[name], 1.0)
+        self.assertAlmostEqual(air_damping(0.05), 2.8)
 
     def test_resolve_preset_custom(self):
         custom = {'Chiffon': dict(structural=5.0, bending=0.05, density=0.05)}

@@ -3,7 +3,7 @@ import bpy
 import numpy as np
 
 from . import seam_shrink, xpbd_nodes
-from .presets import resolve_preset
+from .presets import air_damping, resolve_preset
 
 MODIFIER = 'DD XPBD'
 MASS_SCALE = 1000.0
@@ -338,12 +338,14 @@ def attach(context, obj, doc, panels, pieces, maps, plan, pinned, tacks):
     structural = np.empty(count)
     bending = np.empty(count)
     density = np.empty(count)
+    damping = np.empty(count)
     grain = np.empty((count, 4))
     for ids, _, preset in pieces:
         values = resolve_preset(preset, custom)
         structural[ids] = values['structural']
         bending[ids] = values['bending']
         density[ids] = values['density']
+        damping[ids] = air_damping(values['density'])
         grain[ids] = values['weft'], values['bias'], values['shrink_weft'], values['shrink_warp']
     edges = np.empty(len(mesh.edges) * 2, dtype=np.int32)
     mesh.edges.foreach_get('vertices', edges)
@@ -399,6 +401,7 @@ def attach(context, obj, doc, panels, pieces, maps, plan, pinned, tacks):
     write(mesh, 'dd_bend_rest', 'FLOAT_VECTOR', 'POINT', bend_rest_positions(panels, doc, rest, unit))
     write(mesh, 'dd_bend_compliance', 'FLOAT', 'POINT', BEND_COMPLIANCE * (2.2 / bending) ** 2)
     write(mesh, 'mass', 'FLOAT', 'POINT', np.maximum(face_masses(mesh, rest, density) * MASS_SCALE, 1e-5))
+    write(mesh, 'dd_damping', 'FLOAT', 'POINT', damping)
     write(mesh, 'radius', 'FLOAT', 'POINT', np.full(count, CONTACT_RADIUS / unit))
     write(mesh, 'dd_contact_weight', 'FLOAT', 'POINT', np.where(near_seam, 0.0, 1.0))
     write(mesh, 'dd_body_margin', 'FLOAT', 'POINT', np.full(count, scene.dd_skin_offset / unit))

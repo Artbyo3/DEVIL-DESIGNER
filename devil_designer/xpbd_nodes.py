@@ -4,7 +4,7 @@ import bpy
 ASSET_FILE = 'geometry_nodes_dynamics_assets.blend'
 STOCK_GROUPS = ('XPBD Simulation', 'XPBD Solver', 'Gravity', 'Collider', 'Set Friction', 'Set Geometry Tags',
                 'Set Geo Updater - Deform Only')
-GROUP_VERSION = 6
+GROUP_VERSION = 7
 STOCK_PREFIX = 'DD Stock '
 CLOTH_GROUP = 'DD XPBD Cloth'
 SOLVER_GROUP = 'DD XPBD Solver'
@@ -335,7 +335,6 @@ def build_cloth_group(simulation):
     socket(tree, 'Iterations', 'INPUT', 'NodeSocketInt', 2)
     socket(tree, 'Seam Seconds', 'INPUT', 'NodeSocketFloat', .8)
     socket(tree, 'Gravity', 'INPUT', 'NodeSocketVector', (0.0, 0.0, -9.81))
-    socket(tree, 'Damping', 'INPUT', 'NodeSocketFloat', 1.0)
     socket(tree, 'Geometry', 'OUTPUT', 'NodeSocketGeometry')
     graph = Graph(tree)
     source = tree.nodes.new('NodeGroupInput')
@@ -435,7 +434,7 @@ def build_cloth_group(simulation):
     ramp = graph.node('ShaderNodeClamp', settling, 0.0, 1.0).outputs[0]
     gravity = graph.group(stock_group('Gravity'), Gravity=graph.scale(out['Gravity'], ramp)).outputs[0]
     damping = graph.bundle((('Type', 'STRING', 'Blender.Damping'), ('filter', 'STRING', ''),
-                            ('linear_damping', 'FLOAT', out['Damping']), ('angular_damping', 'FLOAT', 1.0)))
+                            ('linear_damping', 'FLOAT', graph.attribute('dd_damping')), ('angular_damping', 'FLOAT', 1.0)))
     shell = graph.node('GeometryNodeObjectInfo', out['Body Shell'], settings={'transform_space': 'RELATIVE'}).outputs['Geometry']
     collider = graph.group(stock_group('Collider'), Geometry=shell, Friction=SHELL_FRICTION).outputs['Collider']
     cloth = graph.bundle((('Geometry', 'GEOMETRY', updated), ('Edge Length', 'BUNDLE', edge), ('Cross Edge Length', 'BUNDLE', bend),

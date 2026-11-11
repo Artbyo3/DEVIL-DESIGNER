@@ -87,6 +87,29 @@ def test_groups_and_modifier(scene):
     return simulation
 
 
+def test_fabric_air_damping(scene, body):
+    fresh(scene)
+    scene.dd_avatar = body
+    session = Session()
+    session.add([(-.2, 0), (0, 0), (0, .3), (-.2, .3)])
+    session.add([(.05, 0), (.25, 0), (.25, .3), (.05, .3)])
+    first, second = session.document.patterns
+    first.preset, second.preset = 'SILK', 'DENIM'
+    for pattern in (first, second):
+        pattern.placement_mode = 'LEGACY'
+    scene.dd_document = session.document.dumps()
+    simulation = garment.compile_garment(bpy.context)
+    damping = np.array([item.value for item in simulation.data.attributes['dd_damping'].data])
+    silk, denim = int((np.abs(damping - 2.0) < 1e-6).sum()), int((np.abs(damping - 1.0) < 1e-6).sum())
+    check(silk and denim and silk + denim == len(damping) and abs(silk - denim) < .2 * len(damping),
+          'silk and denim pieces of one garment carry their own air damping')
+    tree = simulation.modifiers['DD XPBD'].node_group
+    check(not any(item.item_type == 'SOCKET' and item.name == 'Damping' for item in tree.interface.items_tree),
+          'damping comes from the cloth, not one shared modifier value')
+    run_frames(scene, 20)
+    check(np.isfinite(points(simulation)).all(), 'mixed-damping cloth simulates to finite positions')
+
+
 def test_open_avatar_collision(scene):
     fresh(scene)
     scene.dd_avatar = open_body()
@@ -368,6 +391,7 @@ test_stiff_fabric_links()
 test_seam_bridges()
 test_fell_off_guard(scene, body)
 test_reset_restores_timeline(scene)
+test_fabric_air_damping(scene, body)
 test_open_avatar_collision(scene)
 test_paired_panels_stay_on_their_side(scene, body)
 test_pins_and_tacks(scene, body)

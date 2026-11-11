@@ -14,6 +14,7 @@ PRESETS = {
 FABRIC_DEFAULTS = dict(weft=1.0, bias=1.0, shrink_warp=0.0, shrink_weft=0.0)
 REQUIRED = {'structural', 'bending', 'density'}
 SHRINK_LIMIT = .3
+AIR_DRAG_DENSITY = .14
 
 
 def valid_fabric(values):
@@ -25,6 +26,10 @@ def valid_fabric(values):
         if key.startswith('shrink_') and abs(value) > SHRINK_LIMIT or not key.startswith('shrink_') and value <= 0:
             return False
     return True
+
+
+def air_damping(density):
+    return max(1.0, AIR_DRAG_DENSITY / density)
 
 
 def resolve_preset(name, custom_presets=None):

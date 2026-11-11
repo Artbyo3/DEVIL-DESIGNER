@@ -177,6 +177,10 @@ preserve valid pair membership. Designs without pair records remain unchanged.
   editor is closed. Simulate and Keep set the clock again after reopening.
 - Fabrics differ through bending stiffness. Linen, Denim and Leather add links across
   two cloth edges, because the solver's own bending saturates.
+- Air damping is per vertex. A fabric lighter than Cotton gets more of it in proportion
+  to its lower areal mass, so Silk has twice Cotton's. Every other fabric keeps the
+  solver's base damping of 1 per second, because less damping leaves cloth creeping
+  instead of settling.
 - A piece with a partner on the opposite side of the same volume stops wrapping at
   the body side, and extra width stands out as a flap so the panels cannot cross.
 - Grab cloth while it simulates. Pull follows the hand in the view plane, Push
@@ -354,12 +358,11 @@ remain possible on unusual bodies; inspect the starting fit. Regeneration resets
 Legacy named layouts are non-anatomical placements, not automatic fitting. Cross-avatar
 loading provides an editable starting fit,
 not automatic tailoring to all body proportions. Built-in fabric presets (SILK, KNIT,
-COTTON, LINEN, DENIM, LEATHER) are calibrated against KES-F / FAST data and cantilever
-bending lengths; known simulation limits apply: calibration is exact near 0.02 m spacing
-(Blender assigns mass per vertex and bending per edge without area/length normalization),
-triangle-mesh shear is locked to 3/8 of structural (no shear springs on CDT triangles),
-and multi-fabric garments share one area-weighted density. These limits are visible in the
-usage documentation and do not imply Marvelous Designer feature/performance parity.
+COTTON, LINEN, DENIM, LEATHER) keep stretch, bending and mass values from an earlier
+calibration against KES-F / FAST data and cantilever bending lengths on the previous
+solver. They have not been re-measured against real cloth on the XPBD engine. These
+limits are visible in the usage documentation and do not imply feature or performance
+parity with other garment tools.
 
 ## Acceptance examples
 
