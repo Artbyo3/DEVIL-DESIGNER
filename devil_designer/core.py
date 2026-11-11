@@ -557,6 +557,14 @@ class Document:
 
 from .construction import ConstructionMixin
 
+def mergeable_pair(pattern,path_id,first,second):
+    closed=path_id=='OUTER' or pattern.path(path_id).closed
+    count=len(pattern.path(path_id).vertices)
+    a,b=sorted((first,second))
+    if a<0 or b>=count or a==b:return False
+    if not closed:return count>2 and b==a+1
+    return b==a+1 or (a==0 and b==count-1)
+
 def pattern_enclosed_by_box(pattern,x0,y0,x1,y1):
     min_x,max_x=min(x0,x1),max(x0,x1)
     min_y,max_y=min(y0,y1),max(y0,y1)
@@ -943,9 +951,7 @@ class Session(ConstructionMixin):
         if pts[0][0]!=pts[1][0] or pts[0][1]!=pts[1][1]:return False
         p=self.document.find(pts[0][0])
         if not p:return False
-        nodes=p.path(pts[0][1]).vertices
-        a,b=sorted([pts[0][2],pts[1][2]])
-        return b==a+1 or (a==0 and b==len(nodes)-1)
+        return mergeable_pair(p,pts[0][1],pts[0][2],pts[1][2])
 
     def box_select(self,x0,y0,x1,y1,mode=None,shift=False,alt=False):
         target=self.acquisition_target
@@ -1926,7 +1932,9 @@ class Session(ConstructionMixin):
         nodes=p.path(self.path).vertices
         if indices is None or len(indices)!=2:raise ValueError('Shift-click two adjacent points to merge.')
         a,b=sorted(indices)
-        if b!=a+1 and (a,b)!=(0,len(nodes)-1):raise ValueError('Merge adjacent points.')
+        if not mergeable_pair(p,self.path,a,b):
+            if self.path!='OUTER' and not p.path(self.path).closed and len(nodes)<=2:raise ValueError('An internal line needs at least two points.')
+            raise ValueError('Merge adjacent points.')
         def apply():
             nodes[a].x,nodes[a].y=curves.mix((nodes[a].x,nodes[a].y),(nodes[b].x,nodes[b].y),.5)
             nodes.pop(b)
