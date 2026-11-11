@@ -14,6 +14,7 @@ ARM_STATION = (0.03, 0.10)
 ARM_MAX_THICKNESS = 0.12
 NECK_SEARCH = 0.15
 NECK_BIN = 0.01
+ARM_OUTER_REACH = 0.6
 
 
 def surrounds(segments, center_x):
@@ -112,14 +113,8 @@ def torso_loop_circumference(segments, center_x=0.0):
     if not segments:
         return 0.0
     components, points, edges = get_connected_loops(segments)
-    if not components:
-        return 0.0
-
-    components = [comp for comp in components if surrounds(component_segments(comp, points, edges), center_x)]
-    if not components:
-        return 0.0
-    best_comp = min(components, key=lambda comp: abs((min(points[i][0] for i in comp) + max(points[i][0] for i in comp)) / 2 - center_x))
-    return tape_length([points[i] for i in best_comp])
+    rings = [comp for comp in components if surrounds(component_segments(comp, points, edges), center_x)]
+    return tape_length([points[i] for comp in rings for i in comp])
 
 
 def tape_length(points):
@@ -166,17 +161,31 @@ def arm_band(points, center_x, shoulder_half, low_z, total_height):
     return bottom, top
 
 
+def outstretched_arms(points, center_x, low_z, total_height):
+    lateral = numpy.abs(points[:, 0] - center_x)
+    upper = points[:, 2] > low_z + 0.5 * total_height
+    reach = float(lateral[upper].max()) if upper.any() else 0.0
+    hands = points[upper & (lateral > ARM_OUTER_REACH * reach)]
+    if not len(hands):
+        return None
+    bottom, top = float(hands[:, 2].min()), float(hands[:, 2].max())
+    if top - bottom > ARM_MAX_THICKNESS * total_height:
+        return None
+    return bottom, top
+
+
 def neck_base(points, center_x, shoulder_half, floor, total_height):
     core = points[(numpy.abs(points[:, 0] - center_x) < shoulder_half) & (points[:, 2] > floor)
                   & (points[:, 2] < floor + NECK_SEARCH * total_height)]
     if not len(core):
         return None
     size = NECK_BIN * total_height
+    crown = float(points[:, 2].max())
     bins = ((core[:, 2] - floor) // size).astype(int)
     widths = []
     for index in numpy.unique(bins).tolist():
         members = core[bins == index]
-        if len(members) >= 3:
+        if len(members) >= 3 and floor + (index + 1) * size < crown:
             widths.append((float(members[:, 0].max() - members[:, 0].min()), floor + (index + 0.5) * size))
     if not widths:
         return None
@@ -215,7 +224,11 @@ def measure_mesh(body, mesh, scene, reference):
     xs = [v.x for v in world_verts]
     center_x = (min(xs) + max(xs)) / 2
 
+    points = numpy.array([tuple(v) for v in world_verts], dtype=float)
     shoulder_z = low_z + 0.78 * total_height
+    outstretched = outstretched_arms(points, center_x, low_z, total_height)
+    if outstretched and shoulder_z < outstretched[0]:
+        shoulder_z = (outstretched[0] + outstretched[1]) / 2
     upper_verts = [v for v in world_verts if abs(v.z - shoulder_z) < 0.03 * total_height]
     sh_x = [abs(v.x - center_x) for v in upper_verts if abs(v.y) < 0.15]
     shoulder_width = 2 * (max(sh_x) if sh_x else 0.20 * total_height)
@@ -301,7 +314,6 @@ def measure_mesh(body, mesh, scene, reference):
             break
     inseam = crotch_z - low_z
 
-    points = numpy.array([tuple(v) for v in world_verts], dtype=float)
     arm = arm_band(points, center_x, shoulder_width / 2, low_z, total_height)
     measured_neck = neck_base(points, center_x, shoulder_width / 2, arm[1], total_height) if arm else None
     if measured_neck is not None and measured_neck <= chest_z:

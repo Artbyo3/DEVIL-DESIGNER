@@ -9,6 +9,7 @@ from devil_designer.measurements import (
     get_connected_loops,
     torso_loop_circumference,
     estimate_body_measurements,
+    outstretched_arms,
     tape_length,
     surrounds,
 )
@@ -79,6 +80,43 @@ def tube(verts, polys, centre_x, radius, levels, sides=16):
             polys.append(MockPolygon([low + i, low + (i + 1) % sides, high + (i + 1) % sides, high + i]))
 
 
+def lathe(verts, polys, profile, sides=16):
+    first = len(verts)
+    for z, radius in profile:
+        for i in range(sides):
+            angle = i * math.tau / sides
+            verts.append(MockVertex(radius * math.cos(angle), 0.8 * radius * math.sin(angle), z))
+    for layer in range(len(profile) - 1):
+        for i in range(sides):
+            low = first + layer * sides
+            high = low + sides
+            polys.append(MockPolygon([low + i, low + (i + 1) % sides, high + (i + 1) % sides, high + i]))
+
+
+def sideways_tube(verts, polys, x_from, x_to, z, radius, sides=8, steps=6):
+    first = len(verts)
+    for x in numpy.linspace(x_from, x_to, steps):
+        for i in range(sides):
+            angle = i * math.tau / sides
+            verts.append(MockVertex(float(x), radius * math.cos(angle), z + radius * math.sin(angle)))
+    for layer in range(steps - 1):
+        for i in range(sides):
+            low = first + layer * sides
+            high = low + sides
+            polys.append(MockPolygon([low + i, low + (i + 1) % sides, high + (i + 1) % sides, high + i]))
+
+
+def headless_body():
+    verts, polys = [], []
+    for side in (-0.06, 0.06):
+        tube(verts, polys, side, 0.05, [0.0, 0.62])
+    lathe(verts, polys, [(0.60, 0.15), (0.66, 0.16), (0.72, 0.13), (0.80, 0.10), (0.86, 0.12), (0.92, 0.135),
+                         (0.98, 0.13), (1.01, 0.04), (1.08, 0.04), (1.10, 0.01)])
+    for sign in (-1, 1):
+        sideways_tube(verts, polys, sign * 0.12, sign * 0.55, 0.995, 0.02)
+    return MockMesh(verts, polys)
+
+
 def t_pose_points(height, neck_z, arm_bottom, arm_top):
     rows = []
     for z in numpy.linspace(0.5 * height, neck_z - 0.02, 30):
@@ -101,6 +139,32 @@ class MeasurementsTests(unittest.TestCase):
         self.assertAlmostEqual(band[0], 0.79, places=3)
         self.assertAlmostEqual(band[1], 0.83, places=3)
         self.assertAlmostEqual(neck_base(points, 0.0, 0.13, band[1], height), 0.865, delta=0.011)
+
+    def test_layered_outfit_girth_is_read_on_one_layer_the_outermost(self):
+        def ring(centre, radius):
+            points = [(centre + radius * math.cos(i * math.tau / 24), radius * math.sin(i * math.tau / 24)) for i in range(24)]
+            return list(zip(points, points[1:] + points[:1]))
+        body, outfit = ring(0.0, 0.12), ring(0.004, 0.16)
+        self.assertAlmostEqual(torso_loop_circumference(body + outfit, center_x=0.0), tape_length([p for p, _ in outfit]), places=6)
+        self.assertAlmostEqual(torso_loop_circumference(outfit + body, center_x=0.0), tape_length([p for p, _ in outfit]), places=6)
+
+    def test_headless_body_measures_shoulders_and_neck_from_its_arms(self):
+        mesh = headless_body()
+        m = estimate_body_measurements(MockBody(mesh), MockScene())
+        points = numpy.array([tuple(v.co) for v in mesh.vertices])
+        arms = outstretched_arms(points, 0.0, 0.0, 1.10)
+        self.assertLess(arms[0], 0.995)
+        self.assertGreater(arms[1], 0.995)
+        self.assertGreater(m['shoulder_width'], 26.0)
+        self.assertGreater(m['neck_y'], 1.0)
+        self.assertLess(m['neck_y'], 1.09)
+
+    def test_neck_search_never_takes_the_cut_top_of_a_headless_stump(self):
+        rows = [(x, 0.0, z) for z in numpy.linspace(0.80, 0.95, 16) for x in numpy.linspace(-0.12, 0.12, 9)]
+        rows += [(x, 0.0, z) for z in numpy.linspace(0.97, 1.05, 9) for x in numpy.linspace(-0.04, 0.04, 5)]
+        rows += [(x, 0.0, 1.06) for x in numpy.linspace(-0.01, 0.01, 3)]
+        neck = neck_base(numpy.array(rows), 0.0, 0.13, 0.95, 1.06)
+        self.assertLess(neck, 1.055)
 
     def test_lowered_arms_are_not_read_as_a_sleeve_band(self):
         height = 1.07
