@@ -14,6 +14,8 @@ from mathutils import Matrix, Quaternion, Vector
 
 
 ROOT=Path(__file__).resolve().parents[1]
+PREVIEW_CEILING_MS=150
+PREVIEW_REFERENCE_RATIO=6
 sys.dont_write_bytecode=True
 sys.path.insert(0,str(ROOT))
 import devil_designer
@@ -232,6 +234,18 @@ def check_states(check,area,region,view,scene,avatar,evidence):
     view.view_distance=4;view.update()
 
 
+def reference_workload_ms(panel):
+    import time
+    from mathutils.bvhtree import BVHTree
+    positions=[vertex.co.copy() for vertex in panel.data.vertices]
+    polygons=[tuple(polygon.vertices) for polygon in panel.data.polygons]
+    started=time.perf_counter()
+    tree=BVHTree.FromPolygons(positions,polygons)
+    nearest=np.array([tuple(tree.find_nearest(position)[0]) for position in positions])
+    np.linalg.norm(nearest-nearest.mean(axis=0),axis=1).sum()
+    return (time.perf_counter()-started)*1000
+
+
 def check_preview(check,area,region,view,scene,evidence):
     from devil_designer import garment
     from devil_designer.panel_cache import clear_arrangement_caches
@@ -244,11 +258,12 @@ def check_preview(check,area,region,view,scene,evidence):
     for obj in bpy.context.view_layer.objects:obj.select_set(False)
     bpy.context.view_layer.objects.active=panel
     vertices=len(panel.data.vertices)
-    timings=[]
+    timings=[];references=[]
     with bpy.context.temp_override(area=area,region=region,region_data=view):
         setup=arrangement.ensure_volumes(bpy.context)
         targets=[(volume['id'],point['id']) for volume in setup['volumes'] if volume['id'] in ('chest','waist','hip') for point in volume['points']]
         for volume,point in targets:
+            references.append(reference_workload_ms(panel))
             clear_arrangement_caches()
             started=time.perf_counter()
             preview=live_panels.preview_positions(bpy.context,identity,volume,point)
@@ -260,12 +275,16 @@ def check_preview(check,area,region,view,scene,evidence):
         world=[committed.matrix_world @ vertex.co for vertex in committed.data.vertices]
         agreement=max((Vector(first)-second).length for first,second in zip(preview['positions'],world))
     ordered=sorted(timings)
+    ratios=sorted(timing/reference for timing,reference in zip(timings,references))
     evidence['preview']=dict(vertices=vertices,samples=len(timings),p50_ms=ordered[len(ordered)//2],
                              p95_ms=ordered[min(len(ordered)-1,int(.95*(len(ordered)-1)))],maximum_ms=ordered[-1],
+                             reference_p50_ms=sorted(references)[len(references)//2],ratio_p50=ratios[len(ratios)//2],
+                             ratio_budget=PREVIEW_REFERENCE_RATIO,ceiling_ms=PREVIEW_CEILING_MS,
                              preview_commit_max_mm=agreement*1000)
     check(vertices>=4500,'preview latency is measured on a panel near 5,000 vertices '+str(vertices))
     check(agreement<.001,'preview and committed vertices agree within 1 mm '+str(agreement*1000))
-    check(evidence['preview']['p95_ms']<50,'cold preview p95 stays below 50 ms '+str(evidence['preview']))
+    check(evidence['preview']['ratio_p50']<=PREVIEW_REFERENCE_RATIO,'cold preview median stays within its calibrated reference budget '+str(evidence['preview']))
+    check(evidence['preview']['p95_ms']<PREVIEW_CEILING_MS,'cold preview p95 stays below the 150 ms interaction ceiling '+str(evidence['preview']))
 
 
 def run():

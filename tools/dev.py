@@ -9,7 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(ROOT))
-from tools.workspace import SCRATCH, clean_scratch, extension_archive, prepare_scratch
+from tools.workspace import SCRATCH, child_environment, clean_scratch, extension_archive, prepare_scratch
 BLENDER_PATH = r"C:\Program Files (x86)\Steam\steamapps\common\Blender\blender.exe"
 if not os.path.exists(BLENDER_PATH):
     for p in [r"C:\Program Files\Blender Foundation\Blender 5.2\blender.exe",
@@ -22,8 +22,7 @@ def run_cmd(cmd, cwd=str(ROOT), desc=""):
     if desc:
         print(f"--> {desc}...")
     t0 = time.time()
-    environment = dict(os.environ, PYTHONDONTWRITEBYTECODE='1')
-    res = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, env=environment)
+    res = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, env=child_environment())
     dt = time.time() - t0
     gui_test = any(Path(argument).name == 'run_blender_gui.py' for argument in cmd)
     if res.returncode != 0 or (gui_test and ('GUI TEST FAILED:' in res.stdout or 'GUI TEST TIMED OUT' in res.stdout)):

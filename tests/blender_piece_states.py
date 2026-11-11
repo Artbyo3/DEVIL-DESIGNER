@@ -174,6 +174,10 @@ weak = set(indices[document.patterns[1].id])
 strong_edges = [value for edge, value in zip(simulation.data.edges, edge_stiffness) if not edge.is_loose and set(edge.vertices) <= strong]
 weak_edges = [value for edge, value in zip(simulation.data.edges, edge_stiffness) if not edge.is_loose and set(edge.vertices) <= weak]
 check(abs(max(strong_edges) * 4 - max(weak_edges)) < max(weak_edges) * 1e-3, 'Strengthen multiplies stiffness on the chosen piece only')
+bend_compliance = [item.value for item in simulation.data.attributes['dd_bend_compliance'].data]
+strong_bending = [bend_compliance[index] for index in strong]
+weak_bending = [bend_compliance[index] for index in weak]
+check(abs(max(strong_bending) * 16 - max(weak_bending)) < max(weak_bending) * 1e-3, 'Strengthen multiplies bending stiffness by 16 on the chosen piece only')
 check(PRESETS == presets, 'Strengthen does not mutate any shared preset')
 garment.reset(bpy.context)
 document.patterns[0].deactivated = True

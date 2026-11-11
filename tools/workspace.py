@@ -37,6 +37,12 @@ def prepare_scratch():
     return directory
 
 
+def child_environment():
+    temporary = prepare_scratch() / 'blender-temp'
+    temporary.mkdir(exist_ok=True)
+    return dict(os.environ, PYTHONDONTWRITEBYTECODE='1', TEMP=str(temporary), TMP=str(temporary), TMPDIR=str(temporary))
+
+
 def clean_scratch():
     directory = checked_scratch()
     if not directory.exists():
