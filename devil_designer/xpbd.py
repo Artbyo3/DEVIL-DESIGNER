@@ -1,6 +1,7 @@
 import bmesh
 import bpy
 import numpy as np
+from mathutils.bvhtree import BVHTree
 
 from . import seam_shrink, xpbd_nodes
 from .presets import resolve_preset
@@ -32,6 +33,8 @@ GRAB_REACH = .4
 WELD_REACH = .06
 SHELL_VOXEL = .005
 SHELL_THICKNESS = .015
+PROXY_TRIANGLES = 3000
+GATE_PAD = .002
 
 
 def modifier(obj):
@@ -178,6 +181,47 @@ def bake_shell(context, collider):
     shell.hide_render = True
     shell.hide_set(True)
     return shell
+
+
+def surface_points(mesh):
+    points = np.empty(len(mesh.vertices) * 3, dtype=np.float64)
+    mesh.vertices.foreach_get('co', points)
+    return points.reshape(-1, 3)
+
+
+def deviation(dense, coarse):
+    coarse.calc_loop_triangles()
+    corners = np.empty(len(coarse.loop_triangles) * 3, dtype=np.int32)
+    coarse.loop_triangles.foreach_get('vertices', corners)
+    tree = BVHTree.FromPolygons(surface_points(coarse).tolist(), corners.reshape(-1, 3).tolist(), all_triangles=True)
+    return max((tree.find_nearest(point)[3] for point in surface_points(dense).tolist()), default=0.0)
+
+
+def bake_proxy(context, collider):
+    from . import garment
+    scene = context.scene
+    dense = collider.data
+    dense.calc_loop_triangles()
+    count = len(dense.loop_triangles)
+    if count > PROXY_TRIANGLES:
+        decimate = collider.modifiers.new('DD Proxy', 'DECIMATE')
+        decimate.ratio = PROXY_TRIANGLES / count
+        collider.hide_set(False)
+        context.view_layer.update()
+        graph = context.evaluated_depsgraph_get()
+        mesh = bpy.data.meshes.new_from_object(collider.evaluated_get(graph), depsgraph=graph)
+        collider.modifiers.remove(decimate)
+        collider.hide_set(True)
+        gap = deviation(dense, mesh)
+    else:
+        mesh = dense.copy()
+        gap = 0.0
+    proxy = bpy.data.objects.new('DD Collision Proxy', mesh)
+    garment.collection(scene).objects.link(proxy)
+    garment.tag(proxy, 'collider')
+    proxy.hide_render = True
+    proxy.hide_set(True)
+    return proxy, gap
 
 
 def restart_from_pose(obj):
@@ -401,7 +445,8 @@ def attach(context, obj, doc, panels, pieces, maps, plan, pinned, tacks):
     write(mesh, 'mass', 'FLOAT', 'POINT', np.maximum(face_masses(mesh, rest, density) * MASS_SCALE, 1e-5))
     write(mesh, 'radius', 'FLOAT', 'POINT', np.full(count, CONTACT_RADIUS / unit))
     write(mesh, 'dd_contact_weight', 'FLOAT', 'POINT', np.where(near_seam, 0.0, 1.0))
-    write(mesh, 'dd_body_margin', 'FLOAT', 'POINT', np.full(count, scene.dd_skin_offset / unit))
+    margin = scene.dd_skin_offset / unit
+    write(mesh, 'dd_body_margin', 'FLOAT', 'POINT', np.full(count, margin))
     write(mesh, 'dd_body_grip', 'FLOAT', 'POINT', np.full(count, scene.dd_friction))
     write(mesh, 'dd_body_step', 'FLOAT', 'POINT', np.full(count, BODY_STEP / unit))
     partner = np.full(count, -1, dtype=np.int32)
@@ -443,6 +488,9 @@ def attach(context, obj, doc, panels, pieces, maps, plan, pinned, tacks):
     tag_generated(handle, 'collider')
     collider = bake_collider(context)
     set_input(obj, 'Body', collider)
+    proxy, gap = bake_proxy(context, collider)
+    set_input(obj, 'Body Proxy', proxy)
+    write(mesh, 'dd_body_gate', 'FLOAT', 'POINT', np.full(count, gap + margin / xpbd_nodes.ALIGNED + GATE_PAD / unit))
     set_input(obj, 'Body Shell', bake_shell(context, collider))
     set_input(obj, 'Gravity', tuple(component / unit for component in scene.gravity))
     set_input(obj, 'Inner Substeps', LIVE_SUBSTEPS)

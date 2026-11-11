@@ -2,6 +2,7 @@ import json
 import math
 from pathlib import Path
 import sys
+import time
 
 import bpy
 import numpy as np
@@ -83,7 +84,7 @@ def test_groups_and_modifier(scene):
     check(not simulation.use_simulation_cache, 'simulation runs in realtime mode with no frame cache')
     check({'dd_seam', 'rest_length', 'mass', 'dd_bend_rest', 'dd_partner'} <= set(simulation.data.attributes.keys()), 'compile writes solver attributes')
     kinds = {obj.name.split('.')[0] for obj in garment.generated(scene, 'collider')}
-    check({'DD Collision Body', 'DD Collision Shell'} <= kinds, 'collision body and watertight shell are baked')
+    check({'DD Collision Body', 'DD Collision Shell', 'DD Collision Proxy'} <= kinds, 'collision body, contact proxy and watertight shell are baked')
     return simulation
 
 
@@ -350,6 +351,90 @@ def test_reset_restores_timeline(scene):
     check(not garment.generated(scene, 'collider') and not garment.generated(scene, 'simulation'), 'Reset clears generated simulation objects')
 
 
+def torso(segments, rings):
+    bpy.ops.mesh.primitive_uv_sphere_add(segments=segments, ring_count=rings, radius=1.0, location=(0, 0, 1.0))
+    body = bpy.context.object
+    body.scale = (.16, .13, .6)
+    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+    return body
+
+
+def wrapped_tube(scene, body):
+    fresh(scene)
+    scene.dd_avatar = body
+    session = Session()
+    for _ in range(3):
+        session.add([(-.1, 0), (.1, 0), (.1, .65), (-.1, .65)])
+        session.document.patterns[-1].placement_mode = 'LEGACY'
+    patterns = session.document.patterns
+    for left, right in ((0, 1), (1, 2)):
+        session.sew_chains([session.document.edge(patterns[left].id, 1)], [session.document.edge(patterns[right].id, 3)])
+    scene.dd_document = session.document.dumps()
+    panels = {panel['dd_pattern_id']: panel for panel in garment.build_panels(bpy.context)}
+    for side, pattern in enumerate(patterns):
+        angle = 2 * math.pi * side / 6
+        panels[pattern.id].location = (.1732 * math.cos(angle), .1732 * math.sin(angle), .65)
+        panels[pattern.id].rotation_euler = (math.pi / 2, 0, angle + math.pi / 2)
+    bpy.context.view_layer.update()
+    return garment.compile_garment(bpy.context)
+
+
+def median_frame_ms(scene, warmup, frames):
+    run_frames(scene, warmup)
+    timings = []
+    for _ in range(frames):
+        started = time.perf_counter()
+        run_frames(scene, 1)
+        timings.append((time.perf_counter() - started) * 1000.0)
+    return float(np.median(timings))
+
+
+def proxy_triangles(simulation):
+    proxy = xpbd.input_slot(simulation, 'Body Proxy').value
+    proxy.data.calc_loop_triangles()
+    return len(proxy.data.loop_triangles)
+
+
+def test_dense_body_costs_like_a_light_one(scene):
+    pin_top = scene.dd_pin_top
+    scene.dd_pin_top = True
+    costs, sizes = {}, {}
+    for name, segments, rings in (('dense', 256, 138), ('light', 24, 16)):
+        body = torso(segments, rings)
+        simulation = wrapped_tube(scene, body)
+        costs[name] = median_frame_ms(scene, 20, 40)
+        sizes[name] = proxy_triangles(simulation)
+        fresh(scene)
+        bpy.data.objects.remove(body, do_unlink=True)
+    scene.dd_pin_top = pin_top
+    print('BODY DENSITY MS', round(costs['dense'], 2), round(costs['light'], 2), flush=True)
+    check(costs['dense'] - costs['light'] < 3.0, 'a 70k-triangle body costs within 3 ms per frame of a 720-triangle body')
+    check(max(sizes.values()) <= xpbd.PROXY_TRIANGLES, 'every body gets a contact proxy of bounded size')
+
+
+def test_contact_gate_matches_exact_contact(scene):
+    pin_top = scene.dd_pin_top
+    scene.dd_pin_top = True
+    body = torso(256, 138)
+    simulation = wrapped_tube(scene, body)
+    gate = np.empty(len(simulation.data.vertices), dtype=np.float32)
+    simulation.data.attributes['dd_body_gate'].data.foreach_get('value', gate)
+    drapes = []
+    for value in (gate, np.full(len(gate), 1.0e9, dtype=np.float32)):
+        xpbd.write(simulation.data, 'dd_body_gate', 'FLOAT', 'POINT', value)
+        simulation.update_tag()
+        scene.frame_set(scene.frame_start)
+        run_frames(scene, 60)
+        drapes.append(points(simulation).copy())
+    scene.dd_pin_top = pin_top
+    apart = float(np.linalg.norm(drapes[0] - drapes[1], axis=1).max())
+    print('GATED VS EXACT MM', round(apart * 1000, 4), flush=True)
+    check(apart < 1e-4, 'the contact proxy gate drapes exactly like the full body query')
+    check(float(drapes[0][:, 2].min()) > .3, 'the gated drape still rests on the dense body')
+    fresh(scene)
+    bpy.data.objects.remove(body, do_unlink=True)
+
+
 devil_designer.register()
 scene = bpy.context.scene
 scene.dd_spacing = .025
@@ -371,5 +456,7 @@ test_reset_restores_timeline(scene)
 test_open_avatar_collision(scene)
 test_paired_panels_stay_on_their_side(scene, body)
 test_pins_and_tacks(scene, body)
+test_contact_gate_matches_exact_contact(scene)
+test_dense_body_costs_like_a_light_one(scene)
 devil_designer.unregister()
 print('ALL XPBD CHECKS PASSED', flush=True)

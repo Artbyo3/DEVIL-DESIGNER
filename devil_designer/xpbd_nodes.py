@@ -4,7 +4,7 @@ import bpy
 ASSET_FILE = 'geometry_nodes_dynamics_assets.blend'
 STOCK_GROUPS = ('XPBD Simulation', 'XPBD Solver', 'Gravity', 'Collider', 'Set Friction', 'Set Geometry Tags',
                 'Set Geo Updater - Deform Only')
-GROUP_VERSION = 6
+GROUP_VERSION = 7
 STOCK_PREFIX = 'DD Stock '
 CLOTH_GROUP = 'DD XPBD Cloth'
 SOLVER_GROUP = 'DD XPBD Solver'
@@ -21,6 +21,7 @@ VELOCITY_NEXT = 'dd_velocity_next'
 SIDE_REACH = 8.0
 SIDE_STEP = 1.0
 SHELL_FRICTION = .5
+ALIGNED = .6
 GRAB_EASE_START = 2.0e-6
 GRAB_EASE_RATE = 15.0
 GRAB_EASE_END = 1.0e-2
@@ -224,6 +225,7 @@ def build_contact_group():
     tree = bpy.data.node_groups.new(CONTACT_GROUP, 'GeometryNodeTree')
     socket(tree, 'Geometry', 'INPUT', 'NodeSocketGeometry')
     socket(tree, 'Body', 'INPUT', 'NodeSocketGeometry')
+    socket(tree, 'Body Proxy', 'INPUT', 'NodeSocketGeometry')
     socket(tree, 'Geometry', 'OUTPUT', 'NodeSocketGeometry')
     graph = Graph(tree)
     source = tree.nodes.new('NodeGroupInput')
@@ -235,14 +237,21 @@ def build_contact_group():
 
     margin = graph.attribute('dd_body_margin')
     grip = graph.attribute('dd_body_grip')
-    surface = surface_sample(graph, source.outputs['Body'], position, 'FLOAT_VECTOR', position)
-    outward = graph.vector('NORMALIZE', surface_sample(graph, source.outputs['Body'], normal, 'FLOAT_VECTOR', position))
+    proxy = source.outputs['Body Proxy']
+    rough = surface_sample(graph, proxy, position, 'FLOAT_VECTOR', position)
+    rough_outward = graph.vector('NORMALIZE', surface_sample(graph, proxy, normal, 'FLOAT_VECTOR', position))
+    clear = graph.compare('GREATER_THAN', graph.vector('DOT_PRODUCT', graph.vector('SUBTRACT', position, rough), rough_outward),
+                          graph.attribute('dd_body_gate'))
+    probe = graph.switch('VECTOR', clear, position, rough)
+    surface = surface_sample(graph, source.outputs['Body'], position, 'FLOAT_VECTOR', probe)
+    outward = graph.vector('NORMALIZE', surface_sample(graph, source.outputs['Body'], normal, 'FLOAT_VECTOR', probe))
     away = graph.vector('SUBTRACT', position, surface)
     height = graph.vector('DOT_PRODUCT', away, outward)
     reach = graph.vector('LENGTH', away)
-    aligned = graph.compare('GREATER_THAN', graph.math('ABSOLUTE', height), graph.math('MULTIPLY', reach, .6))
+    aligned = graph.compare('GREATER_THAN', graph.math('ABSOLUTE', height), graph.math('MULTIPLY', reach, ALIGNED))
     close = graph.compare('LESS_THAN', reach, margin)
-    touching = graph.logic('AND', graph.compare('LESS_THAN', height, margin), graph.logic('OR', aligned, close))
+    touching = graph.logic('AND', graph.logic('NOT', clear),
+                           graph.logic('AND', graph.compare('LESS_THAN', height, margin), graph.logic('OR', aligned, close)))
     step = graph.math('MINIMUM', graph.math('SUBTRACT', margin, height), graph.attribute('dd_body_step'))
     lift = graph.scale(outward, step)
     speed = graph.vector('DOT_PRODUCT', velocity, outward)
@@ -282,6 +291,7 @@ def build_solver_group(contact):
     tree.name = SOLVER_GROUP
     socket(tree, 'Inner Substeps', 'INPUT', 'NodeSocketInt', 4)
     socket(tree, 'Body', 'INPUT', 'NodeSocketGeometry')
+    socket(tree, 'Body Proxy', 'INPUT', 'NodeSocketGeometry')
     nodes = tree.nodes
     nodes['Switch'].inputs['Switch'].default_value = True
     step = nodes['XPBD Solver Test Wrapper.001']
@@ -294,6 +304,7 @@ def build_solver_group(contact):
     solved = graph.group(contact)
     tree.links.new(fetched.outputs['Item'], solved.inputs['Geometry'])
     tree.links.new(source.outputs['Body'], solved.inputs['Body'])
+    tree.links.new(source.outputs['Body Proxy'], solved.inputs['Body Proxy'])
     stored = graph.node('NodeStoreBundleItem', settings={'socket_type': 'GEOMETRY'}, Path=GEOMETRY_PATH)
     tree.links.new(step.outputs['World'], stored.inputs['Bundle'])
     tree.links.new(solved.outputs['Geometry'], stored.inputs['Item'])
@@ -306,11 +317,13 @@ def build_simulation_group(solver):
     tree.name = SIMULATION_GROUP
     socket(tree, 'Inner Substeps', 'INPUT', 'NodeSocketInt', 4)
     socket(tree, 'Body', 'INPUT', 'NodeSocketGeometry')
+    socket(tree, 'Body Proxy', 'INPUT', 'NodeSocketGeometry')
     node = tree.nodes['XPBD Solver']
     node.node_tree = solver
     source = tree.nodes.new('NodeGroupInput')
     tree.links.new(source.outputs['Inner Substeps'], node.inputs['Inner Substeps'])
     tree.links.new(source.outputs['Body'], node.inputs['Body'])
+    tree.links.new(source.outputs['Body Proxy'], node.inputs['Body Proxy'])
     return tree
 
 
@@ -321,6 +334,7 @@ def build_cloth_group(simulation):
     socket(tree, 'Geometry', 'INPUT', 'NodeSocketGeometry')
     socket(tree, 'Body', 'INPUT', 'NodeSocketObject')
     socket(tree, 'Body Shell', 'INPUT', 'NodeSocketObject')
+    socket(tree, 'Body Proxy', 'INPUT', 'NodeSocketObject')
     socket(tree, 'Grab Handle', 'INPUT', 'NodeSocketObject')
     socket(tree, 'Grab Index', 'INPUT', 'NodeSocketInt', -1)
     socket(tree, 'Grab Radius', 'INPUT', 'NodeSocketFloat', .05)
@@ -443,7 +457,8 @@ def build_cloth_group(simulation):
                           ('Shell', 'BUNDLE', collider)))
     world = graph.bundle((('Cloth', 'BUNDLE', cloth),))
 
-    solved = graph.group(simulation, World=world, Substeps=out['Contact Passes'], Inner_Substeps=out['Inner Substeps'], Body=body,
+    proxy = graph.node('GeometryNodeObjectInfo', out['Body Proxy'], settings={'transform_space': 'RELATIVE'}).outputs['Geometry']
+    solved = graph.group(simulation, World=world, Substeps=out['Contact Passes'], Inner_Substeps=out['Inner Substeps'], Body=body, Body_Proxy=proxy,
                          Constraint_Steps=out['Iterations'], Time_Scale=1.0, Solver_Output_Path='SolverData')
     result = graph.node('NodeGetBundleItem', settings={'socket_type': 'GEOMETRY'}, Path=GEOMETRY_PATH)
     tree.links.new(solved.outputs['World'], result.inputs['Bundle'])
