@@ -192,6 +192,13 @@ def advance():
             workspace.open_flyout('SHAPE')
             click(center(workspace.canvas_layout.buttons['STRIP_GRAB_UNPIN'][0]))
             check(len(xpbd_live.pinned_vertices(state['simulation'])) == 0 and workspace.tool == 'SHAPE', 'Remove pins frees every cloth pin and stays in Grab')
+            workspace.choose_tool('SELECT')
+            check(workspace.tool == 'SELECT', 'the artist leaves Grab')
+            workspace.handle_event(bpy.context, event('Z', point, ctrl=True))
+            check(len(xpbd_live.pinned_vertices(state['simulation'])) > 0, 'Ctrl+Z outside Grab brings the removed cloth pins back')
+            workspace.handle_event(bpy.context, SimpleNamespace(**{**vars(event('Z', point, ctrl=True)), 'shift': True}))
+            check(len(xpbd_live.pinned_vertices(state['simulation'])) == 0, 'Ctrl+Shift+Z outside Grab removes them again')
+            check('"drape"' in state['scene'].dd_history, 'cloth pin steps are saved with the undo history in the Blender file')
             return .4
         if step == 8:
             workspace.draw_overlay()

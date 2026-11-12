@@ -50,11 +50,11 @@ Press <kbd>Ctrl</kbd> + <kbd>Z</kbd> immediately after loading to restore the pr
 
 ### How many undo steps are saved, and do they survive closing Blender?
 
-The editor keeps the last 100 undo steps and up to 100 redo steps. They cover pattern, seam, fold and piece edits, and a garment load from the Library.
+The editor keeps the last 100 undo steps and up to 100 redo steps. They cover pattern, seam, fold and piece edits, cloth pins on the drape, and a garment load from the Library.
 
 The history is stored in the Blender file. Save the Blender file and the undo steps come back when you reopen it, even after closing Blender. Close without saving and the history since the last save is lost with the rest of the changes. If the design in the file no longer matches the saved history, the history is reset and a message says so. Your design itself stays unchanged.
 
-Cloth pins on the draped garment have their own short history. See [Simulate](simulate.md).
+A cloth pin step only applies to the drape it was made on. After a new drape from a changed pattern, older pin steps are skipped.
 
 ### How are UVs prepared for texturing?
 

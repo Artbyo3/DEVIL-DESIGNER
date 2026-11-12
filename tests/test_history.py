@@ -6,7 +6,7 @@ import tokenize
 import unittest
 
 from devil_designer.core import Document, Session
-from devil_designer.history import HISTORY_LIMIT, restore, store
+from devil_designer.history import HISTORY_LIMIT, PinStep, restore, store
 
 
 SQUARE = [(0, 0), (.3, 0), (.3, .4), (0, .4)]
@@ -228,6 +228,55 @@ class PersistentHistoryTests(unittest.TestCase):
         self.assertIn(f'up to {HISTORY_LIMIT} redo steps', answer)
         self.assertIn('stored in the Blender file', answer)
         self.assertIn('Close without saving', answer)
+
+    def test_cloth_pin_steps_share_the_full_undo_timeline_and_survive_reopening(self):
+        session = Session()
+        session.add(SQUARE)
+        steps = [PinStep('drape', (index,), ((0.0, 0.0, float(index)),)) for index in range(40)]
+        for step in steps:
+            session.push_step(step)
+        session.commit(lambda: setattr(session.document.patterns[0], 'name', 'Renamed'))
+        reopened = Session(Document.loads(session.document.dumps()))
+        self.assertTrue(restore(reopened, store(session)))
+        self.assertEqual(reopened.undo_stack[-41:-1], steps)
+        applied = []
+
+        def apply_step(step):
+            applied.append(step)
+            return PinStep('drape', (), ())
+
+        self.assertTrue(reopened.history(apply_step=apply_step))
+        self.assertNotEqual(reopened.document.patterns[0].name, 'Renamed')
+        self.assertEqual(applied, [])
+        while reopened.history(apply_step=apply_step):
+            pass
+        self.assertEqual(applied, steps[::-1])
+        self.assertEqual(len(reopened.redo_stack), 42)
+        self.assertTrue(reopened.history(redo=True, apply_step=apply_step))
+        self.assertEqual(len(applied), 40)
+        self.assertTrue(reopened.history(redo=True, apply_step=apply_step))
+        self.assertEqual(applied[-1], PinStep('drape', (), ()))
+
+    def test_a_stale_cloth_pin_step_is_skipped_for_the_next_change(self):
+        session = Session()
+        session.add(SQUARE)
+        session.commit(lambda: setattr(session.document.patterns[0], 'name', 'Renamed'))
+        session.push_step(PinStep('old drape', (1,), ((0.0, 0.0, 0.0),)))
+        self.assertTrue(session.history(apply_step=lambda step: None))
+        self.assertNotEqual(session.document.patterns[0].name, 'Renamed')
+        self.assertFalse(any(isinstance(entry, PinStep) for entry in session.redo_stack))
+
+    def test_damaged_cloth_pin_steps_reset_history_safely(self):
+        session = Session()
+        session.add(SQUARE)
+        session.push_step(PinStep('drape', (1,), ((0.0, 0.0, 0.0),)))
+        payload = json.loads(store(session))
+        for broken in ({'drape': '', 'held': [], 'targets': []}, {'drape': 'd', 'held': [1], 'targets': []},
+                       {'drape': 'd', 'held': [-1], 'targets': [[0, 0, 0]]}, {'drape': 'd', 'held': [1], 'targets': [[0, 0]]}):
+            payload['undo'] = [broken]
+            reopened = Session(Document.loads(session.document.dumps()))
+            self.assertFalse(restore(reopened, json.dumps(payload)))
+            self.assertEqual(reopened.undo_stack, [])
 
     def test_new_sources_have_no_comments_or_standalone_strings(self):
         root = Path(__file__).resolve().parents[1]

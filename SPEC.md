@@ -192,7 +192,8 @@ preserve valid pair membership. Designs without pair records remain unchanged.
   frees the pins under the ring, and Remove pins in the Grab flyout frees all of them. Cloth pins are written
   straight into the running solver, so no new drape starts. They are kept through Re-drape and Keep, and
   Reset drape clears them. They never override pattern pins, tacks or frozen pieces. Pinned cloth shows as
-  dots over the 3D view in every tool, and Ctrl+Z in Grab undoes the last pin change.
+  dots over the 3D view in every tool. Pin changes share the editor undo timeline (100 steps, saved
+  with the blend file), so Ctrl+Z and redo work on them in any tool.
 - Fold and Sweep in the Grab flyout are live brushes for deliberate folds. Dragging along the playing drape
   moves the cloth inside the ring with a smooth falloff: Fold draws it toward the stroke line so it gathers
   into a fold, and Sweep carries it along with the stroke. The stroke is a short trailing segment behind the

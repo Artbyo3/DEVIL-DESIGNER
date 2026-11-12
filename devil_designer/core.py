@@ -2196,10 +2196,21 @@ class Session(ConstructionMixin):
         self.clear_selection()
         if document.patterns:self.select_piece(document.patterns[0].id)
 
-    def history(self,redo=False):
+    def push_step(self,step):
+        self.undo_stack.append(step);self.undo_stack=self.undo_stack[-100:]
+        self._undo_selections.append(self.get_selection_state());self._undo_selections=self._undo_selections[-100:]
+        self.redo_stack.clear();self._redo_selections.clear()
+
+    def history(self,redo=False,apply_step=None):
         self.last_repairs=0
         source,target=(self.redo_stack,self.undo_stack) if redo else (self.undo_stack,self.redo_stack)
         sel_source,sel_target=(self._redo_selections,self._undo_selections) if redo else (self._undo_selections,self._redo_selections)
+        while source and not isinstance(source[-1],str):
+            inverse=apply_step(source.pop()) if apply_step else None
+            if sel_source:sel_source.pop()
+            if inverse is not None:
+                target.append(inverse);sel_target.append(self.get_selection_state())
+                return True
         if not source:return False
         committed=self._committed_selection
         current=self.document.dumps()

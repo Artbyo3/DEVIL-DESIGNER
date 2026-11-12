@@ -1,5 +1,7 @@
 import hashlib
 import json
+import math
+from dataclasses import dataclass
 
 from .core import Document
 
@@ -60,10 +62,44 @@ def _snapshot(raw):
     return document.dumps()
 
 
+@dataclass(frozen=True)
+class PinStep:
+    drape: str
+    held: tuple
+    targets: tuple
+
+    def payload(self):
+        return dict(drape=self.drape, held=list(self.held), targets=[list(point) for point in self.targets])
+
+
+def _pin_step(data):
+    drape, held, targets = data.get("drape"), data.get("held"), data.get("targets")
+    if not isinstance(drape, str) or not drape or not isinstance(held, list) or not isinstance(targets, list):
+        raise ValueError("A saved cloth pin step is invalid.")
+    if len(held) != len(targets) or any(type(index) is not int or index < 0 for index in held):
+        raise ValueError("A saved cloth pin step has invalid points.")
+    if any(not isinstance(point, list) or len(point) != 3 or any(
+            type(value) not in (int, float) or not math.isfinite(value) for value in point) for point in targets):
+        raise ValueError("A saved cloth pin step has invalid positions.")
+    return PinStep(drape, tuple(held), tuple(tuple(float(value) for value in point) for point in targets))
+
+
+def _entry(value):
+    if isinstance(value, PinStep):
+        return value
+    if isinstance(value, dict):
+        return _pin_step(value)
+    return _snapshot(value)
+
+
 def _stack(values):
     if not isinstance(values, list):
         raise ValueError("Saved undo and redo stacks must be lists.")
-    return [_snapshot(value) for value in values[-HISTORY_LIMIT:]]
+    return [_entry(value) for value in values[-HISTORY_LIMIT:]]
+
+
+def _saved(values):
+    return [value.payload() if isinstance(value, PinStep) else value for value in _stack(values)]
 
 
 def _clear(session, message):
@@ -74,8 +110,8 @@ def _clear(session, message):
 
 def store(session):
     try:
-        undo = _stack(session.undo_stack)
-        redo = _stack(session.redo_stack)
+        undo = _saved(session.undo_stack)
+        redo = _saved(session.redo_stack)
         payload = dict(version=HISTORY_VERSION, current=_fingerprint(session.document),
                        undo=undo, redo=redo)
         selected = session.selected

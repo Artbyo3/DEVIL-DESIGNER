@@ -80,7 +80,7 @@ Pins hold the cloth exactly where you put it while everything around it keeps dr
 - Drag a pinned spot to move it. It stays where you drop it.
 - <kbd>Ctrl</kbd>+click a pinned spot to free it. **Remove pins** in the Grab menu frees all of them.
 
-Pinned cloth shows as small dots, and <kbd>Ctrl</kbd>+<kbd>Z</kbd> in Grab undoes the last pin change. A smaller circle pins less cloth, which suits a single fold. Pins stay through **Re-drape** and are baked into the mesh by **Keep mesh**. **Reset drape** clears them.
+Pinned cloth shows as small dots. Pin changes are part of the editor's undo history, so <kbd>Ctrl</kbd>+<kbd>Z</kbd> and <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> undo and redo them in any tool, in order with your pattern edits. A smaller circle pins less cloth, which suits a single fold. Pins stay through **Re-drape** and are baked into the mesh by **Keep mesh**. **Reset drape** clears them.
 
 ## Pinch, Steam and Puff
 

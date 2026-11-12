@@ -1,5 +1,6 @@
+import hashlib
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import numpy as np
 from mathutils import Vector
@@ -7,6 +8,7 @@ from mathutils.bvhtree import BVHTree
 from mathutils.geometry import intersect_line_plane
 
 from . import xpbd
+from .history import PinStep
 
 GRAB_RADIUS = .05
 RADIUS_RANGE = (.015, .15)
@@ -19,7 +21,6 @@ BRUSH_RATE = .5
 BRUSH_WALK = 64
 STRENGTH_RANGE = (.2, 1.0)
 LIVE_VERTEX_BUDGET = 14000
-PIN_UNDO_LIMIT = 32
 
 
 def evaluated_points(context, source):
@@ -82,6 +83,33 @@ def store_pins(source, pinned, held, targets):
     xpbd.write(mesh, 'dd_pin_target', 'FLOAT_VECTOR', 'POINT', targets)
     mesh.update()
     source.update_tag()
+
+
+def drape_key(source):
+    rest = source.get('dd_run_rest', '')
+    return hashlib.sha256(f'{len(source.data.vertices)}:{rest}'.encode('utf-8')).hexdigest()
+
+
+def pin_state(source):
+    mesh = source.data
+    held = flags(mesh, 'dd_hold')
+    targets = vectors(mesh, 'dd_pin_target')[held] if held.any() else np.empty((0, 3))
+    return PinStep(drape_key(source), tuple(np.flatnonzero(held).tolist()), tuple(map(tuple, targets.tolist())))
+
+
+def restore_pins(source, step):
+    mesh = source.data
+    if step.drape != drape_key(source) or any(index >= len(mesh.vertices) for index in step.held):
+        return None
+    current = pin_state(source)
+    held = flags(mesh, 'dd_hold')
+    chosen = np.zeros(len(held), dtype=bool)
+    chosen[list(step.held)] = True
+    targets = vectors(mesh, 'dd_pin_target').copy()
+    if step.held:
+        targets[list(step.held)] = np.array(step.targets, dtype=np.float32)
+    store_pins(source, (flags(mesh, 'dd_pinned') & ~held) | chosen, chosen, targets)
+    return current
 
 
 def pin_cloth(source, vertices, positions):
@@ -154,7 +182,7 @@ class ClothGrab:
     offset: object = None
     rebase: bool = False
     lifted: object = None
-    undo_steps: list = field(default_factory=list)
+    on_change: object = None
     strength: float = .6
     stroke_vertex: int = -1
     stroke_trail: object = None
@@ -238,11 +266,8 @@ class ClothGrab:
 
     def pin_stroke(self, context):
         unit = max(1e-6, context.scene.unit_settings.scale_length)
-        self.checkpoint()
-        count = pin_cloth(self.source, patch(self.source, self.stroke_vertex, self.radius / unit), evaluated_points(context, self.source))
-        if not count:
-            self.undo_steps.pop()
-        return count
+        before = pin_state(self.source)
+        return self.recorded(before, pin_cloth(self.source, patch(self.source, self.stroke_vertex, self.radius / unit), evaluated_points(context, self.source)))
 
     def pick(self, context, origin, direction):
         points = evaluated_points(context, self.source)
@@ -267,16 +292,10 @@ class ClothGrab:
         except ReferenceError:
             return False
 
-    def checkpoint(self):
-        mesh = self.source.data
-        self.undo_steps.append((flags(mesh, 'dd_pinned'), flags(mesh, 'dd_hold'), vectors(mesh, 'dd_pin_target').copy()))
-        del self.undo_steps[:-PIN_UNDO_LIMIT]
-
-    def undo(self):
-        if self.held or not self.undo_steps:
-            return False
-        store_pins(self.source, *self.undo_steps.pop())
-        return True
+    def recorded(self, before, count):
+        if count and self.on_change is not None:
+            self.on_change(before)
+        return count
 
     def locked(self, vertex):
         mesh = self.source.data
@@ -309,8 +328,7 @@ class ClothGrab:
         unit = max(1e-6, context.scene.unit_settings.scale_length)
         self.lifted = np.intersect1d(patch(self.source, vertex, self.radius / unit), pinned_vertices(self.source))
         if len(self.lifted):
-            self.checkpoint()
-            unpin_cloth(self.source, self.lifted)
+            self.recorded(pin_state(self.source), unpin_cloth(self.source, self.lifted))
         xpbd.set_input(self.source, 'Grab Radius', self.radius / unit)
         xpbd.set_input(self.source, 'Grab Index', vertex)
         xpbd.set_input(self.source, 'Grab Release', -1.0)
@@ -338,27 +356,22 @@ class ClothGrab:
         if not self.held:
             return 0
         unit = max(1e-6, context.scene.unit_settings.scale_length)
-        if self.lifted is None or not len(self.lifted):
-            self.checkpoint()
+        before = None if self.lifted is not None and len(self.lifted) else pin_state(self.source)
         count = pin_cloth(self.source, patch(self.source, self.vertex, self.radius / unit), evaluated_points(context, self.source))
+        if before is not None:
+            self.recorded(before, count)
         self.lifted = None
         self.drop()
         return count
 
     def unpin_near(self, context, vertex):
         unit = max(1e-6, context.scene.unit_settings.scale_length)
-        self.checkpoint()
-        freed = unpin_cloth(self.source, patch(self.source, vertex, self.radius / unit))
-        if not freed:
-            self.undo_steps.pop()
-        return freed
+        before = pin_state(self.source)
+        return self.recorded(before, unpin_cloth(self.source, patch(self.source, vertex, self.radius / unit)))
 
     def unpin_all(self):
-        self.checkpoint()
-        freed = unpin_cloth(self.source)
-        if not freed:
-            self.undo_steps.pop()
-        return freed
+        before = pin_state(self.source)
+        return self.recorded(before, unpin_cloth(self.source))
 
     def drop(self):
         self.vertex = -1

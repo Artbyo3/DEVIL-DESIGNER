@@ -1575,7 +1575,7 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         if not xpbd.current(simulations[0]):
             raise ValueError('This drape comes from an older version. Press Simulate once, then grab it.')
         if self.shaping is None or self.shaping.source != simulations[0]:
-            self.shaping = ClothGrab(simulations[0])
+            self.shaping = ClothGrab(simulations[0], on_change=self.record_pin_change)
         if not self.choose_tool('SHAPE'):
             return
         self.shaping.arm()
@@ -1585,6 +1585,17 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         self._window.cursor_modal_set('HAND')
         self.shape_cursor = 'HAND'
         self.message = 'Drag the cloth while it simulates. W pins it where you hold it. Ctrl+wheel changes radius.'
+
+    def record_pin_change(self, before):
+        self.session.push_step(before)
+        self._scene.dd_history = history.store(self.session)
+
+    def apply_pin_step(self, step):
+        from . import garment, xpbd_live
+        simulations = garment.generated(self._scene, 'simulation')
+        if not simulations or self.shaping is not None and self.shaping.source == simulations[0] and (self.shaping.held or self.shaping.brushing):
+            return None
+        return xpbd_live.restore_pins(simulations[0], step)
 
     def end_shaping(self):
         if self.shaping is not None:
@@ -1730,8 +1741,11 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
             else:
                 garment.start_playback(context)
             return {'RUNNING_MODAL'}
-        if press and event.ctrl and event.type == 'Z' and grab.undo():
-            self.message = 'Cloth pin change undone.'
+        if press and event.ctrl and event.type in {'Z', 'Y'}:
+            if grab.held or grab.brushing:
+                self.message = 'Let go of the cloth before undoing.'
+            else:
+                self.perform_action('REDO' if event.type == 'Y' or event.shift else 'UNDO')
             return {'RUNNING_MODAL'}
         if press and event.type == 'ESC':
             if grab.held:

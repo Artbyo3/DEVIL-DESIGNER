@@ -71,7 +71,7 @@ class OverlayControls:
                 history_stack = self.session.redo_stack if action == 'REDO' else self.session.undo_stack
                 if history_stack:
                     self.clear_interaction_references()
-                self.run_edit(lambda: self.session.history(action == 'REDO'), action.title() + '.')
+                self.run_edit(lambda: self.session.history(action == 'REDO', self.apply_pin_step), action.title() + '.')
                 self.sync_selection()
         elif action == 'DELETE_PIECE':
             self.session.corner = None
