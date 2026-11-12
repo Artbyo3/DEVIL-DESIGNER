@@ -612,9 +612,6 @@ def register():
         for event in ('LEFTMOUSE','RIGHTMOUSE'):
             item=keymap.keymap_items.new(DD_OT_arrangement_pick.bl_idname,event,'PRESS')
             _keymaps.append((keymap,item))
-        keymap=configuration.keymaps.new(name='Object Mode',space_type='EMPTY')
-        item=keymap.keymap_items.new(DD_OT_arrangement_guide.bl_idname,'H','PRESS')
-        _keymaps.append((keymap,item))
 
 
 def unregister():

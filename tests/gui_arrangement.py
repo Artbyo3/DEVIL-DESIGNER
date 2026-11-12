@@ -65,11 +65,11 @@ def run():
                 check(garment.document(scene).patterns[0].arrangement is not None,'native left-click keymap dispatch arranges a selected panel')
                 check(arrangement_controls.selected_piece(bpy.context) is not None,
                       'native arrangement click retains panel selection: '+str(bpy.context.view_layer.objects.active))
-                check(bpy.ops.devil_designer.arrangement_guide.poll(),'arrangement guide shortcut is available after arranging')
                 dispatch('H',center)
             elif stage==3:
                 panel=garment.generated(scene,'panel')[0]
-                check(not scene.dd_reference_visible and not panel.hide_get(),'native arrangement H hides guides rather than the selected panel')
+                check(scene.dd_reference_visible and panel.hide_get(),'native H over the 3D view hides the selected panel and leaves the body guide as stock Blender would')
+                panel.hide_set(False)
                 panel.select_set(False);body.select_set(True);bpy.context.view_layer.objects.active=body
                 bpy.ops.object.mode_set(mode='EDIT')
                 check(not bpy.ops.devil_designer.arrangement_pick.poll(),'point picking is inactive in mesh Edit Mode')

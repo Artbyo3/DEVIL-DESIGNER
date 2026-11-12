@@ -9,7 +9,7 @@ Closing a pattern shape creates a matching 3D panel. Changes to the shape update
 ## Choose the Avatar
 
 1. Click **Garment**, switch to the **Body** tab, and choose your avatar from the list.
-2. Press <kbd>H</kbd> to show or hide the avatar guide and placement points.
+2. With the pointer over the editor, press <kbd>H</kbd> to show or hide the avatar guide and placement points. Over the 3D Viewport, <kbd>H</kbd> is Blender's own Hide.
 
 ## Wrap a Panel Around the Body
 

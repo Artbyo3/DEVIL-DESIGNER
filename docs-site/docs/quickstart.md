@@ -11,7 +11,7 @@ This guide takes a simple garment from pattern pieces to a finished mesh.
 
 1. Click **Garment** and switch to the **Body** tab.
 2. Choose your avatar from the list.
-3. Press <kbd>H</kbd> to show or hide the avatar guide.
+3. With the pointer over the editor, press <kbd>H</kbd> to show or hide the avatar guide.
 
 ## Step 3: Create Pattern Panels
 
