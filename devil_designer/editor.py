@@ -15,7 +15,7 @@ from .silhouette import BodyReference, torso_alignment
 from . import history,layering,snapping
 from .fit_display import FitOverlay
 
-OVERLAY_REFRESH = .4
+OVERLAY_REFRESH = .1
 RADIUS_STEP = 1.15
 BRUSH_SPACING = .6
 NON_KEYBOARD_TOKENS = ('MOUSE', 'TRACKPAD', 'TIMER', 'NDOF', 'WINDOW', 'PEN', 'ERASER', 'XR_', 'ACTIONZONE', 'EVT_', 'TEXTINPUT')

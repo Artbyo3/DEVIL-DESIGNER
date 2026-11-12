@@ -1,5 +1,6 @@
 import json
 import math
+import time
 from pathlib import Path
 import sys
 import traceback
@@ -113,8 +114,10 @@ def advance():
             handle = xpbd.input_slot(state['simulation'], 'Grab Handle').value
             check(not handle.visible_get(), 'grab handle is never visible')
             check(workspace.overlay_cache is not None or bpy.context.screen.is_animation_playing, 'overlay is cached during playback')
+            state['overlay_time'] = workspace.overlay_cache_time = time.perf_counter()
             return .3
         if step == 2:
+            check(workspace.overlay_cache_time > state['overlay_time'], 'the cached overlay refreshes within 0.3 s during playback')
             strip = workspace.shaping_controls_layout()
             check({'RADIUS_MINUS', 'RADIUS_PLUS'} <= set(strip), 'Grab controls are laid out')
             workspace.handle_event(bpy.context, event('MOUSEMOVE', center(strip['RADIUS_VALUE']), 'NOTHING'))
