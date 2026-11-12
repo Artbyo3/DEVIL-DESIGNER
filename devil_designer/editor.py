@@ -845,7 +845,7 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         if result is not None:
             return result
         from .arrangement_controls import interaction_active,point_event
-        if (not panel or interaction_active()) and self.tool != 'SEW' and not self.pending_tack and not self.pending_place:
+        if (not panel or interaction_active()) and self.tool not in {'SEW', 'PEN'} and not self.pending_tack and not self.pending_place:
             try:arrangement_result=point_event(context,event)
             except ValueError as failure:
                 self.message=str(failure)
