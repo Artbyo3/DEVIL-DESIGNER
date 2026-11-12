@@ -82,7 +82,7 @@ def run():
         with bpy.context.temp_override(area=area,region=region):
             bpy.ops.devil_designer.pattern_editor('INVOKE_DEFAULT')
             op=editor._active
-            scene.dd_reference_visible = True
+            check(scene.dd_reference_visible and scene.dd_points_visible,'opening the editor shows both the silhouette and the arrangement points')
             op.canvas_layout = op.make_layout()
             check(op is not None and bool(op.reference.vertices),'actual avatar silhouette is available on open')
             check(len(op.reference.triangles)>1000,'reference uses actual mesh surface triangles')
@@ -105,6 +105,27 @@ def run():
             check(not scene.dd_reference_visible,'dock Guide toggle hides body silhouette')
             op.handle_event(bpy.context,event('H'))
             check(scene.dd_reference_visible,'H restores body silhouette')
+            op.handle_event(bpy.context,event('H'))
+            check(not scene.dd_reference_visible and scene.dd_points_visible,'H hides the silhouette and leaves the arrangement points shown')
+            op.handle_event(bpy.context,event('H'))
+            op.show_card('BODY',None)
+            labels=[row[1] for row in op.card_rows('BODY')[1] if row[0]=='CHOICES']
+            check({'Silhouette','Arrangement points'}<=set(labels),'the Body menu has separate Silhouette and Arrangement points toggles: '+str(labels))
+            op.renderer.draw(op)
+            check(not op.error_message,'the Body menu with both toggles draws without a render error: '+str(op.error_message))
+            op.minimal_action('INSP_POINTS_Hidden')
+            check(not scene.dd_points_visible and scene.dd_reference_visible,'the Body menu hides the arrangement points and leaves the silhouette shown')
+            op.minimal_action('INSP_SILHOUETTE_Hidden')
+            check(not scene.dd_reference_visible and not scene.dd_points_visible,'the Body menu hides the silhouette on its own toggle')
+            op.minimal_action('INSP_POINTS_Shown')
+            check(scene.dd_points_visible and not scene.dd_reference_visible,'the Body menu shows the arrangement points while the silhouette stays hidden')
+            op.minimal_action('INSP_SILHOUETTE_Shown')
+            check(scene.dd_reference_visible and scene.dd_points_visible,'the Body menu shows the silhouette again')
+            from devil_designer import ui_system
+            check(ui_system.ARRANGEMENT_FILL==ui_system.ACCENT,'arrangement points use the accent color')
+            tint=ui_system.SILHOUETTE_TINT
+            check(max(tint)-min(tint)<.06,'the silhouette tint is a neutral grey, not a hue shared with the points')
+            op.card_kind=None
             for choice,value in (('Light',.15),('Strong',.50),('Medium',.30)):
                 op.minimal_action('INSP_OPACITY_'+choice)
                 check(abs(scene.dd_reference_opacity-value)<1e-5,'guide opacity chip '+choice.lower())

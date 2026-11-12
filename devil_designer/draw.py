@@ -18,7 +18,7 @@ from .avatar_field import EYEDROPPER, LABEL, SEARCH, TEXT_OFFSET, TEXT_SIZE
 from .minimal import FLYOUT_TOOLS, STRIP_KEYS
 from .localization import translate
 from .snapping import EDGE, INTERSECTION, LABELS, MIDPOINT
-from .ui_system import (MENU_CARDS,
+from .ui_system import (MENU_CARDS, SILHOUETTE_TINT,
     BG_BASE, BG_ELEVATED, BG_WELL, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, ACCENT, ACCENT_BG, ACCENT_BORDER, ACCENT_HOVER, BORDER, BORDER_SUBTLE, RADIUS_WINDOW, RADIUS_BADGE, Tooltip, ComponentRenderer, SURFACE_FLOATING, SURFACE_OUTLINE, SELECTION, TEXT_ON_ACCENT, MinimalMetrics,
     NativeField,
     TRANSFORM_FRAME, TRANSFORM_HANDLE, TRANSFORM_HANDLE_HOVER, TRANSFORM_PIVOT, TRANSFORM_PREVIEW_OK,
@@ -964,7 +964,7 @@ class Renderer:
                 elif key == 'GARMENT':
                     position = (rect.x + 20 * scale, rect.y - 18 * scale)
                 tip_label = ('Snap: On' if ed.snap else 'Snap: Off') if key == 'TOGGLE_SNAP' else \
-                            ('Body guide: On' if ed._scene.dd_reference_visible else 'Body guide: Off') if key == 'TOGGLE_GUIDE' else \
+                            ('Body silhouette: On' if ed._scene.dd_reference_visible else 'Body silhouette: Off') if key == 'TOGGLE_GUIDE' else \
                             ('Lengths: On' if ed._scene.dd_lengths_visible else 'Lengths: Off') if key == 'TOGGLE_LENGTHS' else blocker or label
                 if key == 'TOGGLE_FIT_MAP':
                     tip_label = 'Fit map: On' if ed.fit_overlay.enabled else 'Fit map: Off'
@@ -1484,8 +1484,7 @@ class Renderer:
             self.reference_revision = reference.revision
         if scene.dd_reference_visible and scene.dd_reference_opacity > 0:
             alpha = scene.dd_reference_opacity
-            tint = (0.48, 0.56, 0.64)
-            color = tuple(BG[i] * (1 - alpha) + tint[i] * alpha for i in range(3)) + (1,)
+            color = tuple(BG[i] * (1 - alpha) + SILHOUETTE_TINT[i] * alpha for i in range(3)) + (1,)
             origin = ed.view.screen((scene.dd_reference_x, scene.dd_reference_y), c)
             zoom = ed.view.zoom
             transform = Matrix(((zoom, 0, 0, origin[0]), (0, zoom, 0, origin[1]), (0, 0, 1, 0), (0, 0, 0, 1)))

@@ -53,6 +53,7 @@ QUALITY = {'Draft': 12, 'Standard': 24, 'High': 36}
 THICKNESS = {'None': 0, 'Thin': .0005, 'Standard': .001}
 FABRICS = ('COTTON', 'LINEN', 'DENIM', 'SILK', 'LEATHER', 'KNIT')
 GUIDE_OPACITY = {'Light': .15, 'Medium': .30, 'Strong': .50}
+SHOWN = ('Shown', 'Hidden')
 PLACEMENT_DISTANCE = {'Body': None, '1 cm': .01, '2 cm': .02, '5 cm': .05}
 PLACEMENT_OVERLAP = {'Off': (False, 1), 'Right on top': (True, 1), 'Left on top': (True, -1)}
 IMAGE_OPACITY = {'Light': .2, 'Medium': .35, 'Strong': .6}
@@ -148,7 +149,6 @@ class MinimalCards:
         self.library_load_path = None
         self.library_load_signature = None
         self.library_error = ''
-        self._scene.dd_reference_visible = False
         self._scene.dd_fabric = getattr(self.session.document, 'preset', 'COTTON')
         self.sync_fabric_settings(self._scene.dd_fabric)
         self.draw_shape = 'RECTANGLE'
@@ -407,7 +407,9 @@ class MinimalCards:
         elif kind == 'BODY':
             title = 'Body'
             rows = [('AVATAR_FIELD', LABEL)]
+            rows.append(('CHOICES', 'Silhouette', ('INSP_SILHOUETTE', SHOWN, SHOWN[not scene.dd_reference_visible])))
             rows.append(('CHOICES', 'Body opacity', ('INSP_OPACITY', GUIDE_OPACITY, self.named_choice(scene.dd_reference_opacity, GUIDE_OPACITY))))
+            rows.append(('CHOICES', 'Arrangement points', ('INSP_POINTS', SHOWN, SHOWN[not scene.dd_points_visible])))
             measurements = getattr(getattr(self, 'reference', None), 'measurements', None)
             if measurements:
                 rows.append(('INFO', 'Height', f"{measurements['height']:.1f} cm"))
@@ -1413,6 +1415,12 @@ class MinimalCards:
         elif key.startswith('INSP_QUALITY_'):
             choice = key.removeprefix('INSP_QUALITY_')
             scene.dd_quality = QUALITY[choice]
+        elif key.startswith('INSP_SILHOUETTE_'):
+            scene.dd_reference_visible = key == 'INSP_SILHOUETTE_Shown'
+        elif key.startswith('INSP_POINTS_'):
+            scene.dd_points_visible = key == 'INSP_POINTS_Shown'
+            from .arrangement_controls import redraw
+            redraw(bpy.context)
         elif key.startswith('INSP_OPACITY_'):
             choice = key.removeprefix('INSP_OPACITY_')
             scene.dd_reference_opacity = GUIDE_OPACITY[choice]

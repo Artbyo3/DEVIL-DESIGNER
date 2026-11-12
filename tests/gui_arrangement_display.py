@@ -342,11 +342,15 @@ def run():
                     bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP',iterations=1)
                 check(batch.call_count==0,'orbit changes uniforms without rebuilding GPU batches')
             scene.dd_reference_visible=False
+            with bpy.context.temp_override(area=area,region=region,region_data=view):
+                check(bool(arrangement_controls.projected_points(bpy.context)),'hiding the silhouette leaves the arrangement points shown')
+            scene.dd_reference_visible=True
+            scene.dd_points_visible=False
             with patch.object(arrangement_controls,'display_world_points',side_effect=AssertionError('hidden display resolved geometry')):
                 with bpy.context.temp_override(area=area,region=region,region_data=view):
                     arrangement_controls.draw_points()
-                    check(not arrangement_controls.projected_points(bpy.context),'H off skips all geometry and hit detection')
-            scene.dd_reference_visible=True
+                    check(not arrangement_controls.projected_points(bpy.context),'points off skips all geometry and hit detection')
+            scene.dd_points_visible=True
             evidence={}
             check_states(check,area,region,view,scene,avatar,evidence)
             check_preview(check,area,region,view,scene,evidence)

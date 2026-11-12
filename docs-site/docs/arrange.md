@@ -9,13 +9,13 @@ Closing a pattern shape creates a matching 3D panel. Changes to the shape update
 ## Choose the Avatar
 
 1. Click **Garment**, switch to the **Body** tab, and choose your avatar from the list.
-2. With the pointer over the editor, press <kbd>H</kbd> to show or hide the avatar guide and placement points. Over the 3D Viewport, <kbd>H</kbd> is Blender's own Hide.
+2. The avatar silhouette in the canvas and the placement points in the 3D view are separate guides. With the pointer over the editor, <kbd>H</kbd> shows or hides the silhouette. **Garment > Body** has a **Silhouette** and an **Arrangement points** toggle. Both are shown by default. Over the 3D Viewport, <kbd>H</kbd> is Blender's own Hide.
 
 ## Wrap a Panel Around the Body
 
 1. Click **3D view** at the top right of the editor to reveal the 3D Viewport beside the canvas. **Full canvas** brings the canvas back.
 2. Select a piece in the canvas or 3D view.
-3. Click a blue placement point, such as **Chest Front**, **Chest Back**, **Waist**, or **Upper Arm**.
+3. Click a placement point, such as **Chest Front**, **Chest Back**, **Waist**, or **Upper Arm**.
 4. Repeat for the other pieces.
 
 If the body placement point you need is unavailable, choose another visible point or use **Arrange flat** and move the piece into place.

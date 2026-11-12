@@ -232,7 +232,7 @@ def point_visible(context,position):
 
 def projected_points(context):
     global _projection_cache
-    if not context.scene.dd_reference_visible or context.scene.dd_avatar is None or context.region_data is None:return []
+    if not context.scene.dd_points_visible or context.scene.dd_avatar is None or context.region_data is None:return []
     world=display_world_points(context)
     panel=display_panel(context)
     key=(_world_cache[0],context.region.as_pointer(),context.region.width,context.region.height,
@@ -309,7 +309,7 @@ def draw_points():
 def draw_preview():
     context=bpy.context
     preview=_interaction.preview
-    if preview is None or context.area is None or context.area.type!='VIEW_3D' or not context.scene.dd_reference_visible:return
+    if preview is None or context.area is None or context.area.type!='VIEW_3D' or not context.scene.dd_points_visible:return
     if 'batch' not in preview:
         shader=gpu.shader.from_builtin('POLYLINE_UNIFORM_COLOR')
         lines=[position for edge in preview['edges'] for position in (preview['positions'][edge[0]],preview['positions'][edge[1]])]
@@ -385,9 +385,6 @@ def point_event(context,event):
     if not arrangement_context(context):
         if _interaction.state!='IDLE':end_interaction()
         return None
-    if event.type=='H' and event.value=='PRESS' and not (event.ctrl or event.shift or event.alt):
-        bpy.ops.devil_designer.arrangement_guide()
-        return {'RUNNING_MODAL'}
     if context.region_data is None:return None
     mouse=(event.mouse_x-context.region.x,event.mouse_y-context.region.y)
     state=_interaction.state
@@ -488,14 +485,14 @@ class DD_OT_arrangement_pick(bpy.types.Operator):
 
 class DD_OT_arrangement_guide(bpy.types.Operator):
     bl_idname='devil_designer.arrangement_guide'
-    bl_label='Toggle Body Guide and Arrangement Points'
+    bl_label='Toggle Arrangement Points'
 
     @classmethod
     def poll(cls,context):
         return arrangement_context(context)
 
     def execute(self,context):
-        context.scene.dd_reference_visible=not context.scene.dd_reference_visible
+        context.scene.dd_points_visible=not context.scene.dd_points_visible
         for area in context.screen.areas:
             if area.type=='VIEW_3D':area.tag_redraw()
         return {'FINISHED'}
