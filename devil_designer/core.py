@@ -8,6 +8,7 @@ from .presets import valid_fabric
 EPS = 1e-10
 MAX_SPLIT_PARTS = 200
 MOVE_PROBE = 1e-3
+GRID_MARGIN = 1e-6
 
 def uid():
     return uuid.uuid4().hex
@@ -30,19 +31,66 @@ def intersects(a, b, c, d):
         return True
     return any((on_segment(c,a,b),on_segment(d,a,b),on_segment(a,c,d),on_segment(b,c,d)))
 
+def bounds(points):
+    return (min(p[0] for p in points),min(p[1] for p in points),max(p[0] for p in points),max(p[1] for p in points))
+
+class Grid:
+    def __init__(self, points):
+        low_x,low_y,high_x,high_y = bounds(points)
+        extent = max(high_x-low_x,high_y-low_y)
+        self.origin = (low_x,low_y)
+        self.size = max(extent/math.sqrt(len(points)),1e-9)
+        self.last = int(extent/self.size)+1
+        self.cells = {}
+
+    def indices(self, low, high, axis):
+        return range(max(0,int((low-self.origin[axis])//self.size)),min(self.last,int((high-self.origin[axis])//self.size))+1)
+
+    def span(self, box, margin):
+        return [(column,row) for column in self.indices(box[0]-margin,box[2]+margin,0) for row in self.indices(box[1]-margin,box[3]+margin,1)]
+
+    def add(self, item, box):
+        for key in self.span(box,0):
+            self.cells.setdefault(key,[]).append(item)
+
+    def near(self, box, margin):
+        found = set()
+        for key in self.span(box,margin):
+            found.update(self.cells.get(key,()))
+        return found
+
+    def near_triangle(self, corners, reach):
+        found = set()
+        edges = list(zip(corners,corners[1:]+corners[:1]))
+        for column in self.indices(min(x for x,_ in corners)-reach,max(x for x,_ in corners)+reach,0):
+            left = self.origin[0]+column*self.size-reach
+            right = left+self.size+2*reach
+            heights = [y for x,y in corners if left <= x <= right]
+            for (x1,y1),(x2,y2) in edges:
+                if x1 != x2:
+                    heights += [y1+(x-x1)*(y2-y1)/(x2-x1) for x in (left,right) if min(x1,x2) <= x <= max(x1,x2)]
+            if heights:
+                for row in self.indices(min(heights)-reach,max(heights)+reach,1):
+                    found.update(self.cells.get((column,row),()))
+        return found
+
 def validate_polygon(points):
     if len(points) < 3:
         raise ValueError("A pattern needs at least three corners.")
     if any(not math.isfinite(v) or abs(v) > 10000 for p in points for v in p):
         raise ValueError("Coordinates must be finite and within 10 km.")
     n = len(points)
+    boxes = [bounds((points[i],points[(i+1)%n])) for i in range(n)]
+    grid = Grid(points)
+    for i,box in enumerate(boxes):
+        grid.add(i,box)
     for i in range(n):
         a,b,c = points[i-1],points[i],points[(i+1)%n]
         if math.dist(b,c) < 1e-6:
             raise ValueError("Two neighbouring corners are too close.")
         if abs(cross(a,b,c)) <= EPS and (on_segment(c,a,b) or on_segment(a,b,c)):
             raise ValueError("An edge doubles back on itself.")
-        for j in range(i+1,n):
+        for j in sorted(j for j in grid.near(boxes[i],GRID_MARGIN) if j > i):
             if j == i+1 or (i == 0 and j == n-1):
                 continue
             if intersects(points[i],points[(i+1)%n],points[j],points[(j+1)%n]):
@@ -72,18 +120,25 @@ def triangulate(points):
             break
         indices.pop(flat)
     triangles = []
+    remaining = set(indices)
+    grid = Grid(points)
+    for index in indices:
+        grid.add(index,bounds((points[index],)))
     while len(indices) > 3:
         for k,b in enumerate(indices):
             a,c = indices[k-1],indices[(k+1)%len(indices)]
-            if cross(points[a],points[b],points[c]) <= EPS:
+            twice_area = cross(points[a],points[b],points[c])
+            if twice_area <= EPS:
                 continue
+            corners = [tuple(points[a]),tuple(points[b]),tuple(points[c])]
+            reach = 4*EPS/twice_area*max(math.dist(u,v) for u,v in zip(corners,corners[1:]+corners[:1]))+GRID_MARGIN
             if any(cross(points[a],points[b],points[p]) >= -EPS and
                    cross(points[b],points[c],points[p]) >= -EPS and
                    cross(points[c],points[a],points[p]) >= -EPS
-                   for p in indices if p not in (a,b,c)):
+                   for p in grid.near_triangle(corners,reach) if p in remaining and p not in (a,b,c)):
                 continue
             triangles.append((a,b,c))
-            indices.pop(k)
+            remaining.discard(indices.pop(k))
             break
         else:
             raise ValueError("Cannot fill this pattern; check its corners.")
@@ -191,6 +246,14 @@ class Pattern:
     def contains(self,point):
         return contains(point,self.outline()) and not any(contains(point,p.outline()) for p in self.paths if p.role=='HOLE')
 
+
+def vertex_position(owner,identity):
+    nodes=owner.vertices
+    index=owner.__dict__.get('vertex_positions',{}).get(identity)
+    if index is None or index>=len(nodes) or nodes[index].id!=identity:
+        owner.vertex_positions={vertex.id:i for i,vertex in reversed(list(enumerate(nodes)))}
+        index=owner.vertex_positions.get(identity)
+    return index
 
 def sample_path(vertices,closed):
     update_auto_handles(vertices,closed)
@@ -373,8 +436,11 @@ class Document:
     def edge_vertices(self,edge):
         p=self.find(edge.pattern)
         if p:
-            nodes=p.path(edge.path).vertices
-            closed=edge.path=='OUTER' or p.path(edge.path).closed
+            owner=p.path(edge.path)
+            nodes=owner.vertices
+            closed=edge.path=='OUTER' or owner.closed
+            i=vertex_position(owner,edge.start)
+            if i is not None and i<len(nodes)-(0 if closed else 1) and nodes[(i+1)%len(nodes)].id==edge.end: return nodes[i],nodes[(i+1)%len(nodes)]
             for i in range(len(nodes)-(0 if closed else 1)):
                 if nodes[i].id==edge.start and nodes[(i+1)%len(nodes)].id==edge.end: return nodes[i],nodes[(i+1)%len(nodes)]
         raise ValueError('A referenced segment was removed. Pair the replacement again.')
