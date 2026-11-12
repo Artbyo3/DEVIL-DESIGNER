@@ -99,6 +99,16 @@ class DesignTests(unittest.TestCase):
         self.assertAlmostEqual(s.document.seam_stats(seam)[2],0)
         Document.loads(s.document.dumps())
 
+    def test_dart_apex_on_the_mouth_is_refused_instead_of_making_a_flat_dart(self):
+        for apex in ((.2,0.),(.2,.0005),(.2,.0049)):
+            s=self.square();before=[(v.x,v.y) for v in s.document.patterns[0].vertices]
+            with self.assertRaisesRegex(ValueError,'no depth'):
+                s.dart(s.document.edge(s.selected,0),.4,.6,apex)
+            self.assertEqual([(v.x,v.y) for v in s.document.patterns[0].vertices],before)
+            self.assertEqual(s.document.seams,[])
+        s=self.square();s.dart(s.document.edge(s.selected,0),.4,.6,(.2,.006))
+        self.assertLess(abs(area(s.document.patterns[0].outline())),.2)
+
     def test_offset_and_merge(self):
         s=self.square();s.offset(.01)
         self.assertAlmostEqual(abs(area(s.document.patterns[1].outline())),.42*.52)

@@ -3,6 +3,8 @@ import hashlib
 import math
 from . import curves
 
+MINIMUM_DART_DEPTH=.005
+
 class ConstructionMixin:
     def knife_preview(self,points):
         points=[(point.x,point.y) if hasattr(point,'x') else tuple(point) for point in points]
@@ -389,6 +391,7 @@ class ConstructionMixin:
         if end-start<.001:raise ValueError('Give the dart a nonzero mouth width.')
         p=self.document.find(edge.pattern)
         if not p.contains(apex):raise ValueError('Place the dart apex inside the pattern.')
+        if curves.closest_fraction(self.document.edge_curve(edge),apex)[1]<MINIMUM_DART_DEPTH:raise ValueError('The dart apex is on the dart mouth, so the dart would have no depth. Click at least 5 mm inside the pattern.')
         def apply():
             a,b=self.document.edge_vertices(edge)
             base_b=b if end>1-1e-8 else self.document.split_edge(edge,end)
