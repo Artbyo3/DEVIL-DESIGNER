@@ -38,6 +38,17 @@ The design is placed using matching points on the new avatar when available. If 
   <figcaption id="shot-library-load-avatar-caption">Full-editor view showing a saved garment loaded and refitted around the newly selected avatar in the 3D workspace.</figcaption>
 </figure>
 
+## Refit an Open Garment to Another Avatar
+
+With a garment open, choose a different avatar in **Body**. The garment is refit to the new body in one step:
+
+- Every piece takes the new body's length.
+- Across, each part of a piece follows the girth change of the body region it sits on, so the chest area follows the chest and the hem follows the hips. Pieces sewn at the same height change together, so their seams stay matched.
+- Pieces are placed again by their arrangement points on the new body.
+- If the garment was draped, it drapes again on the new body once its arrangement points are ready.
+
+If a body has no clear chest, waist and hips to measure, the garment is scaled evenly by height instead. A body less than half or more than twice the height of the old one leaves the garment at its size. Press <kbd>Ctrl</kbd> + <kbd>Z</kbd> to undo the refit and keep the old size.
+
 ## Undo a Load
 
 Loading a design over an open one saves a temporary recovery point. Press <kbd>Ctrl</kbd> + <kbd>Z</kbd> right after loading to restore the previous design. Undo restores the pattern. Reference images loaded with the garment stay on the canvas. Garments saved before reference images were carried leave your current reference images as they are.

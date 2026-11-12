@@ -433,7 +433,12 @@ def fit_completed(job):
     except (ValueError,RuntimeError,ReferenceError) as failure:
         message=str(failure)
     active=editor._active
-    if active is not None and active._scene==scene:active.message=message
+    if active is not None and active._scene==scene:
+        active.message=message
+        if job.state=='ready' and active.redrape_after_fit:
+            active.redrape_after_fit=False
+            active.perform_action('SIMULATE')
+            active.message=('Garment refit and re-draped on '+job.avatar.name+'. '+active.message).strip()
     for window in getattr(context.window_manager,'windows',()):
         for area in window.screen.areas:
             if area.type=='VIEW_3D':area.tag_redraw()

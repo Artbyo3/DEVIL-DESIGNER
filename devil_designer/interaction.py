@@ -9,6 +9,7 @@ class OverlayControls:
         saved = tuple(self._scene.dd_ui_rect)
         self.window_rect = saved if saved[2] > 0 and saved[3] > 0 else None
         self.pending_simulation = False
+        self.redrape_after_fit = False
         self.confirm_action = None
         self.confirm_message = ''
         self.numeric = None

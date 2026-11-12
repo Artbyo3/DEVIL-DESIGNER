@@ -3,6 +3,7 @@ import traceback
 import time
 import bpy
 import gpu
+from mathutils import Vector
 from gpu_extras.presets import draw_texture_2d
 from .core import Document, Session, Vertex
 from . import curves
@@ -279,7 +280,48 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
         self.view.cx += (canvas.x + canvas.w / 2 - fit_rect.x - fit_rect.w / 2) / self.view.zoom
         self.view.cy += (canvas.y + canvas.h / 2 - fit_rect.y - fit_rect.h / 2) / self.view.zoom
 
+    def refit_spans(self, old):
+        from . import garment
+        unit = garment.metres_per_unit(self._scene)
+        height = old['high_z'] - old['low_z']
+        spans = {}
+        for panel in garment.generated(self._scene, 'panel'):
+            low, high = garment.bounds(panel)
+            up = (panel.matrix_world.to_3x3() @ Vector((0, 1, 0))).normalized().z
+            bottom, top = ((value * unit - old['low_z']) / height for value in (low.z, high.z))
+            spans[panel.get('dd_pattern_id')] = (top, bottom, True) if up < -.7 else (bottom, top, up > .7)
+        return spans
+
+    def refit_to(self, previous, body):
+        from . import garment, refit
+        from .measurements import estimate_body_measurements
+        old = estimate_body_measurements(previous, self._scene)
+        new = estimate_body_measurements(body, self._scene)
+        if old is None or new is None:
+            self.message = 'The garment kept its size because one of the bodies could not be measured.'
+            return False
+        spans = self.refit_spans(old)
+        draped = bool(garment.generated(self._scene, 'simulation'))
+        result = {}
+        changed = self.run_edit(lambda: self.session.commit(lambda: result.update(zip(('along', 'chest'), refit.refit_document(self.session.document, spans, old, new)))),
+                                'Garment refit.')
+        if changed and result:
+            region = 'evenly, because a body has no clear waist and hips' if old['fallback'] or new['fallback'] else 'each body region by its own girth'
+            self.message = (f"Garment refit to {body.name}: length {result['along'] * 100:.0f}%, chest {result['chest'] * 100:.0f}%, "
+                            f'{region}. Ctrl+Z keeps the old size.')
+        return changed and draped
+
     def choose_body(self, body, context):
+        previous = self._scene.dd_avatar
+        redrape = False
+        refit_note = ''
+        if (body is not None and previous is not None and previous != body and self.session.document.patterns
+                and self._scene.dd_library_refit):
+            try:
+                redrape = self.refit_to(previous, body)
+            except ReferenceError:
+                redrape = False
+            refit_note = self.message
         self._scene.dd_avatar = body
         if body is None:
             self.pending_simulation = False
@@ -292,6 +334,14 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
             if self.pending_simulation:
                 self.pending_simulation = False
                 self.perform_action('SIMULATE')
+            elif redrape and pending_job(context) is not None:
+                self.redrape_after_fit = True
+                refit_note += ' It re-drapes when the arrangement points are ready.'
+            elif redrape:
+                self.perform_action('SIMULATE')
+                refit_note = (refit_note + ' ' + self.message).strip()
+        if refit_note:
+            self.message = refit_note
 
     def persist(self):
         from . import live_panels, piece_states
