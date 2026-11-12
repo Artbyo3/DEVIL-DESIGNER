@@ -21,6 +21,7 @@ BRUSH_SPACING = .6
 NON_KEYBOARD_TOKENS = ('MOUSE', 'TRACKPAD', 'TIMER', 'NDOF', 'WINDOW', 'PEN', 'ERASER', 'XR_', 'ACTIONZONE', 'EVT_', 'TEXTINPUT')
 _active = None
 PIN_DEPTH_MARGIN = .002
+HANDLE_CURSORS = {'SCALE': 'SCROLL_XY', 'ROTATE': 'HAND', 'PIVOT': 'CROSSHAIR'}
 
 
 def close_active():
@@ -178,11 +179,21 @@ class DD_OT_pattern_editor(MinimalCards, DesignTools, OverlayControls, bpy.types
             self.window_drag = dict(hit=hit, pointer=self.pointer, rect=self.canvas_layout.panel)
             return {'RUNNING_MODAL'}
         if event.type == 'MOUSEMOVE':
-            cursor = 'DEFAULT' if not hit else 'SCROLL_XY' if hit == 'MOVE' or len(hit) > 1 else 'MOVE_X' if hit in {'L', 'R'} else 'MOVE_Y'
+            cursor = self.handle_cursor() if not hit else 'SCROLL_XY' if hit == 'MOVE' or len(hit) > 1 else 'MOVE_X' if hit in {'L', 'R'} else 'MOVE_Y'
             if cursor != self.window_cursor:
                 self._window.cursor_set(cursor)
                 self.window_cursor = cursor
         return None
+
+    def handle_cursor(self):
+        gesture = self.gesture
+        if gesture and gesture.get('mode') == 'TRANSFORM' and gesture.get('handle'):
+            return HANDLE_CURSORS[gesture['kind']]
+        if gesture and gesture.get('mode') == 'SET_PIVOT':
+            return HANDLE_CURSORS['PIVOT']
+        if self.card_kind or not self.canvas_layout.canvas.contains(*self.pointer):
+            return 'DEFAULT'
+        return HANDLE_CURSORS.get(self.transform_frame_hit(), 'DEFAULT')
 
     def drag_window(self, drag):
         rect = drag['rect']

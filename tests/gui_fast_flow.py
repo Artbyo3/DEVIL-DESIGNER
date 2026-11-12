@@ -740,6 +740,28 @@ def check_interaction_regressions(workspace, event, point, check):
             workspace.pointer = point
             check(workspace.transform_frame_hit() == handle, 'frame hover resolves ' + handle.lower())
             draw_selection_state('Hovered frame ' + handle.lower() + ' handle with hint')
+        for handle, point, cursor in (('ROTATE', frame['knob'], 'HAND'), ('SCALE', frame['corners'][2], 'SCROLL_XY'), ('PIVOT', frame['pivot'], 'CROSSHAIR')):
+            workspace.handle_event(bpy.context, event('MOUSEMOVE', point, 'NOTHING'))
+            check(workspace.window_cursor == cursor, 'hovering the ' + handle.lower() + ' handle shows the ' + cursor + ' cursor, got ' + workspace.window_cursor)
+        canvas = workspace.canvas_layout.canvas
+        outline = workspace.session.document.find(first.id).outline()
+        inside = workspace.view.screen((sum(x for x, _ in outline) / len(outline), sum(y for _, y in outline) / len(outline)), canvas)
+        workspace.handle_event(bpy.context, event('MOUSEMOVE', inside, 'NOTHING'))
+        check(workspace.window_cursor == 'DEFAULT', 'leaving the frame handles restores the default cursor')
+        fills = {}
+        original_fill = workspace.renderer.fill_pattern
+        def recording_fill(identity, world, screen, color, *rest):
+            fills[identity] = color[3]
+            return original_fill(identity, world, screen, color, *rest)
+        workspace.renderer.fill_pattern = recording_fill
+        try:
+            workspace.renderer.draw(workspace)
+        finally:
+            del workspace.renderer.fill_pattern
+        check(not workspace.error_message, 'drawing a hovered piece raises no render error: ' + str(workspace.error_message))
+        others = [value for identity, value in fills.items() if identity not in (first.id, second.id)]
+        check(fills.get(first.id, 0) > max(others, default=.055) and fills.get(first.id, 0) < fills.get(second.id, 1),
+              'a hovered unselected piece reads brighter than idle pieces and quieter than the selected one: ' + str(fills))
         for kind, value, label in (('ROTATE', '30', 'rotation ghost'), ('SCALE', '120%', 'scale ghost'), ('SCALE', '-1', 'blocked scale ghost')):
             workspace.start_transform(kind)
             workspace.gesture['handle'] = True

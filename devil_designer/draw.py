@@ -486,7 +486,8 @@ class Renderer:
                     outline = [view.screen(point, c) for point in world]
                     holes = [path.outline() for path in pat.paths if path.role == 'HOLE']
                     color = (.70, .76, .82)
-                    opacity = .10 if selected else .055
+                    hovered = not selected and ed.tool == 'SELECT' and hovered_piece is not None and hovered_piece.id == source.id
+                    opacity = .10 if selected else .08 if hovered else .055
                     self.fill_pattern(pat.id, world, outline, (*color, opacity), holes, view, c)
 
                     for path, nodes, closed, role in pat.loops():
@@ -494,7 +495,7 @@ class Renderer:
                         screen = [view.screen(point, c) for point in points]
                         active = selected and ed.session.path == path
                         line_color = ACCENT if active else (0.9, 0.48, 0.48, 0.9) if role in {'HOLE', 'SLIT'} else (*ACCENT[:3], 0.55) if (partner_selected and path == 'OUTER') else (*color, 0.95)
-                        self.lines(screen + (screen[:1] if closed else []), line_color, 2.2 if (active or selected) else 1.5, True)
+                        self.lines(screen + (screen[:1] if closed else []), line_color, 2.2 if (active or selected) else 1.9 if hovered and path == 'OUTER' else 1.5, True)
                         fold = next((feature for feature in pat.features if feature.get('type') == 'FOLD' and nodes and feature.get('apex') == nodes[0].id), None)
                         if fold and len(screen) >= 2:
                             start, end = screen[0], screen[-1]
