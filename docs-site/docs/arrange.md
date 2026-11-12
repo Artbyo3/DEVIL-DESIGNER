@@ -20,7 +20,7 @@ Closing a pattern shape creates a matching 3D panel. Changes to the shape update
 
 If the body placement point you need is unavailable, choose another visible point or use **Arrange flat** and move the piece into place.
 
-<figure class="dd-shot" id="shot-arrange-wrap-points" data-shot='{"action":"Wrap selected panel around body placement points","ui_state":"Selected chest panel aligned to blue placement landmarks with avatar visible in 3D Viewport","framing":"full-editor","aspect_ratio":"16:9"}' data-shot-framing="full-editor" aria-labelledby="shot-arrange-wrap-points-caption">
+<figure class="dd-shot" id="shot-arrange-wrap-points" data-shot='{"action":"Wrap selected panel around body placement points","ui_state":"Selected chest panel aligned to placement landmarks with avatar visible in 3D Viewport","framing":"full-editor","aspect_ratio":"16:9"}' data-shot-framing="full-editor" aria-labelledby="shot-arrange-wrap-points-caption">
   <div class="dd-shot__frame"><span class="dd-shot__icon" aria-hidden="true"></span><span class="dd-shot__label">Screenshot coming soon</span></div>
   <figcaption id="shot-arrange-wrap-points-caption">Full-editor view showing the selected chest panel positioned against avatar landmark placement points in the revealed 3D Viewport.</figcaption>
 </figure>

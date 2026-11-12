@@ -31,7 +31,7 @@ For a matching left and right piece, right-click a piece and choose **Clone > Cl
 Panels can drape without being arranged first. To place them around the avatar:
 
 1. Click **3D view** at the top right of the editor to reveal the 3D Viewport.
-2. Select a piece and click a blue placement point, such as **Chest Front**.
+2. Select a piece and click a placement point, such as **Chest Front**.
 3. Place the back piece at **Chest Back**.
 4. Use Blender's <kbd>G</kbd> and <kbd>R</kbd> controls to adjust a piece if needed.
 
