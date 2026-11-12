@@ -619,7 +619,7 @@ def _fit_timer():
 
 def job_key(avatar):
     try:
-        return avatar.as_pointer() if hasattr(avatar, 'as_pointer') else id(avatar)
+        return getattr(avatar, 'session_uid', None) or id(avatar)
     except ReferenceError:
         return id(avatar)
 

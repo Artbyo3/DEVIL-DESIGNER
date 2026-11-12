@@ -125,6 +125,22 @@ class LivePanelTests(unittest.TestCase):
                 self.assert_full_panel_equivalence()
         self.scene.unit_settings.scale_length = 1
 
+    def test_a_fit_left_by_a_deleted_avatar_is_never_handed_to_a_new_one(self):
+        from devil_designer import arrangement, live_panels
+        stale = arrangement.pending_job(bpy.context)
+        self.assertIsNotNone(stale)
+        self.scene.dd_avatar = None
+        bpy.data.objects.remove(self.body, do_unlink=True)
+        bpy.ops.mesh.primitive_cube_add(size=1, location=(0, 0, 1))
+        body = bpy.context.object
+        body.scale = (.5, .3, 2)
+        bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+        arrangement._jobs[body.as_pointer()] = stale
+        self.body = body
+        self.scene.dd_avatar = body
+        live_panels.arrange_piece(bpy.context, self.session.selected, 'chest', 'front')
+        self.assertIn('dd_arrangement_volumes', body)
+
     def test_reuse_falls_back_for_missing_cache_or_edited_mesh(self):
         from devil_designer import garment
         obj = self.panels()[0]
