@@ -33,6 +33,7 @@ GRAB_REACH = .4
 WELD_REACH = .06
 SHELL_VOXEL = .005
 SHELL_THICKNESS = .015
+SHELL_FULL_DETAIL_AREA = 4.0
 PROXY_TRIANGLES = 3000
 SHELL_TRIANGLES = 8000
 GATE_PAD = .002
@@ -187,15 +188,22 @@ def hidden_collider(scene, name, mesh):
     return obj
 
 
+def shell_coarsening(mesh, unit):
+    areas = np.empty(len(mesh.polygons))
+    mesh.polygons.foreach_get('area', areas)
+    return max(1.0, float(np.sqrt(areas.sum() * unit * unit / SHELL_FULL_DETAIL_AREA)))
+
+
 def bake_shell(context, collider):
     scene = context.scene
     unit = max(1e-6, scene.unit_settings.scale_length)
+    coarsening = shell_coarsening(collider.data, unit)
     solid = collider.modifiers.new('DD Shell Solid', 'SOLIDIFY')
-    solid.thickness = SHELL_THICKNESS / unit
+    solid.thickness = SHELL_THICKNESS * coarsening / unit
     solid.offset = -1
     remesh = collider.modifiers.new('DD Shell', 'REMESH')
     remesh.mode = 'VOXEL'
-    remesh.voxel_size = SHELL_VOXEL / unit
+    remesh.voxel_size = SHELL_VOXEL * coarsening / unit
     remesh.use_smooth_shade = False
     mesh = evaluated_mesh(context, collider)
     collider.modifiers.remove(remesh)

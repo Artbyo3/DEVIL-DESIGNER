@@ -6,7 +6,7 @@ import time
 
 import bpy
 import numpy as np
-from mathutils import Vector
+from mathutils import Matrix, Vector
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.dont_write_bytecode = True
@@ -474,6 +474,21 @@ def test_shell_size_is_bounded(scene):
     scene.dd_avatar = avatar
 
 
+def test_oversized_body_bakes_without_stalling(scene):
+    avatar = scene.dd_avatar
+    collider = xpbd.bake_collider(bpy.context)
+    check(xpbd.shell_coarsening(collider.data, 1.0) == 1.0, 'a body of normal size keeps the full shell detail')
+    collider.data.transform(Matrix.Scale(16, 4))
+    started = time.perf_counter()
+    shell = xpbd.bake_shell(bpy.context, collider)
+    spent = time.perf_counter() - started
+    print('OVERSIZED SHELL S', round(spent, 2), flush=True)
+    check(spent < 15, f'a body 16 times too large bakes its collision shell in {spent:.1f} s instead of stalling')
+    check(0 < xpbd.triangle_count(shell.data) <= SHELL_CEILING, 'the oversized body still gets a bounded collision shell')
+    check(max(shell.dimensions) > max(avatar.dimensions) * 12, 'the oversized shell still wraps the whole body')
+    garment.remove_objects([collider, shell])
+
+
 def drape_with_self_collision(scene, enabled):
     scene.dd_self_collision = enabled
     body = torso(24, 16)
@@ -546,6 +561,7 @@ test_open_avatar_collision(scene)
 test_paired_panels_stay_on_their_side(scene, body)
 test_pins_and_tacks(scene, body)
 test_shell_size_is_bounded(scene)
+test_oversized_body_bakes_without_stalling(scene)
 test_self_collision_off_skips_self_contact(scene)
 test_contact_gate_matches_exact_contact(scene)
 test_dense_body_costs_like_a_light_one(scene)
