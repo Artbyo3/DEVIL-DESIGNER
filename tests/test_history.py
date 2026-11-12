@@ -216,6 +216,19 @@ class PersistentHistoryTests(unittest.TestCase):
                 self.assertEqual(session.redo_stack, [])
                 self.assertIn('keep editing', session.history_message)
 
+    def test_faq_states_the_real_undo_depth_and_where_it_is_kept(self):
+        session = Session()
+        session.add(SQUARE)
+        for index in range(HISTORY_LIMIT + 20):
+            session.commit(lambda index=index: setattr(session.document.patterns[0], 'name', f'Piece {index}'))
+        self.assertEqual(len(session.undo_stack), HISTORY_LIMIT)
+        faq = (Path(__file__).resolve().parents[1] / 'docs-site' / 'docs' / 'faq.md').read_text(encoding='utf-8')
+        answer = faq.split('### How many undo steps are saved', 1)[1].split(chr(10) + '### ', 1)[0]
+        self.assertIn(f'last {HISTORY_LIMIT} undo steps', answer)
+        self.assertIn(f'up to {HISTORY_LIMIT} redo steps', answer)
+        self.assertIn('stored in the Blender file', answer)
+        self.assertIn('Close without saving', answer)
+
     def test_new_sources_have_no_comments_or_standalone_strings(self):
         root = Path(__file__).resolve().parents[1]
         for relative in ('devil_designer/history.py', 'tests/test_history.py'):
