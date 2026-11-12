@@ -106,7 +106,7 @@ body:has(.dd-landing-container) .md-content__inner {
   pointer-events: none;
 }
 
-.dd-video-placeholder-img {
+.dd-overview-img {
   width: 100%;
   height: 100%;
   object-fit: cover;

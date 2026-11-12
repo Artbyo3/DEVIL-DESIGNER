@@ -21,7 +21,7 @@ Closing a pattern shape creates a matching 3D panel. Changes to the shape update
 If the body placement point you need is unavailable, choose another visible point or use **Arrange flat** and move the piece into place.
 
 <figure class="dd-shot" id="shot-arrange-wrap-points" data-shot='{"action":"Wrap selected panel around body placement points","ui_state":"Selected chest panel aligned to placement landmarks with avatar visible in 3D Viewport","framing":"full-editor","aspect_ratio":"16:9"}' data-shot-framing="full-editor" aria-labelledby="shot-arrange-wrap-points-caption">
-  <div class="dd-shot__frame"><span class="dd-shot__icon" aria-hidden="true"></span><span class="dd-shot__label">Screenshot coming soon</span></div>
+  <div class="dd-shot__frame"><img src="assets/images/shots/shot-arrange-wrap-points.png" alt="Full-editor view showing the selected chest panel positioned against avatar landmark placement points in the revealed 3D Viewport." loading="lazy" /></div>
   <figcaption id="shot-arrange-wrap-points-caption">Full-editor view showing the selected chest panel positioned against avatar landmark placement points in the revealed 3D Viewport.</figcaption>
 </figure>
 
@@ -41,9 +41,9 @@ Press <kbd>K</kbd> and click a point on a piece to hold it in place.
 
 Press <kbd>T</kbd>, click a point on the fabric, then click a point on the avatar to attach the fabric there.
 
-<figure class="dd-shot" id="shot-arrange-avatar-tacks" data-shot='{"action":"Attach fabric tack point to target avatar geometry","ui_state":"Fabric tack line linking pattern point directly to avatar surface mesh","framing":"close-up","aspect_ratio":"4:3"}' data-shot-framing="close-up" aria-labelledby="shot-arrange-avatar-tacks-caption">
-  <div class="dd-shot__frame"><span class="dd-shot__icon" aria-hidden="true"></span><span class="dd-shot__label">Screenshot coming soon</span></div>
-  <figcaption id="shot-arrange-avatar-tacks-caption">Close-up view of an active avatar tack anchoring the fabric position directly to the underlying character surface.</figcaption>
+<figure class="dd-shot" id="shot-arrange-avatar-tacks" data-shot='{"action":"Attach fabric tack point to target avatar geometry","ui_state":"Tack marker on a pattern point of the arranged piece","framing":"close-up","aspect_ratio":"4:3"}' data-shot-framing="close-up" aria-labelledby="shot-arrange-avatar-tacks-caption">
+  <div class="dd-shot__frame"><img src="assets/images/shots/shot-arrange-avatar-tacks.png" alt="Close-up of a tack marker on a pattern point. The tack holds that point to the avatar surface during the drape." loading="lazy" /></div>
+  <figcaption id="shot-arrange-avatar-tacks-caption">Close-up of a tack marker on a pattern point. The tack holds that point to the avatar surface during the drape.</figcaption>
 </figure>
 
 ### Remove Pins & Tacks

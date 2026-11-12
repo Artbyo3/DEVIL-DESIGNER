@@ -262,3 +262,7 @@ When the screenshot capture agent executes:
    ```
 7. Use the stable shot ID as the filename and write alt text for the actual captured state. Use width="1200" height="900" for close-ups. The relative image path starts with `../` because built guide pages live in their own URL directories. Retain the parent `<figure>` tag, stable `id`, JSON metadata, framing attribute, and existing caption.
 8. Re-run `zensical build --strict` to verify site generation.
+
+## Status (2026-11-11)
+
+Every placeholder is now a real capture of the current build. `python tools/docs_shots.py` installs the built package into an isolated Blender profile under `scratch/`, stages each screen on a synthetic avatar, crops it to the figure's framing and wires the image into the page. `--crop-only` re-crops the last raw captures. The images live in `docs-site/docs/assets/images/shots/`, and the landing image is `editor-overview.png`.

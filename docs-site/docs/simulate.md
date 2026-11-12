@@ -45,7 +45,7 @@ Right-click a piece and choose **Simulation**:
 Press <kbd>F</kbd> to show or hide the **Fit Map**, a color guide that shows where the fabric is stretched or compressed. White is close to its original length, blue shows compression, and red shows stretch. It is a visual guide, not a pressure measurement.
 
 <figure class="dd-shot" id="shot-simulate-fit-map" data-shot='{"action":"Inspect garment stretch and compression with the Fit Map","ui_state":"Paused drape with white neutral, blue compressed, and red stretched fabric and bottom controls visible","framing":"full-editor","aspect_ratio":"16:9"}' data-shot-framing="full-editor" aria-labelledby="shot-simulate-fit-map-caption">
-  <div class="dd-shot__frame"><span class="dd-shot__icon" aria-hidden="true"></span><span class="dd-shot__label">Screenshot coming soon</span></div>
+  <div class="dd-shot__frame"><img src="assets/images/shots/shot-simulate-fit-map.png" alt="Full-editor view of the paused drape with the Fit Map enabled, showing white neutral, blue compressed, and red stretched fabric alongside the bottom controls." loading="lazy" /></div>
   <figcaption id="shot-simulate-fit-map-caption">Full-editor view of the paused drape with the Fit Map enabled, showing white neutral, blue compressed, and red stretched fabric alongside the bottom controls.</figcaption>
 </figure>
 
@@ -59,7 +59,7 @@ Press <kbd>F</kbd> to show or hide the **Fit Map**, a color guide that shows whe
 Kept garments are **On** by default. The exception is a kept copy of the garment you are still working on: it starts **Off**, so simulating again after a change does not collide with your earlier result. Click its row to turn it **On** if you do want to drape over it.
 
 <figure class="dd-shot" id="shot-simulate-layer-settings" data-shot='{"action":"Enable a kept inner garment for layered draping","ui_state":"Simulate arrow menu open with a named kept inner garment listed under Wear over and set to On","framing":"close-up","aspect_ratio":"4:3"}' data-shot-framing="close-up" aria-labelledby="shot-simulate-layer-settings-caption">
-  <div class="dd-shot__frame"><span class="dd-shot__icon" aria-hidden="true"></span><span class="dd-shot__label">Screenshot coming soon</span></div>
+  <div class="dd-shot__frame"><img src="assets/images/shots/shot-simulate-layer-settings.png" alt="Close-up view of the open Simulate arrow menu, showing the kept inner garment by name under Wear over with its toggle set to On." loading="lazy" /></div>
   <figcaption id="shot-simulate-layer-settings-caption">Close-up view of the open Simulate arrow menu, showing the kept inner garment by name under Wear over with its toggle set to On.</figcaption>
 </figure>
 
@@ -103,6 +103,6 @@ Keep takes a second or two to finish the cloth, then checks it against your avat
 The finished mesh is editable in Blender. Its UVs are the flat map used to place textures on the garment and follow the pattern pieces.
 
 <figure class="dd-shot" id="shot-simulate-keep-mesh" data-shot='{"action":"Configure mesh baking options and execute Keep mesh","ui_state":"Paused drape with Keep mesh arrow expanded showing Weld Auto/Manual and Thickness options","framing":"close-up","aspect_ratio":"4:3"}' data-shot-framing="close-up" aria-labelledby="shot-simulate-keep-mesh-caption">
-  <div class="dd-shot__frame"><span class="dd-shot__icon" aria-hidden="true"></span><span class="dd-shot__label">Screenshot coming soon</span></div>
+  <div class="dd-shot__frame"><img src="assets/images/shots/shot-simulate-keep-mesh.png" alt="Close-up view of the Keep mesh popup controls showing Weld Auto/Manual selection and Thickness input fields." loading="lazy" /></div>
   <figcaption id="shot-simulate-keep-mesh-caption">Close-up view of the Keep mesh popup controls showing Weld Auto/Manual selection and Thickness input fields.</figcaption>
 </figure>

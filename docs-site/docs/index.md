@@ -5,9 +5,9 @@ hide:
 ---
 
 <div class="dd-landing-container">
-  <!-- Video slot: placeholder demonstration illustration -->
-  <div class="dd-video-slot" aria-hidden="true">
-    <img src="assets/images/video-placeholder.png" alt="" class="dd-video-placeholder-img" />
+  <!-- Overview: the editor beside a draped garment -->
+  <div class="dd-video-slot">
+    <img src="assets/images/editor-overview.png" alt="Devil Designer editor beside a draped top on an avatar" class="dd-overview-img" />
   </div>
 
   <main class="dd-landing-content">

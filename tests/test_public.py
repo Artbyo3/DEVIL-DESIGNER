@@ -75,15 +75,18 @@ class PublicationTests(unittest.TestCase):
         inspect_payload('devil_designer/assets/icons/SELECT.png', icon_png(png_chunk(b'tEXt', b'Author\x00local identity')), errors)
         self.assertTrue(any('metadata' in error for error in errors))
 
-    def test_docs_site_placeholder_is_permitted(self):
-        errors = []
-        placeholder = (ROOT / 'docs-site/docs/assets/images/video-placeholder.png').read_bytes()
-        inspect_payload('docs-site/docs/assets/images/video-placeholder.png', placeholder, errors)
-        self.assertEqual(errors, [])
+    def test_docs_site_screenshots_are_permitted(self):
+        images = sorted((ROOT / 'docs-site/docs/assets/images').rglob('*.png'))
+        self.assertTrue(images)
+        for image in images:
+            with self.subTest(image=image.name):
+                errors = []
+                inspect_payload(image.relative_to(ROOT).as_posix(), image.read_bytes(), errors)
+                self.assertEqual(errors, [])
 
     def test_docs_site_image_metadata_is_rejected(self):
         errors = []
-        inspect_payload('docs-site/docs/assets/images/video-placeholder.png', icon_png(png_chunk(b'tEXt', b'Author\x00local identity')), errors)
+        inspect_payload('docs-site/docs/assets/images/editor-overview.png', icon_png(png_chunk(b'tEXt', b'Author\x00local identity')), errors)
         self.assertTrue(any('metadata' in error for error in errors))
 
     def test_unexpected_binary_is_rejected(self):

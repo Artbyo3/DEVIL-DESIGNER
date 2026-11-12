@@ -15,7 +15,7 @@ Your reference images are saved with the garment: every image, which one is acti
 Use **Search** to find a name, tag or body. Use **Tags** to filter the grid; choose **All tags** to clear the filter. Large libraries have pages and support mouse-wheel browsing. Files added, changed or removed while the library is open are detected automatically; no restart or reload action is needed.
 
 <figure class="dd-shot" id="shot-library-save-garment" data-shot='{"action":"Save current garment design to the local library","ui_state":"Library view open with saved garment entries and its save control visible in the minimal interface","framing":"full-editor","aspect_ratio":"16:9"}' data-shot-framing="full-editor" aria-labelledby="shot-library-save-garment-caption">
-  <div class="dd-shot__frame"><span class="dd-shot__icon" aria-hidden="true"></span><span class="dd-shot__label">Screenshot coming soon</span></div>
+  <div class="dd-shot__frame"><img src="assets/images/shots/shot-library-save-garment.png" alt="Full-editor view showing the open Library with saved garment entries and its save control visible in the minimal interface." loading="lazy" /></div>
   <figcaption id="shot-library-save-garment-caption">Full-editor view showing the open Library with saved garment entries and its save control visible in the minimal interface.</figcaption>
 </figure>
 
@@ -34,7 +34,7 @@ Invalid or deleted designs cannot be loaded from their preview. If a saved desig
 The design is placed using matching points on the new avatar when available. If a matching point is not available, the piece returns to its flat layout and a message appears. Tacks are moved to the new avatar.
 
 <figure class="dd-shot" id="shot-library-load-avatar" data-shot='{"action":"Load saved garment onto a new avatar with automatic refitting","ui_state":"Garment pieces loaded and automatically positioned around the new character model","framing":"full-editor","aspect_ratio":"16:9"}' data-shot-framing="full-editor" aria-labelledby="shot-library-load-avatar-caption">
-  <div class="dd-shot__frame"><span class="dd-shot__icon" aria-hidden="true"></span><span class="dd-shot__label">Screenshot coming soon</span></div>
+  <div class="dd-shot__frame"><img src="assets/images/shots/shot-library-load-avatar.png" alt="Full-editor view showing a saved garment loaded and refitted around the newly selected avatar in the 3D workspace." loading="lazy" /></div>
   <figcaption id="shot-library-load-avatar-caption">Full-editor view showing a saved garment loaded and refitted around the newly selected avatar in the 3D workspace.</figcaption>
 </figure>
 
