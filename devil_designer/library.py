@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 import bpy
 from mathutils import Matrix
 from .core import Document
-from . import garment,live_panels
+from . import garment,live_panels,tracing
 
 
 def directory(scene,create=False):
@@ -49,6 +49,32 @@ def scale_document(doc,factor,vertical=None):
         doc.uv_layout['origin']=[doc.uv_layout['origin'][0]*factor,doc.uv_layout['origin'][1]*vertical]
         doc.uv_layout['scale']*=max(factor,vertical)
     doc.validate()
+
+
+def saved_references(scene):
+    entries=([tracing.active_entry(scene)] if scene.dd_trace_path else [])+tracing.stack(scene)
+    return [dict(entry,path=bpy.path.abspath(entry['path'])) for entry in entries]
+
+
+def stored_references(data,folder):
+    references=data.get('references')
+    if references is None:return None
+    if not isinstance(references,list) or len(references)>64 or not all(tracing.valid_entry(entry) for entry in references):
+        raise ValueError('Invalid stored reference images.')
+    result=[]
+    for entry in references:
+        entry=dict(tracing.ENTRY_FIELDS,**{key:value for key,value in entry.items() if key in tracing.ENTRY_FIELDS})
+        beside=folder/Path(entry['path'].replace('\\','/')).name
+        if not Path(entry['path']).is_file() and beside.is_file():entry['path']=str(beside)
+        result.append(entry)
+    return result
+
+
+def apply_references(scene,references):
+    if references:tracing.apply_entry(scene,references[0])
+    else:scene.dd_trace_path=''
+    tracing.write_stack(scene,references[1:])
+    scene.dd_trace_error=''
 
 
 def preview(path):
@@ -110,6 +136,7 @@ def save(context,name,tags=()):
             point=panel.matrix_world.translation
             data['panels'].append(dict(pattern=panel['dd_pattern_id'],position=[(point[i]-low[i])/max(1e-6,high[i]-low[i]) for i in range(3)],
                 orientation=[list(row) for row in panel.matrix_world.to_3x3()]))
+    data['references']=saved_references(scene)
     data['settings']={key:getattr(scene,key) for key in ('dd_spacing','dd_quality','dd_self_collision','dd_pin_top','dd_weld_distance','dd_thickness','dd_friction','dd_keep_quads')}
     output=directory(scene,True)/(safe+'.garment.json')
     temporary=output.with_suffix('.tmp')
@@ -150,6 +177,7 @@ def load(context,index):
                 if key in float_bounds:
                     lower=min(lower,float_bounds[key][0]);upper=max(upper,float_bounds[key][1])
                 settings[key]=min(max(value,lower),upper)
+        references=stored_references(data,path.parent)
         poses=data.get('panels',[])
         if not isinstance(poses,list):raise ValueError('Invalid stored garment placement.')
         identities={pattern.id for pattern in doc.patterns}
@@ -185,9 +213,10 @@ def load(context,index):
                 matrix.translation=translation
                 placements[pose['pattern']]=matrix
         incoming=doc.dumps()
-        previous={key:getattr(scene,key) for key in (*supported,'dd_document','dd_library_name')}
+        previous={key:getattr(scene,key) for key in (*supported,'dd_document','dd_library_name',*(tracing.PROPERTIES if references is not None else ()))}
         try:
             for key,value in settings.items():setattr(scene,key,value)
+            if references is not None:apply_references(scene,references)
             scene.dd_library_name=name
             scene.dd_document=incoming
             panels=garment.build_panels(context)

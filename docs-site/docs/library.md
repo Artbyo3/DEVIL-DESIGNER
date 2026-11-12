@@ -10,6 +10,8 @@ The Library saves editable garment designs so you can use them again or fit them
 
 The visual grid updates as soon as you save, including when you overwrite a design. Each tile shows its captured flat-pattern thumbnail, name, piece count, saved date, body name/height and tags. Thumbnails are automatically captured from the editable pattern layout, not a rendered simulation pose. Existing designs receive a fallback pattern preview without conversion or resaving; missing historical body names are shown as unspecified.
 
+Your reference images are saved with the garment: every image, which one is active, and each one's position, size, rotation, mirror, lock, visibility and opacity. The garment file records where each image is stored, so the images themselves stay where they are. To share a garment with its references, put the image files in the same folder as the garment file. When an image is not found at its saved place, the one with the same name beside the garment file is used. An image found in neither place is named on the canvas.
+
 Use **Search** to find a name, tag or body. Use **Tags** to filter the grid; choose **All tags** to clear the filter. Large libraries have pages and support mouse-wheel browsing. Files added, changed or removed while the library is open are detected automatically; no restart or reload action is needed.
 
 <figure class="dd-shot" id="shot-library-save-garment" data-shot='{"action":"Save current garment design to the local library","ui_state":"Library view open with saved garment entries and its save control visible in the minimal interface","framing":"full-editor","aspect_ratio":"16:9"}' data-shot-framing="full-editor" aria-labelledby="shot-library-save-garment-caption">
@@ -38,7 +40,7 @@ The design is placed using matching points on the new avatar when available. If 
 
 ## Undo a Load
 
-Loading a design over an open one saves a temporary recovery point. Press <kbd>Ctrl</kbd> + <kbd>Z</kbd> right after loading to restore the previous design.
+Loading a design over an open one saves a temporary recovery point. Press <kbd>Ctrl</kbd> + <kbd>Z</kbd> right after loading to restore the previous design. Undo restores the pattern. Reference images loaded with the garment stay on the canvas. Garments saved before reference images were carried leave your current reference images as they are.
 
 ## Save and Reopen Your Blender Project
 

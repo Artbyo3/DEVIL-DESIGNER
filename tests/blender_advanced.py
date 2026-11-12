@@ -234,6 +234,50 @@ finally:
     garment.build_panels=original_build
     scene.dd_avatar=new_body
     path.write_bytes(original_bytes)
+from devil_designer import tracing
+pictures=ROOT/'scratch'/'test-references'
+pictures.mkdir(parents=True,exist_ok=True)
+for label in ('front','back'):
+    picture=bpy.data.images.new(label,8,4)
+    picture.filepath_raw=str(pictures/(label+'.png'));picture.file_format='PNG';picture.save()
+    bpy.data.images.remove(picture)
+scene.dd_trace_path='';tracing.write_stack(scene,[])
+tracing.add_reference(scene,str(pictures/'front.png'))
+scene.dd_trace_width,scene.dd_trace_rotation,scene.dd_trace_flip_x,scene.dd_trace_opacity=.42,15.0,True,.6
+tracing.add_reference(scene,str(pictures/'back.png'))
+scene.dd_trace_locked,scene.dd_trace_visible=True,False
+saved_refs=[tracing.active_entry(scene)]+tracing.stack(scene)
+referenced=library.save(bpy.context,'Referenced sample')
+stored=json.loads(referenced.read_text(encoding='utf-8'))
+check([Path(entry['path']).name for entry in stored['references']]==['back.png','front.png'],'a library garment carries every reference image, active one first')
+scene.dd_trace_path='';tracing.write_stack(scene,[])
+library.load(bpy.context,scene.dd_library_selected)
+check([tracing.active_entry(scene)]+tracing.stack(scene)==saved_refs,'loading a library garment restores each reference image with its placement, mirror, lock, visibility and opacity')
+check(tracing.reference_count(scene)==2 and len(tracing.reference_corners(scene))==4 and not scene.dd_trace_error,'restored reference images open without a missing-image message')
+shared=ROOT/'scratch'/'test-shared-library'
+shared.mkdir(parents=True,exist_ok=True)
+copy=deepcopy(stored)
+for entry in copy['references']:entry['path']=str(ROOT/'scratch'/'moved-away'/Path(entry['path']).name)
+for label in ('front','back'):(shared/(label+'.png')).write_bytes((pictures/(label+'.png')).read_bytes())
+(shared/'Referenced-sample.garment.json').write_text(json.dumps(copy),encoding='utf-8')
+scene.dd_library_dir=str(shared);scene.dd_library_selected=0
+scene.dd_trace_path='';tracing.write_stack(scene,[])
+library.load(bpy.context,0)
+check([Path(entry['path']).parent for entry in [tracing.active_entry(scene)]+tracing.stack(scene)]==[shared,shared],'a shared garment finds its reference images beside the garment file')
+before_refs=[tracing.active_entry(scene)]+tracing.stack(scene)
+for value in ({},'front.png',[{'path':''}],[{'path':'a.png','width':-1}],[{'path':'a.png','locked':'yes'}],[{'path':'a.png','x':float('inf')}]):
+    broken=deepcopy(copy);broken['references']=value
+    (shared/'Referenced-sample.garment.json').write_text(json.dumps(broken),encoding='utf-8')
+    try:library.load(bpy.context,0)
+    except ValueError as error:check('reference' in str(error).lower(),'a damaged reference list is refused with a readable message')
+    else:raise AssertionError('Accepted damaged references: '+repr(value))
+    check([tracing.active_entry(scene)]+tracing.stack(scene)==before_refs,'a refused garment leaves the current reference images untouched')
+older=deepcopy(copy);older.pop('references')
+(shared/'Referenced-sample.garment.json').write_text(json.dumps(older),encoding='utf-8')
+library.load(bpy.context,0)
+check([tracing.active_entry(scene)]+tracing.stack(scene)==before_refs,'a garment saved before references were carried keeps the current reference images')
+scene.dd_library_dir=str(ROOT/'scratch'/'test-library')
+scene.dd_trace_path='';tracing.write_stack(scene,[])
 stale_session=Session()
 stale_session.add([(0,0),(.3,0),(.3,.3),(0,.3)])
 stale_session.add([(.4,0),(.7,0),(.7,.3),(.4,.3)])
