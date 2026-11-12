@@ -2,6 +2,7 @@ import math
 from .core import area,contains,validate_polygon
 from . import curves
 MAX_VERTICES=50000
+MIN_SAMPLE_GAP=.25
 
 class SamplingPlan(dict):
     def __init__(self):
@@ -19,7 +20,9 @@ def edge_counts(document,spacing):
                 a,b=document.edge_vertices(edge)
                 if a.outgoing is not None or b.incoming is not None:
                     _,cumulative=curves.arc_table(document.edge_curve(edge))
-                    values.update(v/max(1e-12,cumulative[-1]) for v in cumulative)
+                    gap=MIN_SAMPLE_GAP*spacing/max(1e-12,cumulative[-1])
+                    for fraction in (v/max(1e-12,cumulative[-1]) for v in cumulative):
+                        if all(abs(fraction-kept)>=gap for kept in values):values.add(fraction)
                 plan.samples[edge]=values
     for seam in document.seams:
         sides=[seam.side(i) for i in (0,1)]
