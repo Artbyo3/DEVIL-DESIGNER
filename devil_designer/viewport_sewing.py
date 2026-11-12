@@ -6,6 +6,10 @@ from mathutils.bvhtree import BVHTree
 from bpy_extras import view3d_utils
 from gpu_extras.batch import batch_for_shader
 from . import garment
+from .minimal import SEAM_ACTIVE, SEAM_CONNECTED, SEAM_QUIET
+
+SEAM_WARNING = (1, .67, .31, 1)
+SEAM_STYLES = {SEAM_QUIET: (1.5, (.28, .65, .63, .45)), SEAM_CONNECTED: (2.2, (.28, .65, .63, .9)), SEAM_ACTIVE: (3.0, (.75, .95, .92, 1))}
 
 
 def seam_hits(document, edge, fraction):
@@ -186,7 +190,10 @@ class ViewportSewing:
             return
         self.ensure(context)
         occupied = []
+        levels = editor.seam_focus_levels()
         for identity, position in self.label_positions.items():
+            if levels.get(identity) != SEAM_ACTIVE:
+                continue
             screen = view3d_utils.location_3d_to_region_2d(context.region, context.region_data, position)
             if screen is None:
                 continue
@@ -217,6 +224,7 @@ class ViewportSewing:
         unit = garment.metres_per_unit(context.scene)
         for seam in document.seams:
             positions = []
+            detail = []
             middles = []
             try:
                 for side in (0, 1):
@@ -228,13 +236,13 @@ class ViewportSewing:
                         positions.extend((first, second))
                     start = points[-1] if side == 1 and seam.reverse else points[0]
                     for axis in ((.003, 0, 0), (0, .003, 0), (0, 0, .003)):
-                        positions.extend((start - Vector(axis) / unit, start + Vector(axis) / unit))
+                        detail.extend((start - Vector(axis) / unit, start + Vector(axis) / unit))
                     middles.append(points[24])
                 self.label_positions[seam.id] = (middles[0] + middles[1]) / 2
                 record = self.truth['records'].get(seam.id) if self.truth else None
                 if record:
                     for first, second in record['world']:
-                        positions.extend((Vector(first), Vector(second)))
+                        detail.extend((Vector(first), Vector(second)))
                     for side in (0, 1):
                         samples = [Vector(pair[side]) for pair in record['world']]
                         for index in sorted({len(samples) // 3, 2 * len(samples) // 3}):
@@ -248,12 +256,13 @@ class ViewportSewing:
                             other = direction.cross(across)
                             for wing in (across, other):
                                 for sign in (-1, 1):
-                                    positions.extend((samples[index], samples[index] - direction * .008 / unit + wing * sign * .004 / unit))
+                                    detail.extend((samples[index], samples[index] - direction * .008 / unit + wing * sign * .004 / unit))
             except ValueError:
                 continue
             record = self.truth['records'].get(seam.id) if self.truth else None
             warning = not record or record['warning'] or bool(record['flags'])
-            self.batches.append((seam.id, warning, batch_for_shader(self.shader, 'LINES', {'pos': positions})))
+            self.batches.append((seam.id, warning, batch_for_shader(self.shader, 'LINES', {'pos': positions}),
+                                 batch_for_shader(self.shader, 'LINES', {'pos': detail}) if detail else None))
         self.visibility = None
         self.gesture_key = None
         self.serialized = serialized
@@ -332,11 +341,18 @@ class ViewportSewing:
             projection[2] = projection[2] - projection[3] * 1e-5
             self.shader.uniform_float('ModelViewProjectionMatrix', projection)
             self.shader.uniform_float('viewportSize', (context.region.width, context.region.height))
-            self.shader.uniform_float('lineWidth', 3)
-            for identity, mismatch, batch in self.batches:
-                highlighted = identity in (editor.seam_selected, editor.seam_hover)
-                self.shader.uniform_float('color', (1, .67, .31, 1) if highlighted or mismatch else (.28, .65, .63, .85))
+            levels = editor.seam_focus_levels()
+            scale = editor.canvas_layout.scale
+            for identity, mismatch, batch, detail in self.batches:
+                level = levels.get(identity, SEAM_QUIET)
+                width, color = SEAM_STYLES[level]
+                self.shader.uniform_float('lineWidth', (width + (.5 if mismatch and level == SEAM_QUIET else 0)) * scale)
+                self.shader.uniform_float('color', SEAM_WARNING if mismatch else color)
                 batch.draw(self.shader)
+                if level == SEAM_ACTIVE and detail is not None:
+                    self.shader.uniform_float('lineWidth', 1.5 * scale)
+                    detail.draw(self.shader)
+            self.shader.uniform_float('lineWidth', 3 * scale)
             if self.gesture_batch is not None:
                 self.shader.uniform_float('color', (1, .82, .3, 1))
                 self.gesture_batch.draw(self.shader)

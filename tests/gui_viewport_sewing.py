@@ -153,7 +153,7 @@ def run():
             with patch.object(viewport_sewing, 'batch_for_shader', wraps=viewport_sewing.batch_for_shader) as batches:
                 preview.dirty = True
                 preview.ensure(bpy.context)
-                positions = batches.call_args_list[0].args[2]['pos']
+                positions = [position for call in batches.call_args_list[:2] for position in call.args[2]['pos']]
                 links = [(tuple(positions[index]), tuple(positions[index + 1])) for index in range(0, len(positions), 2)]
                 check(all((tuple(first), tuple(second)) in links for first, second in record['world']), '3D batch contains the real correspondence set, not midpoint shorthand')
                 check(len(positions) > 2 * len(record['pairs']) + 200, '3D preview retains edge strokes and adds direction arrowheads')
@@ -216,6 +216,47 @@ def run():
                     active.viewport_sewing.draw()
                 check(resolve.call_count == 0, 'orbit redraw does not re-resolve sewing chains')
             check(active.viewport_sewing.batches is batches and active.viewport_sewing.geometry is geometry and active.viewport_sewing.visibility is tree, 'orbit retains geometry, GPU batches and visibility cache')
+            check(all(len(entry) == 4 and entry[3] is not None for entry in batches), 'each 3D seam keeps its stitch detail apart from its edge lines')
+            drawn = []
+            class RecordingShader:
+                def __init__(self, real):
+                    self.real, self.uniforms = real, {}
+                def bind(self):
+                    pass
+                def uniform_float(self, name, value):
+                    self.uniforms[name] = value
+            class RecordingBatch:
+                def __init__(self, identity, kind):
+                    self.identity, self.kind = identity, kind
+                def draw(self, shader):
+                    drawn.append((self.identity, self.kind, shader.uniforms['lineWidth'], tuple(shader.uniforms['color'])))
+            sewing = active.viewport_sewing
+            real_shader, real_batches, real_gesture = sewing.shader, sewing.batches, sewing.gesture_batch
+            sewing.shader = RecordingShader(real_shader)
+            sewing.batches = [(identity, False, RecordingBatch(identity, 'edges'), RecordingBatch(identity, 'detail')) for identity, _, _, _ in real_batches]
+            sewing.gesture_batch = None
+            try:
+                active.seam_selected = active.session.document.seams[0].id
+                active.seam_hover = None
+                active.session.selected = None
+                active.session.selected_patterns = []
+                sewing.draw()
+            finally:
+                sewing.shader, sewing.batches, sewing.gesture_batch = real_shader, real_batches, real_gesture
+            chosen = active.session.document.seams[0].id
+            others = [entry for entry in drawn if entry[0] != chosen]
+            check(any(entry[:2] == (chosen, 'detail') for entry in drawn), 'the selected seam shows its stitch pairs and direction in 3D')
+            check(others and all(entry[1] == 'edges' for entry in others), 'other seams show only their edge lines in 3D, no stitch pairs: ' + str(drawn))
+            check(all(entry[2] < next(item[2] for item in drawn if item[:2] == (chosen, 'edges')) for entry in others),
+                  'the selected seam draws heavier than idle seams in 3D')
+            check(all(entry[3][3] < 1 for entry in others), 'idle seams are translucent in 3D')
+            written = []
+            with patch.object(active.renderer, 'text', side_effect=lambda x, y, label, *rest, **named: written.append(label)):
+                with bpy.context.temp_override(area=active._area, region=active._region):
+                    sewing.labels()
+            record = sewing.truth['records'].get(chosen) if sewing.truth else None
+            check(len(written) >= 1 and (record is None or written[0] == record['readout']) and len(written) <= 2,
+                  'only the selected seam shows its readout in 3D: ' + str(written))
             bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=2)
             bpy.ops.screen.screenshot(filepath=str(ROOT / 'scratch' / 'viewport-sewing.png'))
             active.handle_event(bpy.context, event('DEL', pointer))
