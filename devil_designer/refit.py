@@ -6,13 +6,13 @@ RATIO_RANGE = (.5, 2.0)
 
 def _ratio(new, old):
     if not (math.isfinite(new) and math.isfinite(old)) or new <= 0 or old <= 0:
-        raise ValueError('The avatar measurements are not usable for a refit.')
+        raise ValueError("This body could not be measured, so the garment kept its size. Choose your avatar's body mesh to refit it.")
     return min(RATIO_RANGE[1], max(RATIO_RANGE[0], new / old))
 
 
 def length_ratio(old, new):
     if not (math.isfinite(new['height']) and math.isfinite(old['height'])) or new['height'] <= 0 or old['height'] <= 0:
-        raise ValueError('The avatar measurements are not usable for a refit.')
+        raise ValueError("This body could not be measured, so the garment kept its size. Choose your avatar's body mesh to refit it.")
     ratio = new['height'] / old['height']
     if not RATIO_RANGE[0] <= ratio <= RATIO_RANGE[1]:
         raise ValueError('The new body is less than half or more than twice the height of the old one, so the garment kept its size.')
@@ -22,7 +22,7 @@ def length_ratio(old, new):
 def girth_profile(old, new):
     span = old['high_z'] - old['low_z']
     if not math.isfinite(span) or span <= 0:
-        raise ValueError('The avatar measurements are not usable for a refit.')
+        raise ValueError("This body could not be measured, so the garment kept its size. Choose your avatar's body mesh to refit it.")
     if old['fallback'] or new['fallback']:
         along = length_ratio(old, new)
         return lambda fraction: along

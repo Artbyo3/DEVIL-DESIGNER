@@ -6,16 +6,21 @@ import time
 from dataclasses import dataclass, field
 import numpy
 
+UNUSABLE_AVATAR = ("This object has no body shape to dress. It has no faces, is flat, or is scaled to zero. "
+                   "Choose your avatar's body mesh instead.")
+DAMAGED_ARRANGEMENT = ('The saved arrangement points on this avatar are damaged. '
+                       'Choose Reset points in the Body menu to rebuild them.')
+
 
 def _volume_bounds(vertices):
     if not vertices or any(len(point) != 3 or any(not math.isfinite(value) for value in point)
                            for point in vertices):
-        raise ValueError('Avatar vertices must contain finite three-dimensional points.')
+        raise ValueError(UNUSABLE_AVATAR)
     low = tuple(min(point[axis] for point in vertices) for axis in range(3))
     high = tuple(max(point[axis] for point in vertices) for axis in range(3))
     extent = tuple(high[axis] - low[axis] for axis in range(3))
     if min(extent) <= 0 or any(not math.isfinite(value) for value in extent):
-        raise ValueError('Avatar bounds must have positive finite width, depth, and height.')
+        raise ValueError(UNUSABLE_AVATAR)
     return low, extent
 
 
@@ -26,7 +31,7 @@ def _volume_dot(first, second):
 def _volume_unit(vector):
     length = math.hypot(*vector)
     if length <= 1e-12:
-        raise ValueError('Avatar volume has a degenerate axis.')
+        raise ValueError(UNUSABLE_AVATAR)
     return tuple(value / length for value in vector)
 
 
@@ -113,11 +118,11 @@ class FitPending(ValueError):
 
 def _array_bounds(points):
     if points.ndim != 2 or points.shape[1] != 3 or not len(points) or not numpy.isfinite(points).all():
-        raise ValueError('Avatar vertices must contain finite three-dimensional points.')
+        raise ValueError(UNUSABLE_AVATAR)
     low = points.min(axis=0)
     extent = points.max(axis=0) - low
     if extent.min() <= 0 or not numpy.isfinite(extent).all():
-        raise ValueError('Avatar bounds must have positive finite width, depth, and height.')
+        raise ValueError(UNUSABLE_AVATAR)
     return tuple(float(value) for value in low), tuple(float(value) for value in extent)
 
 
@@ -263,17 +268,17 @@ def _fit_steps(vertices, triangles, clearance=0.03, support=None):
     try:
         points = numpy.asarray(vertices, dtype=float)
     except (TypeError, ValueError) as error:
-        raise ValueError('Avatar vertices must contain finite three-dimensional points.') from error
+        raise ValueError(UNUSABLE_AVATAR) from error
     low, extent = _array_bounds(points)
     if not math.isfinite(clearance) or clearance < 0:
         raise ValueError('Avatar clearance must be nonnegative and finite.')
     try:
         faces = numpy.asarray(triangles)
     except ValueError as error:
-        raise ValueError('Avatar triangles must contain three valid vertex indices.') from error
+        raise ValueError(UNUSABLE_AVATAR) from error
     if (faces.ndim != 2 or not len(faces) or faces.shape[1] != 3 or faces.dtype.kind not in 'iu'
             or faces.min() < 0 or faces.max() >= len(points)):
-        raise ValueError('Avatar triangles must contain three valid vertex indices.')
+        raise ValueError(UNUSABLE_AVATAR)
     normalized = (points - numpy.asarray(low)) / extent[2]
     yield
     for start in range(0, len(faces), 8192):
@@ -282,7 +287,7 @@ def _fit_steps(vertices, triangles, clearance=0.03, support=None):
             break
         yield
     else:
-        raise ValueError('Avatar triangles must contain a nondegenerate surface.')
+        raise ValueError(UNUSABLE_AVATAR)
     yield
     body = _BodyIndex(normalized, faces)
     yield
@@ -417,7 +422,7 @@ def _volume_validate(setup):
                 raise ValueError
             _volume_validate(setup['legacy'])
     except (KeyError, TypeError, ValueError, OverflowError) as error:
-        raise ValueError('Invalid avatar arrangement volumes; explicitly regenerate avatar setup.') from error
+        raise ValueError(DAMAGED_ARRANGEMENT) from error
     return setup
 
 
@@ -687,7 +692,7 @@ def ensure_volumes(context, force=False, wait=True):
         try:
             setup = _volume_validate(json.loads(stored))
         except (TypeError, json.JSONDecodeError) as error:
-            raise ValueError('Invalid avatar arrangement volumes JSON; explicitly regenerate avatar setup.') from error
+            raise ValueError(DAMAGED_ARRANGEMENT) from error
         support_key = _support_key(context.scene)
         if setup.get('support', []) == support_key:
             return setup
@@ -991,7 +996,7 @@ def layout_plan(pieces, body_bounds, mode):
         raise ValueError('Avatar bounds must be finite.')
     extent = tuple(high[axis] - low[axis] for axis in range(3))
     if any(not math.isfinite(value) or value <= 0 for value in extent):
-        raise ValueError('Avatar bounds must have positive width, depth, and height.')
+        raise ValueError(UNUSABLE_AVATAR)
     center = tuple(low[axis] + extent[axis] * .5 for axis in range(3))
     ordered = sorted(pieces, key=lambda piece: (piece[1].casefold(), piece[0]))
     result = []

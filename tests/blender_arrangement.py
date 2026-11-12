@@ -92,3 +92,57 @@ print('PASS: arrangement preserves persistent history after document reconciliat
 
 import runpy
 runpy.run_path(str(Path(__file__).resolve().parent / 'blender_ellipse.py'), run_name='__main__')
+
+
+def unusable_body(name, vertices, faces, scale=(1, 1, 1)):
+    mesh = bpy.data.meshes.new(name)
+    mesh.from_pydata(vertices, [], faces)
+    body = bpy.data.objects.new(name, mesh)
+    scene.collection.objects.link(body)
+    body.scale = scale
+    return body
+
+
+from devil_designer import starters
+from devil_designer.measurements import estimate_body_measurements
+
+garment.forget_drape()
+garment.reset(bpy.context)
+arrangement.cancel_fits()
+bpy.ops.mesh.primitive_cube_add(size=1)
+tee = starters.create_tee_starter(estimate_body_measurements(bpy.context.object, scene), 'COTTON').dumps()
+DATA_TERMS = ('triangle', 'vertices', 'vertex', 'bounds', 'degenerate', 'finite', 'three-dimensional')
+for label, vertices, faces, scale in (
+        ('vertices without faces', [(0, 0, 0), (1, 0, 0), (0, 1, 1), (1, 1, 2)], [], (1, 1, 1)),
+        ('no vertices', [], [], (1, 1, 1)),
+        ('flat plane', [(0, 0, 0), (1, 0, 0), (1, 1, 0), (0, 1, 0)], [(0, 1, 2, 3)], (1, 1, 1)),
+        ('single triangle', [(0, 0, 0), (1, 0, 0), (0, 1, 0)], [(0, 1, 2)], (1, 1, 1)),
+        ('vertical wall', [(0, 0, 0), (1, 0, 0), (1, 0, 1), (0, 0, 1)], [(0, 1, 2, 3)], (1, 1, 1)),
+        ('scaled to zero', [(0, 0, 0), (1, 0, 0), (0, 1, 0), (0, 0, 1)], [(0, 1, 2), (0, 1, 3), (0, 2, 3), (1, 2, 3)], (0, 0, 0))):
+    arrangement.cancel_fits()
+    body = unusable_body(label, vertices, faces, scale)
+    bpy.context.view_layer.update()
+    scene['dd_arrangement_message'] = ''
+    scene.dd_avatar = body
+    while arrangement.pending_job(bpy.context) is not None:
+        arrangement._fit_timer()
+    shown = scene.get('dd_arrangement_message', '')
+    assert shown == arrangement.UNUSABLE_AVATAR, (label, shown)
+    try:
+        arrangement.ensure_volumes(bpy.context)
+    except ValueError as error:
+        assert str(error) == arrangement.UNUSABLE_AVATAR, (label, str(error))
+    else:
+        raise AssertionError(label + ' must be refused as a body')
+    if faces:
+        scene.dd_document = tee
+        scene.pop('dd_last_error', None)
+        try:
+            bpy.ops.devil_designer.simulate('EXEC_DEFAULT')
+        except RuntimeError:
+            pass
+        assert scene.get('dd_last_error', '') == arrangement.UNUSABLE_AVATAR, (label, scene.get('dd_last_error', ''))
+    assert not any(term in shown.lower() for term in DATA_TERMS), shown
+    print('PASS: a ' + label + ' body is refused in plain words when picked and at Simulate', flush=True)
+    scene.dd_avatar = None
+    bpy.data.objects.remove(body, do_unlink=True)

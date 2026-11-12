@@ -1,7 +1,7 @@
 import bisect
 import math
 import numpy
-from .arrangement import _volume_cross, _volume_dot, _volume_unit
+from .arrangement import UNUSABLE_AVATAR, _volume_cross, _volume_dot, _volume_unit
 
 
 def section_basis(up):
@@ -77,7 +77,7 @@ def directional_radius(section, direction):
     product = _volume_dot(side, front)
     determinant = side_square * front_square - product * product
     if determinant <= 1e-24:
-        raise ValueError('Avatar ellipse has a degenerate section.')
+        raise ValueError(UNUSABLE_AVATAR)
     side_dot = _volume_dot(direction, side)
     front_dot = _volume_dot(direction, front)
     side_coordinate = (front_square * side_dot - product * front_dot) / determinant
@@ -135,7 +135,7 @@ def wrap_positions(vertices, resolved, width, minimum, minimum_clearance):
             product = _volume_dot(side, depth)
             determinant = side_square * depth_square - product * product
             if determinant <= 1e-24:
-                raise ValueError('Avatar ellipse has a degenerate section.')
+                raise ValueError(UNUSABLE_AVATAR)
             coordinates = []
             for direction in (right, front):
                 side_dot, depth_dot = _volume_dot(direction, side), _volume_dot(direction, depth)
@@ -196,7 +196,7 @@ def _row_sections(entries, heights, up, right, front):
     product = (side * depth).sum(axis=1)
     determinant = side_square * depth_square - product * product
     if (determinant <= 1e-24).any():
-        raise ValueError('Avatar ellipse has a degenerate section.')
+        raise ValueError(UNUSABLE_AVATAR)
     coordinates = []
     for direction in (right, front):
         direction = numpy.asarray(direction, dtype=float)

@@ -198,7 +198,7 @@ def load(context,index):
             low,high=garment.bounds(avatar)
             if scene.dd_library_refit and height>1e-6:
                 factor=(high.z-low.z)*garment.metres_per_unit(scene)/height
-                if not .05<factor<20:raise ValueError('Avatar scale differs too much. Correct the scene/body units before refitting.')
+                if not .05<factor<20:raise ValueError("This body is over 20 times larger or smaller than the one the garment was saved on. Check the avatar's scale and the scene units, then load the garment again.")
                 saved_girth=data.get('body_girth_m',0)
                 width=body_girth(scene)/saved_girth if type(saved_girth) in (int,float) and saved_girth>1e-6 else factor
                 scale_document(doc,width if .05<width<20 and abs(width/factor-1)>.05 else factor,factor)

@@ -342,6 +342,20 @@ class ArrangementVolumeTests(unittest.TestCase):
             with self.subTest(vertices=vertices, triangles=triangles, clearance=clearance), self.assertRaises(ValueError):
                 generate_volumes(vertices, triangles, clearance)
 
+    def test_unusable_body_meshes_are_refused_in_plain_words(self):
+        for vertices, triangles in (([], []), ([(0, 0, 0)] * 3, [(0, 1, 2)]), ([(math.nan, 0, 0)], []),
+                                    (self.vertices, [(0, 1, 99)]), (self.vertices, [(0, 1)]),
+                                    (self.vertices, [(0, 0, 0)]), (self.vertices, []),
+                                    ([(0, 0, 0), (1, 0, 0), (1, 1, 0), (0, 1, 0)], [(0, 1, 2), (0, 2, 3)])):
+            with self.subTest(vertices=vertices, triangles=triangles):
+                with self.assertRaises(ValueError) as refused:
+                    generate_volumes(vertices, triangles)
+                self.assertEqual(str(refused.exception), arrangement.UNUSABLE_AVATAR)
+        with self.assertRaises(ValueError) as refused:
+            arrangement._volume_axes(((0, 0, 0, 0), (0, 0, 0, 0), (0, 0, 0, 0), (0, 0, 0, 1)))
+        self.assertEqual(str(refused.exception), arrangement.UNUSABLE_AVATAR)
+        self.assertIn("Choose your avatar's body mesh", arrangement.UNUSABLE_AVATAR)
+
     def test_bad_edits_do_not_modify_avatar_json(self):
         arrangement.ensure_volumes(self.context)
         stored = self.avatar['dd_arrangement_volumes']
@@ -361,7 +375,7 @@ class ArrangementVolumeTests(unittest.TestCase):
         setup = arrangement.ensure_volumes(self.context)
         for stored in ('{', 'null', '{}', json.dumps(dict(setup, version=3))):
             self.avatar['dd_arrangement_volumes'] = stored
-            with self.subTest(stored=stored), self.assertRaisesRegex(ValueError, 'regenerate'):
+            with self.subTest(stored=stored), self.assertRaisesRegex(ValueError, 'Reset points'):
                 arrangement.ensure_volumes(self.context)
             self.assertEqual(self.avatar['dd_arrangement_volumes'], stored)
         self.assertEqual(arrangement.ensure_volumes(self.context, force=True)['version'], 2)
@@ -449,7 +463,7 @@ class ArrangementVolumeTests(unittest.TestCase):
             self.volume(invalid)[field] = value
             stored = json.dumps(invalid)
             self.avatar['dd_arrangement_volumes'] = stored
-            with self.subTest(field=field), self.assertRaisesRegex(ValueError, 'regenerate'):
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, 'Reset points'):
                 arrangement.ensure_volumes(self.context)
             self.assertEqual(self.avatar['dd_arrangement_volumes'], stored)
 
