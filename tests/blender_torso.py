@@ -60,6 +60,30 @@ def skin_body():
     return body
 
 
+def t_pose_body(height):
+    bpy.ops.object.select_all(action='DESELECT')
+    parts = [ellipsoid((.15, .11, .30), (0, 0, 1.18)), ellipsoid((.17, .12, .16), (0, 0, .92)),
+             ellipsoid((.09, .1, .12), (0, 0, 1.62)), capsule(.05, (0, 0, 1.40), (0, 0, 1.55)),
+             capsule(.075, (.09, 0, .90), (.09, 0, .05)), capsule(.075, (-.09, 0, .90), (-.09, 0, .05)),
+             capsule(.045, (.17, 0, 1.40), (.78, 0, 1.40)), capsule(.045, (-.17, 0, 1.40), (-.78, 0, 1.40)),
+             ellipsoid((.18, .08, .06), (0, 0, 1.40))]
+    for part in parts:
+        part.select_set(True)
+    bpy.context.view_layer.objects.active = parts[0]
+    bpy.ops.object.join()
+    body = bpy.context.object
+    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+    remesh = body.modifiers.new('Skin', 'REMESH')
+    remesh.mode = 'VOXEL'
+    remesh.voxel_size = .012
+    bpy.ops.object.modifier_apply(modifier=remesh.name)
+    top = max(vertex.co.z for vertex in body.data.vertices)
+    body.scale = (height / top,) * 3
+    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+    body.name = 'T-pose body'
+    return body
+
+
 def in_torso(co):
     return .80 < co.z < 1.38 and abs(co.x) < .19
 
@@ -256,6 +280,30 @@ def test_keep_names_missing_torso(scene):
     check('fell off the body' in message, 'an intact avatar keeps the fit and placement refusal')
 
 
+def test_hoodie_neck_join(scene):
+    spacing = scene.dd_spacing
+    scene.dd_spacing = .02
+    garment.forget_drape()
+    garment.reset(bpy.context)
+    arrangement.cancel_fits()
+    for obj in list(scene.objects):
+        bpy.data.objects.remove(obj, do_unlink=True)
+    scene.frame_set(scene.frame_start)
+    body = t_pose_body(1.40)
+    bpy.context.view_layer.objects.active = body
+    bpy.context.view_layer.update()
+    scene.dd_avatar = body
+    load_starter(scene, starters.create_hoodie_starter)
+    result, error = simulate(scene)
+    check(result == {'FINISHED'} and not error, 'the Hoodie simulates on a 1.40 m T-pose body: ' + error)
+    drape(scene)
+    scene['dd_unwelded_seams'] = -1
+    kept, error = keep(scene)
+    check(len(kept) == 1 and not error, 'Keep accepts the Hoodie where the hood joins the neckline: ' + error)
+    check(scene['dd_unwelded_seams'] == 0, 'the kept Hoodie has no open seam pairs: ' + str(scene['dd_unwelded_seams']))
+    scene.dd_spacing = spacing
+
+
 devil_designer.register()
 scene = bpy.context.scene
 scene.dd_spacing = .025
@@ -267,4 +315,5 @@ test_shrink_is_left_on(test_hidden_torso_drapes(scene, shrink_torso, 'Shrink', i
 test_outfit_collision_route(scene)
 test_outfit_added_later_refits(scene)
 test_keep_names_missing_torso(scene)
+test_hoodie_neck_join(scene)
 devil_designer.unregister()

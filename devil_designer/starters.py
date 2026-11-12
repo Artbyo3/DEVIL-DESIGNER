@@ -10,6 +10,7 @@ SKIRT_HIP_DROP = 0.20
 SKIRT_MIN_FLARE = 0.05
 SKIRT_MAX_FLARE = 0.5
 ARM_CLEARANCE = 0.01
+HOOD_CLEARANCE = 0.05
 
 
 def make_edge(doc, pattern_id, index, rev=False):
@@ -237,11 +238,11 @@ def create_hoodie_starter(measurements, fabric='COTTON'):
         hood = document.patterns[-1]
         hood.name = label
         hood.preset = fabric
-        hood.arrangement = arrangement_record('neck', 'opposite_side' if label == 'Hood right' else 'side', True, version=3)
+        hood.arrangement = arrangement_record('neck', 'side' if label == 'Hood right' else 'opposite_side', True, version=3, clearance=HOOD_CLEARANCE)
         hoods.append(hood.id)
     right, left = hoods
-    session.sew_chains(right_neck, [make_edge(document, right, 0)], reverse=False)
-    session.sew_chains(left_neck, [make_edge(document, left, 0)], reverse=False)
+    session.sew_chains(right_neck, [make_edge(document, right, 0)], reverse=True)
+    session.sew_chains(left_neck, [make_edge(document, left, 0)], reverse=True)
     session.sew_chains([make_edge(document, right, 3)], [make_edge(document, left, 1)], reverse=True)
     session.sew_chains([make_edge(document, right, 2)], [make_edge(document, left, 2)], reverse=True)
     return document
