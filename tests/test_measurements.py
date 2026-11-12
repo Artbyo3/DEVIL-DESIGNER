@@ -117,6 +117,18 @@ def headless_body():
     return MockMesh(verts, polys)
 
 
+def fused_sleeve_outfit():
+    verts, polys = [], []
+    for side in (-0.08, 0.08):
+        tube(verts, polys, side, 0.06, [0.0, 0.74])
+    lathe(verts, polys, [(0.72, 0.17), (0.80, 0.19), (0.90, 0.18), (1.01, 0.17), (1.035, 0.21), (1.055, 0.235),
+                         (1.075, 0.27), (1.10, 0.42), (1.16, 0.43), (1.22, 0.40), (1.26, 0.06), (1.32, 0.06),
+                         (1.36, 0.10), (1.45, 0.11), (1.55, 0.01)])
+    for sign in (-1, 1):
+        sideways_tube(verts, polys, sign * 0.40, sign * 0.75, 1.20, 0.04)
+    return MockMesh(verts, polys)
+
+
 def t_pose_points(height, neck_z, arm_bottom, arm_top):
     rows = []
     for z in numpy.linspace(0.5 * height, neck_z - 0.02, 30):
@@ -158,6 +170,11 @@ class MeasurementsTests(unittest.TestCase):
         self.assertGreater(m['shoulder_width'], 26.0)
         self.assertGreater(m['neck_y'], 1.0)
         self.assertLess(m['neck_y'], 1.09)
+
+    def test_sleeves_fused_to_the_torso_cannot_inflate_the_shoulders(self):
+        m = estimate_body_measurements(MockBody(fused_sleeve_outfit()), MockScene())
+        self.assertLessEqual(m['shoulder_width'], 0.25 * m['height'] + 0.5)
+        self.assertGreater(m['shoulder_width'], 0.20 * m['height'])
 
     def test_neck_search_never_takes_the_cut_top_of_a_headless_stump(self):
         rows = [(x, 0.0, z) for z in numpy.linspace(0.80, 0.95, 16) for x in numpy.linspace(-0.12, 0.12, 9)]

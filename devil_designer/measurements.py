@@ -8,6 +8,7 @@ except ImportError:
 
 ARMS_OUT_RATIO = 1.6
 SHOULDER_TO_CHEST = 1.45
+SHOULDER_HEIGHT_LIMIT = 0.25
 ARMPIT_JUMP = 1.15
 OPEN_SECTION_GAP = math.pi / 2
 ARM_STATION = (0.03, 0.10)
@@ -294,8 +295,10 @@ def measure_mesh(body, mesh, scene, reference):
     waist_circ = torso_loop_circumference(w_segs, center_x)
     hip_z, hip_circ = widest_torso_loop(mesh, matrix, hip_z, waist_z, world_verts, center_x)
 
+    shoulder_limit = math.inf
     if chest_w > 0 and shoulder_width > chest_w * ARMS_OUT_RATIO:
         shoulder_width = chest_w * SHOULDER_TO_CHEST
+        shoulder_limit = SHOULDER_HEIGHT_LIMIT * total_height
 
     if chest_circ <= 0.01 or not has_landmarks:
         chest_circ = 0.58 * total_height
@@ -340,7 +343,7 @@ def measure_mesh(body, mesh, scene, reference):
     return {
         **landmarks,
         'height': r(total_height),
-        'shoulder_width': r(shoulder_width),
+        'shoulder_width': r(min(shoulder_width, shoulder_limit)),
         'chest': r(chest_circ),
         'waist': r(waist_circ),
         'hip': r(hip_circ),
